@@ -46,7 +46,17 @@ class StreamScrubber:
 
     def close(self) -> None:
         if not self.suppressing and self.buffer:
-            print(self.buffer, end="", flush=True)
+            buf = self.buffer
+            # Drop longest proper prefix of STATE_MARKER so a truncated
+            # stream cannot leak "<session_st" (etc.) into the terminal.
+            drop = 0
+            for k in range(1, len(STATE_MARKER)):
+                if buf.endswith(STATE_MARKER[:k]):
+                    drop = k
+            if drop:
+                buf = buf[:-drop]
+            if buf:
+                print(buf, end="", flush=True)
         self.buffer = ""
 
 
@@ -91,8 +101,12 @@ def log_turn(log_path: Path, user_input, visible, state, final):
         "usage": {
             "input_tokens": final.usage.input_tokens,
             "output_tokens": final.usage.output_tokens,
-            "cache_read_input_tokens": final.usage.cache_read_input_tokens,
-            "cache_creation_input_tokens": final.usage.cache_creation_input_tokens,
+            "cache_read_input_tokens": getattr(
+                final.usage, "cache_read_input_tokens", 0
+            ) or 0,
+            "cache_creation_input_tokens": getattr(
+                final.usage, "cache_creation_input_tokens", 0
+            ) or 0,
         },
     }
     with log_path.open("a") as f:
@@ -119,10 +133,20 @@ def main() -> None:
     print(f"Tutor ready ({args.pack.name}, {config.MODEL}). {HELP}\n")
     print("tutor> ", end="", flush=True)
     # Let the tutor open the session (goal-setting per the teaching policy).
-    history, state, final, visible = run_turn(
-        client, system, history, state,
-        "Hi, I'm ready to start.",
-    )
+    try:
+        history, state, final, visible = run_turn(
+            client, system, history, state,
+            "Hi, I'm ready to start.",
+        )
+    except anthropic.RateLimitError:
+        print("[Rate limited — wait a moment and restart.]")
+        return
+    except anthropic.APIStatusError as e:
+        print(f"[API error {e.status_code}: {e.message}]")
+        return
+    except anthropic.APIConnectionError:
+        print("[Network error — check your connection and restart.]")
+        return
     log_turn(log_path, "(session start)", visible, state, final)
     print("\n")
 

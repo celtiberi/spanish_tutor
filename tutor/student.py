@@ -29,17 +29,22 @@ def extract_state(reply: str, previous: dict) -> tuple[str, dict]:
     """Split a model reply into (visible text, updated state).
 
     Falls back to the previous state if the block is missing or malformed —
-    a dropped state update shouldn't kill the session.
+    a dropped state update shouldn't kill the session. Always hide from
+    STATE_MARKER onward when the open tag is present, even if the close
+    tag / JSON is truncated.
     """
     match = STATE_RE.search(reply)
-    if not match:
-        return reply.strip(), previous
-    visible = reply[: match.start()].strip()
-    try:
-        state = json.loads(match.group(1))
-    except json.JSONDecodeError:
-        return visible, previous
-    return visible, state
+    if match:
+        visible = reply[: match.start()].strip()
+        try:
+            state = json.loads(match.group(1))
+        except json.JSONDecodeError:
+            return visible, previous
+        return visible, state
+    marker_at = reply.find(STATE_MARKER)
+    if marker_at != -1:
+        return reply[:marker_at].strip(), previous
+    return reply.strip(), previous
 
 
 def state_message(state: dict) -> dict:
