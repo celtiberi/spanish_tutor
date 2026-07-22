@@ -15,7 +15,7 @@ Spanish infinitives end in **-ar**, **-er**, or **-ir**. Regular verbs conjugate
 
 Core A1 regular verbs: **hablar** (to speak), **estudiar** (to study), **trabajar** (to work), **comer** (to eat), **beber** (to drink), **leer** (to read)¹, **vivir** (to live), **escribir** (to write), **abrir** (to open).
 
-Closed practice nouns for this unit only: *agua, café, pan, pizza, carne, fruta, casa, español, inglés, libros*. Do not expand beyond this list in Unit 5.
+Closed noun set for **free-production drills** in this unit: *agua, café, pan, pizza, carne, fruta, casa, español, inglés, libros*. When asking the learner to produce sentences, stay within this set. Pack examples and model answers may additionally contain proper names and incidental context words (places, *hoy*, etc.) — treat those as recognition-only; do not teach or drill them here.
 
 ¹ *leer* is regular in the present tense (irregularities appear in past tenses, out of scope).
 
@@ -85,8 +85,8 @@ Learner looks for a "do" word: \**¿Haces tú hablar inglés?* or hesitates form
 **P-5.4** — Translate: "Are you (informal) eating at home today?"
 **Key:** *¿Comes en casa hoy?* (Simple present is correct; no progressive.)
 
-**P-5.5 (production)** — Write four sentences about your week using at least one verb from each family, including one negative.
-**Key (model):** *Estudio español los lunes. Como con mi familia los domingos. Vivo en Austin. No trabajo los sábados.* Check endings match subjects and families.
+**P-5.5 (production)** — Write four sentences about yourself using at least one verb from each family, including one negative.
+**Key (model):** *Hablo español y estudio inglés. Como pan y bebo café. Vivo en una casa grande. No trabajo hoy.* Check endings match subjects and families; production nouns should come from this unit's closed set.
 
 ## Scope notes
 

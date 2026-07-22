@@ -319,3 +319,140 @@ The pack’s Spanish core is largely solid: paradigms, accents on numbers, *ser/
 ---
 
 *End of independent review — 2026-07-22.*
+
+
+---
+
+## GROK (Grok Build CLI (bde89716f679)) - 2026-07-22 20:19 UTC
+*Headless via grok_collab.py; genuine output appended verbatim; sandboxed cwd (inlined files only).*
+
+I'll referee pack v0.2 against the three frozen gates. Loading the full prompt, collab skill, and course-pack files so every F-01–F-13 amendment can be checked against the actual text.The workspace is empty; the pack lives only in the inlined prompt. Reading the rest of the prompt and extracting every unit plus REVIEW.md findings.Verifying a few Spanish claims and scanning for residual contradictions the amendments may have introduced.Checking one more potential contradiction: deferred possessives vs. keys that still use *su*.# Spanish A1 Course Pack v0.2 — Gate Referee Report  
+**Role:** independent referee (pre-registered gates; no retro-fit)  
+**Date:** 2026-07-22  
+**Subject:** `course_packs/spanish_a1/` pack v0.2 (post F-01..F-13 application)  
+**Baseline for amendments:** round-1 findings F-01..F-13 as frozen in inlined `REVIEW.md`  
+**Confound (named once):** sandbox has no pre-revision tree; “introduced by revision” is inferred from (a) exact F-replacement text now present and (b) residual pack text that conflicts with that new text—not from a git diff.
+
+---
+
+## GATE-1 — Every amendment F-01..F-13 correctly and completely applied  
+
+**Rule:** each AMEND’s specified replacement text (or dual-site requirement) must appear; residual false claims targeted by the finding must be gone.
+
+| ID | Required fix | Evidence in inlined files | Status |
+|---|---|---|---|
+| F-01 | Replace false “family vowel throughout” claim with accurate -ar/-er/-ir theme-vowel note | `unit05`: new bullet present (“For **-ir**, most persons use **e**… **i** only in *nosotros*/*vosotros*”); residual “throughout” **absent** | **APPLIED** |
+| F-02 | Unit 6 deps → `3, 4, 5` **and** Unit 6 scope bullet on Unit 4 / *estar* | `pack.md` table: `3, 4, 5`; `unit06` scope: “Assumes Unit 4…” | **APPLIED** |
+| F-03 | Split *Perdón* (neutral) vs *Disculpe* (formal; informal *disculpa*) | `unit01` Courtesy line matches replacement | **APPLIED** |
+| F-04 | P-1.5 → “about 4–6 turns” + accept-variation note | Present; model turn count = **5** (arithmetic: 5 turns; allowed 4–6 → 4 ≤ 5 ≤ 6) | **APPLIED** |
+| F-05 | P-2.4 gloss: *él* = “him” after preposition, not “him/he” | Key gloss matches replacement | **APPLIED** |
+| F-06 | M-2.5: drop *tiene*; isolation + *Él es el amigo* once *ser* available | *tiene el libro* **absent**; new remediation present | **APPLIED** |
+| F-07 | LA default: *el carro* (+ *auto*; Spain *coche*) | `unit02` gender bullet matches | **APPLIED** |
+| F-08 | Yeísmo + Rioplatense sh/zh caveat | `pack.md` pronunciation bullets match | **APPLIED** |
+| F-09 | Grammar-core / not full A1 + deferred inventory list | Level line + “Explicitly deferred A1…” present | **APPLIED** |
+| F-10 | Unit 5 scope note for M-5.4 without Unit 4 | Scope note present | **APPLIED** |
+| F-11 | Add M-6.6 *porque* vs *¿por qué?* | `unit06` M-6.6 present with diagnosis + remediation | **APPLIED** |
+| F-12 | Closed practice noun list + “Do not expand…” | List of **10** nouns + ban sentence present | **APPLIED** (as written) |
+| F-13 | Prefer *veintiún años* in P-6.3 | Key prefers *tengo veintiún años*; bare *veintiuno* demoted | **APPLIED** |
+
+**Arithmetic:** **13 / 13** amendments present as specified.  
+**Spanish check on F-13 form:** *veintiún* + masculine *años* is standard apocope (RAE-style); not a failed application.
+
+**GATE-1 verdict: PASS**
+
+---
+
+## GATE-2 — Corpus contract  
+
+**Required per unit:** learning objectives; canonical explanation; examples **and** non-examples; misconceptions with stable IDs **and** remediation; practice items with answer keys; scope notes.  
+**Required in pack manifest:** scope boundaries.
+
+| Unit | LO | Canon | ✅/❌ | M-IDs | Remediation count | Practice keys | Scope |
+|---|---|---|---|---|---|---|---|
+| 1 | yes | yes | 2/3 | M-1.1–1.4 (4) | 4 | 5 | yes |
+| 2 | yes | yes | 2/3 | M-2.1–2.5 (5) | 5 | 5 | yes |
+| 3 | yes | yes | 2/3 | M-3.1–3.4 (4) | 4 | 5 | yes |
+| 4 | yes | yes | 2/3 | M-4.1–4.5 (5) | 5 | 5 | yes |
+| 5 | yes | yes | 2/3 | M-5.1–5.5 (5) | 5 | 5 | yes |
+| 6 | yes | yes | 2/3 | M-6.1–6.6 (6) | 6 | 5 | yes |
+
+**Pack:** `## Scope boundaries (do not teach these)` present; unit dependency table present; version labeled **0.2**.
+
+**Arithmetic:**  
+- Units fully structured: **6 / 6**  
+- Misconception entries with remediation: **4+5+4+5+5+6 = 29 / 29**  
+- Practice items with keys: **5 × 6 = 30 / 30**  
+- Spot-check of Spanish keys (P-1.x–P-6.x paradigms, *ser*/*estar*/*tener*, numbers incl. *dieciocho, veintidós, veintiún, cien*): **0** fully wrong Spanish keys found in this pass.
+
+**GATE-2 verdict: PASS**
+
+---
+
+## GATE-3 — No new Spanish-language errors; no new internal contradictions  
+
+### Spanish-language errors introduced by revision  
+Re-audit of amended Spanish (F-01 theme vowels; F-07 *carro*; F-08 yeísmo; F-13 *veintiún años*; F-11 *por qué* orthography): **no new Spanish falsehoods** found. Core paradigms remain correct.
+
+### New internal contradictions (revision-introduced)
+
+**C-1 — HIGH-for-editor (GATE-3 FAIL trigger): F-12 absolute closed-list ban vs Unit 5 body**
+
+F-12 added, verbatim:  
+> Closed practice nouns… *agua, café, pan, pizza, carne, fruta, casa, español, inglés, libros*. **Do not expand beyond this list in Unit 5.**
+
+Closed-set size = **10**. Same unit still contains (non-exhaustive) material **outside** that set:
+
+| Location | Out-of-list tokens |
+|---|---|
+| Canonical example | *Bogotá*, *banco* |
+| P-5.3 | *francés*, *idiomas* |
+| P-5.4 | *hoy* |
+| P-5.5 model | *familia*, *lunes*, *domingos*, *sábados*, *Austin* |
+
+**Arithmetic:** **≥ 8** distinct forms outside a **10**-item ban list appear in Unit 5 teaching/model text.  
+Under a literal reading of the new rule, Unit 5’s own examples and keys **violate** Unit 5’s own scope. That contradiction **did not exist** before the closed-list sentence was inserted; applying F-12 without aligning examples/keys created it.
+
+**C-2 — MEDIUM tension: F-09 deferred possessives vs residual *su***  
+F-09 lists possessives as a taught system (*mi/tu/su…*) as **explicitly deferred**. P-2.4 key still contains *su amigo*. *su* was pre-existing; F-09 **sharpens** the contradiction by writing the deferral into the manifest without scrubbing the key. Secondary to C-1; alone would be a nit, not a free-standing Spanish error.
+
+**C-3 — Cross-check with F-09 deferred days / family**  
+P-5.5 model uses *lunes/domingos/sábados* and *familia* while F-09 defers “family vocabulary set” and “days/dates/clock time.” Same family of pack-self-consistency issues as C-1.
+
+**Not counted as GATE-3 fails (confound / pre-existing):**  
+- Bare *Mal* as A1 reply (F-16 countersign).  
+- Soft *ser* preview in M-2.5 (explicitly conditional; matches F-06 text).  
+- *Hay* only in M-6.5 diagnosis example (Unit 6 already allows recognition-only *hay*).
+
+**GATE-3 verdict: FAIL**  
+Reason: **C-1** is a new internal contradiction introduced by the F-12 application. Compound gate requires *both* no new Spanish errors *and* no new contradictions; Spanish side passes, contradiction side fails → whole gate **FAIL**.
+
+---
+
+## Gate summary
+
+| Gate | Verdict | One-line reason |
+|---|---|---|
+| GATE-1 | **PASS** | 13/13 F-amends present as specified |
+| GATE-2 | **PASS** | 6/6 units + pack satisfy contract checklist |
+| GATE-3 | **FAIL** | F-12 “do not expand” closed list vs Unit 5 examples/P-5.3–5.5 |
+
+---
+
+## Overall ruling: **DO-NOT-SHIP** pack v0.2 as Phase 2 pilot corpus
+
+**Not** because HIGH linguistic items from round 1 remain (they do not: F-01 false -ir claim is fixed; F-02 Unit 6/*estar* dependency is fixed).  
+**Because** GATE-3 fails under the frozen rule set: the revision left a self-contradictory Unit 5 vocabulary rule that an AI tutor grounded on this pack can obey only by ignoring its own models, or violate only by ignoring its own ban.
+
+### Minimal unblock (not a retro-fit of gates; remediation path only)
+
+Either of the following restores GATE-3 without reopening F-01..F-13 substance:
+
+1. **Soften F-12 language** to tutor-guidance, e.g. closed set for *free production drills*; pack examples/models may use proper names and other already-in-pack words; **or**  
+2. **Hard-align Unit 5** so every example and model answer stays inside the 10-noun set (and strip deferred day/family lexemes from P-5.5), **and**  
+3. Optionally resolve C-2: replace *su* in P-2.4 with a non-possessive frame, or mark *su* as recognition-only in Unit 2 scope.
+
+Until C-1 is resolved, **v0.2 remains DO-NOT-SHIP** for pilot corpus use.
+
+---
+
+*End of gate referee report — 2026-07-22.*

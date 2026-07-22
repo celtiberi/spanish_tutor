@@ -1,7 +1,7 @@
 # Course Pack: Spanish A1 — Foundations
 
 **Pack ID:** `spanish_a1_foundations`
-**Version:** 0.2 (post-review — Grok countersign round 1 applied)
+**Version:** 0.3 (post-review — Grok round 1 countersign + round 2 referee C-1/C-2/C-3 fixes applied)
 **Level:** CEFR A1 grammar-core slice (absolute beginner), first ~6 weeks — **not** a complete A1 inventory. Covers greetings/courtesy, noun gender/articles/plurals, subject pronouns, *ser*, *estar* (core contrast), regular present (-ar/-er/-ir), numbers 0–100, *tener* (possession/age), and core question words.
 **Explicitly deferred A1 (do not invent; later packs):** alphabet/spelling, possessives as a taught system (*mi/tu/su...*), family vocabulary set, days/dates/clock time, *hay*, *ir*, food/drink noun sets, colors, demonstratives, *cuál*, money/*costar*.
 **Instruction language:** English (metalanguage), Spanish (target content)

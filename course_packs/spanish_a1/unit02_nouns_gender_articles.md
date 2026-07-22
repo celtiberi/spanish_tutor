@@ -89,8 +89,8 @@ Learner writes *él libro* or reads *el* as "he." **Diagnosis cue:** accent misu
 **P-2.3** — Correct the errors: \**La problema es la día.*
 **Key:** *El problema es el día.* (Both are masculine exceptions.)
 
-**P-2.4** — Choose: *(Un / Una) foto de (el / él) y su amigo.*
-**Key:** *Una foto de él y su amigo.* (*foto* is feminine → *Una*; after a preposition use *él* "him," never the article *el*.)
+**P-2.4** — Choose: *(Un / Una) foto de (el / él).*
+**Key:** *Una foto de él.* (*foto* is feminine → *Una*; after a preposition use *él* "him," never the article *el*.)
 
 **P-2.5 (production)** — Write three sentences of the form "The ___ is ___" using one regular noun, one -ma word, and one exception word.
 **Key (model):** e.g. *La casa es grande. El idioma es difícil. La mano es pequeña.* Check article agreement; adjectives may be any the learner knows (do not require adjective-agreement mastery — that's previewed, not tested, at this point).
