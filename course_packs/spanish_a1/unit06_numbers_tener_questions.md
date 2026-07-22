@@ -84,6 +84,9 @@ All question words carry a **written accent**, and questions open with an invert
 ### M-6.5 — *Cuánto* never changes form
 \**¿Cuánto sillas hay?* **Diagnosis cue:** invariable *cuánto* before plural/feminine nouns. **Remediation:** *cuánto* agrees like an adjective: *cuánto dinero, cuánta agua, cuántos años, cuántas sillas.* (Links back to Unit 2 agreement.)
 
+### M-6.6 — *porque* and *¿por qué?* are the same
+\**Porque estudias español?* or \**estudio español ¿por que?* **Diagnosis cue:** missing accent/split or using the answer-form as a question. **Remediation:** question = two words + accent *¿por qué?*; answer-word *porque* ("because") is out of scope for production — recognition only if it appears.
+
 ## Practice items
 
 **P-6.1** — Write out: 15, 18, 22, 47, 76, 100.
@@ -93,7 +96,7 @@ All question words carry a **written accent**, and questions open with an invert
 **Key:** *tengo, tienes, tiene, tenemos, tienen.*
 
 **P-6.3** — Correct the errors: \**Mi hermano es quince años y yo soy veinte y uno.*
-**Key:** *Mi hermano tiene quince años y yo tengo veintiuno.* (Accept *veintiún años*.)
+**Key:** *Mi hermano tiene quince años y yo tengo veintiún años.* (Also accept *...tengo veintiuno* only if the learner is clearly counting, not stating age; prefer the form with *años*.)
 
 **P-6.4** — Ask the question that fits each answer: *(a) — Tengo treinta años. (b) — Soy de Guatemala. (c) — Está en la mesa.*
 **Key:** *(a) ¿Cuántos años tienes/tiene usted? (b) ¿De dónde eres/es usted? (c) ¿Dónde está...?*
@@ -103,6 +106,7 @@ All question words carry a **written accent**, and questions open with an invert
 
 ## Scope notes
 
+- Assumes Unit 4: *estar* for location appears in question-word examples and P-6.4(c).
 - Numbers above 100, dates, and telling time are out of scope.
 - *Tener que* + infinitive ("have to") and *tener hambre/sed/frío* idioms are out of scope; if asked, acknowledge and defer.
 - *Hay* ("there is/are") may appear in drills as recognition vocabulary but is not an objective.

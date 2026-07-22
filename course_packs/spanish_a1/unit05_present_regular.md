@@ -15,6 +15,8 @@ Spanish infinitives end in **-ar**, **-er**, or **-ir**. Regular verbs conjugate
 
 Core A1 regular verbs: **hablar** (to speak), **estudiar** (to study), **trabajar** (to work), **comer** (to eat), **beber** (to drink), **leer** (to read)¹, **vivir** (to live), **escribir** (to write), **abrir** (to open).
 
+Closed practice nouns for this unit only: *agua, café, pan, pizza, carne, fruta, casa, español, inglés, libros*. Do not expand beyond this list in Unit 5.
+
 ¹ *leer* is regular in the present tense (irregularities appear in past tenses, out of scope).
 
 ### Endings
@@ -32,7 +34,7 @@ Patterns worth pointing out:
 
 - **yo always ends in -o** across all three families.
 - -er and -ir differ **only** in the *nosotros* and *vosotros* forms (*comemos/vivimos*, *coméis/vivís*).
-- The vowel of the family (a/e/i) shows up throughout its endings.
+- For **-ar**, the family vowel **a** appears in all forms except *yo* (*hablas, habla, hablamos, habláis, hablan*). For **-er**, **e** appears in all forms except *yo*. For **-ir**, most persons use **e** (*vives, vive, viven*); **i** appears only in *nosotros* and *vosotros* (*vivimos, vivís*) — which is exactly where -er and -ir differ.
 
 ### Meaning of the present
 
@@ -90,3 +92,4 @@ Learner looks for a "do" word: \**¿Haces tú hablar inglés?* or hesitates form
 
 - Stem-changing verbs (*querer, poder*) and irregular yo-forms (*hago, tengo*) are out of scope here; *tener* appears in Unit 6 as a memorized irregular.
 - Do not teach the present progressive.
+- M-5.4 mentions *estar* only to block the progressive; if Unit 4 is not yet done, remediate with "use the simple present (*Como*)" and do not drill *estar* forms here.

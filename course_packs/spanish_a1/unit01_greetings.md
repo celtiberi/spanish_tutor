@@ -55,7 +55,7 @@ Note the pattern: **buenos** with **días** (masculine), **buenas** with **tarde
 
 ### Courtesy
 
-**Por favor** (please), **Gracias** (thank you), **Muchas gracias** (thank you very much), **De nada** (you're welcome), **Perdón / Disculpe** (sorry / excuse me, formal).
+**Por favor** (please), **Gracias** (thank you), **Muchas gracias** (thank you very much), **De nada** (you're welcome), **Perdón** (sorry / excuse me — neutral), **Disculpe** (excuse me — formal *usted*; informal: *disculpa*).
 
 ## Examples and non-examples
 
@@ -93,8 +93,8 @@ Rare but real literal-translation trap. **Diagnosis cue:** learner translates *g
 **P-1.4** — Translate for the right register: "What is your name?" asked to (a) a child, (b) a customs officer.
 **Key:** (a) *¿Cómo te llamas?* (b) *¿Cómo se llama (usted)?*
 
-**P-1.5 (production)** — Write a 4-line dialogue: two strangers meet in the evening, greet, exchange names, and part.
-**Key (model answer):** *— Buenas noches. — Buenas noches. ¿Cómo se llama usted? — Me llamo Ana, ¿y usted? — Soy Luis. Mucho gusto. — Igualmente. Hasta luego.* Accept variations with correct register and agreement.
+**P-1.5 (production)** — Write a short dialogue (about 4–6 turns): two strangers meet in the evening, greet, exchange names, and part.
+**Key (model answer):** *— Buenas noches. — Buenas noches. ¿Cómo se llama usted? — Me llamo Ana, ¿y usted? — Soy Luis. Mucho gusto. — Igualmente. Hasta luego.* Accept variations with correct register and agreement; do not require this exact wording or turn count.
 
 ## Scope notes
 

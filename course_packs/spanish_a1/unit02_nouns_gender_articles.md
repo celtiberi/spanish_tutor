@@ -18,7 +18,7 @@ Every Spanish noun is grammatically masculine or feminine — including things (
 - Ends in **-o** → usually masculine: *el libro, el vaso, el amigo*
 - Ends in **-a** → usually feminine: *la casa, la silla, la amiga*
 - Ends in **-ción / -sión / -dad / -tad** → feminine: *la nación, la ciudad, la libertad*
-- Ends in **-e** or a consonant → unpredictable; learn the article with the word: *el coche, la noche, el papel, la flor*
+- Ends in **-e** or a consonant → unpredictable; learn the article with the word: *el carro* (also *el auto*; Spain: *el coche*), *la noche, el papel, la flor*
 
 **High-frequency exceptions (memorize):**
 
@@ -76,7 +76,7 @@ Learner reasons "a dress is feminine so *vestido* must be *la*." **Diagnosis cue
 \**papels*, \**ciudads*. **Diagnosis cue:** missing -es on consonant-final nouns. **Remediation:** vowel → -s, consonant → -es, -z → -ces; drill with *papel, ciudad, lápiz*.
 
 ### M-2.5 — él and el are the same word
-Learner writes *él libro* or reads *el* as "he." **Diagnosis cue:** accent misuse on el/él in writing. **Remediation:** *el* = "the" (no accent), *él* = "he" (accent). Minimal pair sentence: *Él tiene el libro.*
+Learner writes *él libro* or reads *el* as "he." **Diagnosis cue:** accent misuse on el/él in writing. **Remediation:** *el* = "the" (no accent), *él* = "he" (accent). Minimal pair: *el libro* vs *él*; full sentence using only known patterns once *ser* is available: *Él es el amigo.* Until then, contrast the written forms in isolation.
 
 ## Practice items
 
@@ -90,7 +90,7 @@ Learner writes *él libro* or reads *el* as "he." **Diagnosis cue:** accent misu
 **Key:** *El problema es el día.* (Both are masculine exceptions.)
 
 **P-2.4** — Choose: *(Un / Una) foto de (el / él) y su amigo.*
-**Key:** *Una foto de él y su amigo.* (*foto* is feminine; *él* = "him/he" after a preposition.)
+**Key:** *Una foto de él y su amigo.* (*foto* is feminine → *Una*; after a preposition use *él* "him," never the article *el*.)
 
 **P-2.5 (production)** — Write three sentences of the form "The ___ is ___" using one regular noun, one -ma word, and one exception word.
 **Key (model):** e.g. *La casa es grande. El idioma es difícil. La mano es pequeña.* Check article agreement; adjectives may be any the learner knows (do not require adjective-agreement mastery — that's previewed, not tested, at this point).
