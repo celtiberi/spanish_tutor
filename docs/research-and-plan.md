@@ -189,15 +189,22 @@ v0 can start with unstructured notes + automatic chunking; structure improves qu
 
 - [x] Capture concept, research, constraints  
 - [ ] Confirm success criteria with stakeholders  
-- [ ] Choose first pilot domains (suggest 2 train + 1 transfer test)
+- [x] Choose pilot train domain A: **Spanish A1** (locked 2026-07-22); train domain B and transfer subject C deferred until Phase 3 prep
 
-**Suggested pilot design**
+**Pilot design**
 
 | Role | Domain | Purpose |
 |------|--------|---------|
-| Pedagogy train A | e.g. intro Python | Teaching dialogues + preferences |
-| Pedagogy train B | e.g. Spanish A1 or basic stats | Force domain-agnostic moves |
+| Pedagogy train A | **Spanish A1** (locked 2026-07-22) | Teaching dialogues + preferences; corpus = Claude-generated course pack |
+| Pedagogy train B | TBD — e.g. intro Python or basic stats | Force domain-agnostic moves (decide before Phase 3) |
 | Transfer test C | e.g. company onboarding doc / new textbook | Corpus only; no fine-tune on C |
+
+**Locked build decisions (2026-07-22):**
+
+- Phase 2 vertical slice = **Python CLI app** (corpus ingest + RAG + chat loop + session logging).
+- Tutor model = `claude-opus-4-8` via the Anthropic Python SDK.
+- Corpus for A = **Claude-generated course pack**, structured per §4.3 (objectives, canonical explanations, misconceptions, practice items + keys, scope boundaries). Caveat: a synthetic corpus weakens the "teach unfamiliar material" framing — mitigate by generating the pack independently of the tutor policy, grounding the tutor strictly in the pack (design principle 6), and seeding known misconceptions so diagnostic accuracy (rubric dimension 8) stays measurable.
+- Spanish A1 eval caveat: no automatic verifier exists (unlike code); correctness scoring leans on the rubric, seeded-misconception scenarios, and simulated-student personas — consider a native/proficient speaker spot-check before Phase 3.
 
 ### Phase 1 — Spec & metrics
 
@@ -431,3 +438,4 @@ Use these as starting points for deeper literature review; not exhaustive.
 |---------|------|--------|
 | 0.1 | 2026-07-22 | Initial research synthesis and plan outline |
 | 0.2 | 2026-07-22 | Applied countersigned review change set R1–R9 (see `docs/review-research-and-plan.md`): Phase 3 renamed to policy value test; new Phase 5 trained-behavior transfer (thesis test); rater protocol + pre-registered success bars; adversarial scenario class; diagnostic-accuracy rubric dimension; ethics gate; base-model feasibility matrix; citations and dataset shortlist |
+| 0.3 | 2026-07-22 | Locked Phase 0/2 build decisions: pilot domain A = Spanish A1; corpus = Claude-generated course pack; vertical slice = Python CLI app on `claude-opus-4-8` |
