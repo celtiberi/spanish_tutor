@@ -70,7 +70,7 @@ def run_turn(client, system, history, state, user_input):
 
     if final.stop_reason == "refusal":
         print("[The tutor declined this request.]")
-        return history, state, final
+        return history, state, final, ""
 
     reply = "".join(b.text for b in final.content if b.type == "text")
     visible, state = extract_state(reply, state)
@@ -78,7 +78,7 @@ def run_turn(client, system, history, state, user_input):
         {"role": "user", "content": user_input},
         {"role": "assistant", "content": visible},
     ]
-    return history, state, final
+    return history, state, final, visible
 
 
 def log_turn(log_path: Path, user_input, visible, state, final):
@@ -119,11 +119,11 @@ def main() -> None:
     print(f"Tutor ready ({args.pack.name}, {config.MODEL}). {HELP}\n")
     print("tutor> ", end="", flush=True)
     # Let the tutor open the session (goal-setting per the teaching policy).
-    history, state, final = run_turn(
+    history, state, final, visible = run_turn(
         client, system, history, state,
         "Hi, I'm ready to start.",
     )
-    log_turn(log_path, "(session start)", history[-1]["content"], state, final)
+    log_turn(log_path, "(session start)", visible, state, final)
     print("\n")
 
     while True:
@@ -145,7 +145,7 @@ def main() -> None:
 
         print("tutor> ", end="", flush=True)
         try:
-            history, state, final = run_turn(
+            history, state, final, visible = run_turn(
                 client, system, history, state, user_input
             )
         except anthropic.RateLimitError:
@@ -157,7 +157,7 @@ def main() -> None:
         except anthropic.APIConnectionError:
             print("[Network error — check your connection and resend.]")
             continue
-        log_turn(log_path, user_input, history[-1]["content"], state, final)
+        log_turn(log_path, user_input, visible, state, final)
         print("\n")
 
     print(f"Session log: {log_path}")
