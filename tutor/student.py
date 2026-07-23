@@ -29,10 +29,11 @@ def default_state() -> dict:
 
 
 def load_profile(path: Path) -> dict:
-    """Cross-session learner profile: last session's final state.
+    """Cross-session learner profile: last session's final durable state.
 
-    Session-local fields are reset; the durable fields (misconceptions,
-    mastery, review_schedule) carry over so spaced review works.
+    Durable (carried): current_unit, observed_misconceptions, mastered,
+    struggling, review_schedule. Session-local (reset): goal,
+    current_item_attempts, revisit_queue.
     """
     if not path.exists():
         return default_state()

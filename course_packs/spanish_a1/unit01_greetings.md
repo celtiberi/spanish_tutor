@@ -41,7 +41,7 @@ By the end of this unit the learner can:
 1. Greet and take leave appropriately for the time of day and formality level.
 2. Introduce themselves and ask someone's name, in both informal (*tú*) and formal (*usted*) registers.
 3. Ask and answer "how are you?" with three basic responses.
-4. Use core courtesy words (*por favor, gracias, de nada, perdón*).
+4. Use core courtesy and leave-taking formulas modeled in this unit (*gracias*, *mucho gusto* / *igualmente*, *adiós* / *hasta luego* / *hasta mañana*). *Por favor*, *de nada*, *perdón*, *disculpe/disculpa* appear in the tables for recognition and light practice, not as Input-first targets.
 
 ## Canonical explanation
 

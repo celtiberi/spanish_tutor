@@ -1,11 +1,19 @@
-"""Harness edge cases from the Grok round-3 code review (B-3, B-4, B-5)."""
+"""Harness edge cases from the Grok code reviews (scrubber, state, profile)."""
 
 import contextlib
 import io
+import tempfile
 import unittest
+from pathlib import Path
 
 from tutor.cli import StreamScrubber
-from tutor.student import default_state, extract_state
+from tutor.student import (
+    default_state,
+    extract_state,
+    load_profile,
+    save_profile,
+    state_message,
+)
 
 STATE_BLOCK = (
     '<session_state>\n{"current_unit": 4, "goal": "g", '
@@ -67,6 +75,43 @@ class TestExtractState(unittest.TestCase):
         )
         self.assertEqual(visible, "ok")
         self.assertEqual(state, prev)
+
+
+class TestProfilePersistence(unittest.TestCase):
+    def test_durable_fields_carry_session_locals_reset(self):
+        state = default_state()
+        state.update(
+            current_unit=4,
+            goal="ser vs estar",
+            current_item_attempts=2,
+            revisit_queue=["P-4.1"],
+            observed_misconceptions=["M-4.1"],
+            review_schedule=[
+                {"item": "location estar", "misconception": "M-4.1",
+                 "due": "2026-07-23", "successes": 0}
+            ],
+        )
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "profile.json"
+            save_profile(path, state)
+            loaded = load_profile(path)
+        self.assertEqual(loaded["current_unit"], 4)
+        self.assertEqual(loaded["observed_misconceptions"], ["M-4.1"])
+        self.assertEqual(loaded["review_schedule"][0]["due"], "2026-07-23")
+        self.assertIsNone(loaded["goal"])
+        self.assertEqual(loaded["current_item_attempts"], 0)
+        self.assertEqual(loaded["revisit_queue"], [])
+
+    def test_missing_and_corrupt_profile_fall_back_to_default(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(load_profile(Path(d) / "nope.json"), default_state())
+            bad = Path(d) / "bad.json"
+            bad.write_text("{not json")
+            self.assertEqual(load_profile(bad), default_state())
+
+    def test_state_message_carries_iso_date(self):
+        content = state_message(default_state())["content"]
+        self.assertRegex(content, r"^Today's date: \d{4}-\d{2}-\d{2}\.")
 
 
 if __name__ == "__main__":

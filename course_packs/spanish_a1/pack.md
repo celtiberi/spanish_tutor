@@ -3,7 +3,7 @@
 **Pack ID:** `spanish_a1_foundations`
 **Version:** 0.4 (pedagogy revision — input blocks, can-do tasks, structured input, spaced review; see `docs/pedagogy-comparison.md`)
 **Level:** CEFR A1 grammar-core slice (absolute beginner), first ~6 weeks — **not** a complete A1 inventory. Covers greetings/courtesy, noun gender/articles/plurals, subject pronouns, *ser*, *estar* (core contrast), regular present (-ar/-er/-ir), numbers 0–100, *tener* (possession/age), and core question words.
-**Explicitly deferred A1 (do not invent; later packs):** alphabet/spelling, possessives as a taught system (*mi/tu/su...*), family vocabulary set, days/dates/clock time, *hay*, *ir*, food/drink noun sets, colors, demonstratives, *cuál*, money/*costar*.
+**Explicitly deferred A1 (do not invent; later packs):** alphabet/spelling, possessives as a taught system (*mi/tu/su...*), family vocabulary set (**except** the Unit 6 production collocations *hermano(s)/hermana(s)* with *tener*), days/dates/clock time, *hay* (recognition-only where it already appears), *ir*, food/drink noun sets beyond Unit 5's closed production set, colors, demonstratives, *cuál*, money/*costar*.
 **Instruction language:** English (metalanguage), Spanish (target content)
 **Variety:** Latin American Spanish as default; European (peninsular) forms noted where they differ.
 
@@ -26,7 +26,7 @@
 
 - The learner profile carries a `review_schedule` of previously missed items with due dates. **Start each session by re-testing due items** before new material.
 - When reviewing, **interleave** across units (mix *ser*/*estar*/*tener* items) rather than re-drilling one topic in a block.
-- After a miss, schedule the item at expanding intervals: next session → ~3 days → ~7 days.
+- After a miss, schedule the item at expanding calendar intervals from today's date: **next day** → **~3 days** after a spaced success → **~7 days** after a second spaced success; drop after two consecutive spaced successes (same algorithm as `prompts/teaching_policy.md`). If the learner fails a review attempt, reset `successes` to 0 and set `due` to the next day.
 - In-unit incidental words in input texts (days, places, *hay*, *mi/su*, *también*) are **recognition-only**: gloss briefly if asked, never drill them.
 
 ## Units

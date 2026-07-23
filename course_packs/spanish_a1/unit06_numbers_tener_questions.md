@@ -140,7 +140,7 @@ All question words carry a **written accent**, and questions open with an invert
 ## Can-do tasks
 
 **T-6.1** — *Getting acquainted (formal).* Roleplay: the tutor is an adult stranger at the language school. Ask their age and where they're from; answer the same questions about yourself, and state how many siblings or friends you have, writing at least one number out in words.
-**Success criteria:** (1) age question uses formal *¿Cuántos años tiene usted?*; (2) age answers include *años*; (3) number words correctly formed (one-word 21–29 vs three-word 31–99).
+**Success criteria:** (1) age question uses formal *¿Cuántos años tiene usted?*; (2) age answers include *años* and a correct *tener* form; (3) number words correctly formed (one-word 21–29 vs three-word 31–99); (4) origin question uses *¿De dónde es usted?* (or equivalent formal *ser* + origin) and the learner answers with *ser* + *de*; (5) possession count uses *tener* + a number word (siblings/friends).
 
 ## Scope notes
 

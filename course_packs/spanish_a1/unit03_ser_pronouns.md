@@ -118,7 +118,7 @@ Learner avoids *ustedes* with friends, looking for *vosotros* in a Latin America
 **Key:** *No, no soy de España.* (Accept a following correction like *Soy de...*)
 
 **P-3.5 (production)** — Introduce a friend in three sentences: name, origin, profession.
-**Key (model):** *Es mi amiga Laura. Es de Argentina. Es ingeniera.* Check: *es* forms, no article before profession, pronouns dropped where natural.
+**Key (model):** *Es Laura. Es de Argentina. Es ingeniera.* Check: *es* forms, no article before profession, pronouns dropped where natural. (Avoid *mi/tu/su* — possessives are recognition-only in this pack.)
 
 ## Can-do tasks
 
