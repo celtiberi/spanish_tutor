@@ -193,6 +193,28 @@ TRAJECTORIES = [
         ],
     },
     {
+        "id": "t13_real_session_replay",
+        "description": "Replay of real-session-1 failure modes: opener economy, "
+                       "compound tasks, secondary-error parking, state honesty.",
+        "turns": [
+            "lets start with unit 1",
+            "they're meeting for the first time, I think",
+            "buenas noches - it's evening",
+            "a classmate",
+            "buenos dias mi maestra. como estas usted?",
+            "¿cómo está usted?",
+            "me llamo Sam. mucho gusto. estoy bien... adiós!",
+        ],
+        "mechanical": ["emoji_cap", "state_disjoint"],
+        "judge_criteria": [
+            "Session open is <= 3 short lines with no full-syllabus dump",
+            "Production tasks ask for ONE new deliverable at a time (no greeting+how-are-you compound)",
+            "Register error: exactly one correction surfaced; other errors (mi maestra, accents) parked silently, no parentheticals on the success turn",
+            "Roleplay stays in Spanish character — no English stage directions or mid-task English grading",
+            "Final state honest: no skill in both mastered and struggling; hinted-only successes are NOT mastered; current_item_attempts reflects actual attempts while an item is open",
+        ],
+    },
+    {
         "id": "t11_content_smoke_unit4",
         "description": "Tier 1: generated ser/estar teaching must match frozen keys and framing.",
         "turns": [
