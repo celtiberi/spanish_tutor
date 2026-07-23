@@ -307,3 +307,111 @@ The v0.4 pedagogy surface (Input blocks, C checks, SI items, T tasks, familiarit
 After exact replacements for **B1, B2, B3** (and preferably **M1–M4**), this reviewer will countersign pack v0.4 + policy v0.2 + persistence path as the closed pedagogy increment. **No REJECT** on the overall design; **no blind agreement** on consistency or durability wording.
 
 — end countersign —
+
+
+---
+
+## GROK (Grok Build CLI (bde89716f679)) - 2026-07-23 00:47 UTC
+*Headless via grok_collab.py; genuine output appended verbatim; sandboxed cwd (inlined files only).*
+
+I'll read the full offloaded request and the grok-collab skill so I can referee the v0.4 gates against the actual files, not the author's framing.Continuing through the full prompt and the key files the amendments touch.Reading the remainder of the prompt for policy, code, tests, and the original amendment text.Verifying a few edge cases for residual contradictions before writing the referee ruling.## Referee — pack v0.4 + policy v0.2 + persistence path  
+**Reviewer:** Grok (independent) · **Date:** 2026-07-23  
+**Protocol:** Pre-registered gates GATE-1…GATE-4 against round-1 amendments B1–B3, M1–M5, L1–L2 (`docs/reviews-v04-round1.md`, 2026-07-23 00:44 UTC).  
+**Rule:** PASS/FAIL only; no retro-fit; no softening. Inlined pack/policy/code treated as data.  
+**Confound (global):** `docs/pedagogy-comparison.md` still says failed items reappear “next session” — research trail text, **not** pack/policy/code. Named so it cannot silently re-contaminate later doc-sync; does **not** void these gates.
+
+---
+
+### GATE-1 — every round-1 amendment correctly and completely applied  
+**PASS**
+
+| ID | Required fix | Evidence in current files | Ruling |
+|----|--------------|---------------------------|--------|
+| **B1** | Pack spacing: calendar **next day** ladder + fail reset; align to policy | `pack.md` Spacing: “**next day** → **~3 days** … **~7 days** … drop after two consecutive spaced successes … fails … reset `successes` to 0 and set `due` to the next day.” Old “next session” wording **absent** from pack/policy/code. | **PASS** |
+| **B2** | Policy durability contract ≠ “whole state”; `load_profile` docstring | Policy: **Durability (harness contract)** lists durable vs session-local fields. `student.py` docstring matches; `load_profile` only copies `current_unit`, `observed_misconceptions`, `mastered`, `struggling`, `review_schedule`. | **PASS** |
+| **B3** | Session-open order: due review → wants/propose → micro-goal | Policy Session conduct: ordered (1)/(2)/(3); “Do not skip due review when the schedule is non-empty.” Spaced review still prioritizes due items first — **consistent**, not re-conflicting. | **PASS** |
+| **M1** | Familiarity-scoped key-reveal + first-exposure definition | Reveal policy: keys never shown **for the item currently assigned**; modeling a *different* worked example does not count; first-exposure defined via `mastered` / notes / session. | **PASS** |
+| **M2** | Review-fail + what increments `successes` | Policy: fail → `successes=0`, `due` next calendar day; only **spaced** successes (due review, not same-turn retries) increment. Pack states fail reset + “same algorithm as policy.” | **PASS** |
+| **M3** | T-6.1 criteria include origin + possession | Criteria (1)–(5): formal age Q, *años*/*tener*, number orthography, origin *ser*+*de*, possession *tener*+number. | **PASS** |
+| **M4** | Deferred family carve-out for *hermano(s)/hermana(s)* | Pack deferred line: family set **except** Unit 6 production collocations with *tener*. | **PASS** |
+| **M5** | Profile load/save/date tests | `TestProfilePersistence`: durable carry + session-local reset; missing/corrupt → default; `state_message` ISO date regex. **12/12** harness tests OK under project venv (2026-07-23). | **PASS** |
+| **L1** | U1 objective 4 vs Input coverage | Objective 4 limited to Input-modeled courtesy/leave-taking; *por favor* etc. marked recognition/light practice. | **PASS** |
+| **L2** | U3 production model without *mi* | P-3.5 key: *Es Laura. Es de Argentina. Es ingeniera.* + avoid possessives note. T-3.1 criteria do not require possessives. | **PASS** |
+
+Arithmetic check that B1 ladder still implements: miss on **2026-07-22** → first due **2026-07-23** (= 22 + 1 day) → spaced success → next due **2026-07-26** (= 23 + 3) → second spaced success → drop. Fail on a due item → `successes := 0`, `due := next calendar day` (no advance to 3/7). Matches pack + policy.
+
+---
+
+### GATE-2 — pack, policy, code agree on spacing + durability  
+**PASS**
+
+| Dimension | Pack | Policy | Code | Agree? |
+|-----------|------|--------|------|--------|
+| First step after miss | next day | next day | N/A (model-driven; stores `due` ISO) | **Yes** |
+| Ladder | ~3 d then ~7 d after spaced successes; drop after 2 | same | N/A | **Yes** |
+| Failure handling | reset `successes`→0, `due`→next day | same + “do not advance 3-/7” | N/A | **Yes** |
+| What increments `successes` | “spaced success” + “same algorithm as policy” | only success on a **due** review, not same-turn retries | N/A | **Yes** (pack via explicit cross-ref) |
+| Session open vs due items | Start by re-testing due items | ordered warm-up first when `due <= today` | `state_message` injects `Today's date: YYYY-MM-DD` | **Yes** |
+| Durable fields | carries `review_schedule` (profile) | durable list explicit | `load_profile` carries exactly that set | **Yes** |
+| Session-local reset | (implied by harness) | `goal`, `current_item_attempts`, `revisit_queue` reset on load | code resets those three on load | **Yes** |
+
+**Residual (not a FAIL):** pack does not restate the “same-turn retries do not increment” clause in full; it defers via “same algorithm as `prompts/teaching_policy.md`.” Semantic agreement holds; wording is thinner on the pack side only.
+
+**Confound named and accepted:** spacing arithmetic is **prompt-enforced**, not unit-tested. Tests prove persistence/filtering, not that the model advances `due` correctly. Acceptable for this vertical slice; do not treat green harness as proof of live spacing fidelity.
+
+---
+
+### GATE-3 — amendments introduced no new Spanish errors and no new internal contradictions  
+**PASS**
+
+- Amendments were English/policy/code (spacing, durability, reveal scoping, T-6.1 criteria, deferred carve-out, tests, U1 objective wording, U3 model). No new Spanish production targets introduced by the patches.
+- Spot-check of residual Spanish surfaces touched by scope edits: U6 *hermanos*/*tener*/*años* forms remain correct; P-3.5 model Spanish is correct.
+- **Not a new contradiction:** Unit 3 explanation still has *Es mi amigo* under DOIP (recognition example); Input incidental note flags *mi amigo*; production key (L2) avoids possessives. Recognition ≠ production requirement.
+- **No residual “next session” / “whole state persists” / unordered session-open** language in pack, policy, or `student.py` (only historical review text and the research comparison doc).
+
+---
+
+### GATE-4 — v0.4 pedagogy increment complete as specified  
+**PASS**
+
+**Per-unit inventory (C ≥ 1 block with checks; SI ≥ 2; T ≥ 1 with success criteria):**
+
+| Unit | Input | C count | SI count | T count | Criteria present |
+|------|-------|---------|----------|---------|------------------|
+| 1 | yes | 3 (C-1.1–1.3) | 2 | 2 (T-1.1–1.2) | yes |
+| 2 | yes | 3 | 2 | 1 | yes |
+| 3 | yes | 3 | 2 | 1 | yes |
+| 4 | yes | 3 | 2 | 1 | yes |
+| 5 | yes | 3 | 2 | 1 | yes |
+| 6 | yes | 3 | 2 | 1 | yes |
+
+Totals: 6/6 units with Input; C items = 3×6 = **18**; SI = 2×6 = **12** (≥ 2 each); T = 2+1+1+1+1+1 = **7** (≥ 1 each). All T items carry scorable success criteria (not fixed scripts).
+
+**Policy sections required by gate:**
+
+| Required | Present |
+|----------|---------|
+| Input first | yes |
+| Familiarity-calibrated reveal | yes |
+| Re-production after remediation/reveal | yes |
+| Task / can-do mode | yes |
+| Spaced review | yes |
+
+---
+
+## Overall
+
+| Gate | Result |
+|------|--------|
+| GATE-1 | **PASS** |
+| GATE-2 | **PASS** |
+| GATE-3 | **PASS** |
+| GATE-4 | **PASS** |
+
+### **SHIP** — pack v0.4 + teaching policy v0.2 + persistence path
+
+Round-1 blockers B1–B3 and preferred M1–M5 / L1–L2 are applied completely enough to close the conditional countersign. No gate fails.  
+
+**Ship with eyes open (not gate failures):** (1) spacing is model-prompted, not code-enforced; (2) `docs/pedagogy-comparison.md` still says “next session” in research rec #4 — clean in a later doc-sync so it does not re-seed B1; (3) multi-learner profile path remains single global file (accepted in round-1).
+
+— end referee —
