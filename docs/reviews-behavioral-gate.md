@@ -680,3 +680,146 @@ Cycle-4 delta vs round 3: **t12 still FAIL** → \(11 + 0 = 11\) (no change).
 3. **Do not** re-score this transcript under a softened or split criterion; freeze any split of #3 **before** the next run if limbs are to be scored separately.
 
 **Referee close:** Frozen criteria applied without softening; re-test bar identical to rounds 1–3. **11/12 full PASS → behavioral (prompt-layer judgment) gate still FAIL** as of **2026-07-22**, with **t12** remaining on the re-production limb of criterion 3.
+
+
+---
+
+## GROK (Grok Build CLI (bde89716f679)) - 2026-07-23 02:37 UTC
+*Headless via grok_collab.py; genuine output appended verbatim; sandboxed cwd (inlined files only).*
+
+I'll referee t12 against the re-frozen criteria with quoted transcript evidence. Loading the collab skill and the teaching-policy application rules so the grade is independent of the author's framing.Pulling unit-5 scope and denylist so criterion 1 is graded against pack constraints, not vibes.I have the frozen criterion text, policy branches, and cycle-5 transcript. Grading t12 strictly with quoted evidence and gate arithmetic.# Behavioral-gate referee report — Round 5 (cycle-5 re-test: t12 only)
+
+**Date:** 2026-07-22  
+**Role:** Independent blind referee of pre-registered protocol. Frozen `judge_criteria` for t12 from `evals/trajectories.py` as inlined for this run (criterion 3 re-frozen **before** this transcript).  
+**Scope:** pedagogical `judge_criteria` only on **t12_content_smoke_unit5_generated_input**. Prior locked full-PASS trajectories are not re-litigated: **t01, t04, t06, t07, t10, t11** (rounds 2–3) and **t02, t03, t05, t08, t09** (round 1) → **11** already full-PASS.  
+**Rule:** PASS only if the transcript shows the criterion; charm does not convert FAIL → PASS. No retro-fit of gates after seeing results.  
+**Full-trajectory PASS** = every `judge_criteria` item is PASS (any PARTIAL or FAIL → trajectory does not clear full criteria).
+
+**Re-freeze in scope (legitimacy ruling first):**  
+Criterion 3 was rewritten before this run to credit **either** same-item re-production (practiced / post-remediation path) **or** a fresh same-pattern application item (first-exposure path), matching `prompts/teaching_policy.md` familiarity branches (model → fresh item on first exposure; re-produce corrected form after remediation/reveal on practiced/just-cued material).  
+
+This is **legitimate policy alignment**, not illegitimate softening of a prior FAIL:
+
+1. Rounds 3–4 prescribed: freeze any split/reword of #3 **before** the next run; do **not** re-score old transcripts. That protocol was followed.  
+2. This transcript is a **new** run under the re-frozen text. Round-4’s FAIL is not reopened.  
+3. Under the re-frozen text, a pure post-reveal pivot away from the revealed item without same-item re-production would **still** FAIL the practiced-material branch. The re-freeze does not erase that failure mode; it only makes the first-exposure branch scorable when that is what the tutor actually ran.
+
+---
+
+## Frozen criteria under test (t12)
+
+1. Generated dialogue delivered immediately on request, using only in-scope structures/vocab (denylist scan corroborates)  
+2. Dialogue is short (seed-length), followed by comprehension before drilling  
+3. Wrong attempt on a just-cued form: content hint (no gold token) then re-attempt; full model only after second miss. After a model/reveal, the tutor elicits APPLICATION — either re-production of the same item (practiced material) or a fresh same-pattern item (first exposure) — and the learner completes it before the topic moves on  
+
+---
+
+## t12_content_smoke_unit5_generated_input (cycle-5)
+
+| # | Criterion | Verdict | Evidence |
+|---|-----------|---------|----------|
+| 1 | Generated dialogue delivered immediately; in-scope structures/vocab | **PASS** | LEARNER 1 requests a fresh daily-routines dialogue “Not the one from the course.” **TUTOR 1** delivers on that turn: Sofía/Diego exchange with regular present (*vives, vivo, bebo, como, trabajas, trabajo, estudias, estudio, leo, escribo*) and A1 routines content. **Immediate delivery:** no Unit-1 gate, no dependency probe blocking generation. **Structure/denylist scan:** no past/compound tense, no progressive, no *ir a* + infinitive, no stem-changers, no *gustar*/object-pronoun constructions, no subjunctive. Verb inventory matches Unit 5 core set (*vivir, beber, comer, trabajar, estudiar, leer, escribir*). Length ~54 words vs seed ~46 words (comparable). **Mild flag (not a FAIL under this bar):** *¿dónde?* is a Unit-6 question word used as recognition filler; prior rounds accepted similar incidental recognition without structure-scope breach. Not taught as a question-word objective. |
+| 2 | Short (seed-length); comprehension before drilling | **PASS** | Dialogue is seed-scale (seven short turns). **TUTOR 1** immediately follows with three English-ok comprehension checks (who drinks coffee/water; Diego at night; shared activity). **TUTOR 2** stays on meaning work (re-points *bebo café / bebo agua* lines). Form/conjugation drill begins only at **TUTOR 3**, after LEARNER 3 asks “ok quiz me on the verbs from it.” Comprehension precedes drilling. |
+| 3 | Hint-before-gold on just-cued wrong attempt; application after model/reveal completed before topic moves on | **PASS** | See limb-by-limb below. |
+
+**Trajectory full criteria:** **PASS** (3/3).
+
+---
+
+### Criterion 3 — limb-by-limb (quoted)
+
+**A. Just-cued form + wrong-attempt path (hint before gold; full model only after second miss)**
+
+| Step | Evidence | Ruling |
+|------|----------|--------|
+| Cue / model of pattern | **TUTOR 3** models *hablar* paradigm table; states “**yo always ends in -o**”; assigns *beber* yo: “How would Sofía say **‘I drink’** — *beb__*?” Form also appeared in prior input (*bebo café*). Just-cued / first-production path applies. | Cue present |
+| First wrong | LEARNER 4: *trabajas* | Wrong attempt |
+| First response = content hint, **no gold token** | **TUTOR 4:** “verb we want is **beber**… stem is **beb-**… **yo** always ends in **-o** (not *-as*…).” Re-elicits “*beb__*.” **Does not** print *bebo*. | **PASS** |
+| Second wrong | LEARNER 5: *trabajo!* | Second miss |
+| Second response | **TUTOR 5:** credits ending “**yo → -o**”; rejects wrong stem (*trabajo* = I work); re-elicits “put your correct **-o** ending onto **beb-**… **‘I drink’**?” Still **no gold *bebo***. | **PASS** — “full model only after second miss” is a **ceiling** on early reveal, not an obligation to dump gold on miss #2. Withholding past the second miss does not fail this limb. Premature gold (rounds 1–2 failure mode) is absent. |
+| Successful production | LEARNER 6: “if it's beber, **yo bebo**. Trabajar would be yo trabajo.” | Learner produces corrected target without a prior tutor gold dump |
+
+**B. After model/reveal → APPLICATION completed before topic moves on**
+
+Two application-relevant events:
+
+1. **First-exposure branch (pattern *yo → -o*):** **TUTOR 3** models *hablar*, then immediately assigns a **fresh same-pattern item** (*beber* yo). Learner completes that application at LEARNER 6 (*yo bebo*) **before** **TUTOR 6** advances the topic to a further stretch (*comer* yo). This matches policy first-exposure: model worked example → learner uses it on a fresh item.  
+2. **Practiced / post-reveal same-item re-production branch:** Not triggered as a separate post-gold event for *bebo*, because the tutor **never fully revealed** *bebo* before the learner produced it. There is therefore **no** post-reveal pivot-away failure of the kind that failed round 4 (reveal *comes* → jump to *vives* without re-production of *comes*).  
+
+**TUTOR 6** after correct *yo bebo*: “¡Exacto! **Yo bebo**… Let's stretch it one step… **comer**… *com__*.” Stretch to a new same-pattern item **after** completion of the *beber* application is allowed; it is not “moving on” from an uncompleted application of the modeled rule.
+
+**Does the tutor fail either application branch?**  
+- First-exposure application: **no fail** — fresh item (*beber*) completed by learner before next topic move.  
+- Same-item re-production after reveal: **branch not activated** for *bebo* (no pre-production full reveal). No observed fail.  
+
+**Criterion 3 overall:** **PASS**.
+
+---
+
+### Confounds named (do not convert PASS → FAIL or vice versa)
+
+1. **Scripted recovery copy** assumes a yo-form drill and supplies *yo bebo / yo trabajo*. In this run the tutor’s actual drill target **was** *beber* yo, so the recovery turn **aligns** with the correction target (unlike round 4, where the revealed item was *comes* meaning and recovery emitted unrelated yo-forms). Confound reduced vs round 4; not a void.  
+2. **Transcript ends mid-*comer*** (`revisit_queue`: “comer yo-form (in progress)”). That incomplete stretch is **not** the application item required by the *hablar* model / *beber* path; *beber* was completed first. Incomplete terminal item is not a criterion-3 fail under the frozen text.  
+3. **No full gold after second miss:** tutor never used the permission to model *bebo* after miss #2; learner self-recovered. Pedagogically fine under policy; scorable as PASS under “full model **only after** second miss.”  
+4. ***¿dónde?* mild U6 recognition creep** in generated input: named under #1; does not fail structure/denylist scan used in prior rounds for this criterion.
+
+**No voiding run-spec violation:** turns match frozen `trajectories.py` learner script shape; criterion 3 text was re-frozen before the run; transcript is scorable.
+
+---
+
+## FINAL combined gate arithmetic
+
+| Block | Trajectories full-PASS | Count |
+|-------|------------------------|------:|
+| Round 1 locked | t02, t03, t05, t08, t09 | **5** |
+| Round 2 cleared | t01, t06, t07, t10, t11 | **5** |
+| Round 3 cleared | t04 | **1** |
+| Round 4 | t12 | **0** (historical; not re-scored) |
+| Round 5 (this run) | t12 | **1** |
+| **Total full-PASS** | | **12** |
+| Still full-FAIL | — | **0** |
+| Total trajectories | | **12** |
+
+Arithmetic:
+
+\[
+5 + 5 + 1 + 1 = 12
+\]
+
+\[
+\frac{12}{12} = 1.0 = \mathbf{100\%}\ \text{full-criteria PASS}
+\]
+
+\[
+12 - 12 = 0\ \text{remaining full-criteria FAIL}
+\]
+
+Prior locked before this run: **11**.  
+Cycle-5 delta: \(+1\) (t12 full PASS).  
+Combined: \(11 + 1 = \mathbf{12}\).
+
+**No numeric pass threshold is pre-registered in `trajectories.py`.** Under the smoke convention used in rounds 1–4 (clean clear only if **all** trajectories full-PASS), **0 remaining FAILs → gate clears**.
+
+---
+
+## Overall ruling
+
+**PASS — 12 of 12 trajectories pass full pre-registered `judge_criteria` as of 2026-07-22.**
+
+- t12: **PASS** on all three frozen criteria under the pre-run re-frozen criterion 3.  
+- Application: first-exposure branch satisfied (*hablar* model → *beber* application completed by learner before stretch to *comer*); practiced same-item re-production branch not violated because no premature/post-wrong full reveal of *bebo* occurred without application.  
+- Hint-before-gold on just-cued wrong attempts: held (no gold token on miss 1 or miss 2).  
+- Re-freeze: **accepted as legitimate policy alignment**, frozen before this run, not a re-score of round 4.  
+- No voiding confounds that discard the PASS; confounds named above limit over-claim only.
+
+### What cleared on t12 this round (vs round 4)
+
+| Limb / area | Round 4 | Round 5 |
+|-------------|---------|---------|
+| #1 dialogue delivery + scope | PASS | **PASS** (held) |
+| #2 seed-length + comprehension before drill | PASS | **PASS** (held) |
+| #3 hint-before-reveal (no gold on first wrong) | PASS | **PASS** (held; also no gold on second wrong) |
+| #3 APPLICATION after model/reveal before topic moves on | **FAIL** (reveal *comes* → pivot; no same-item re-production) | **PASS** (model *hablar* → fresh-item *beber* completed; no orphan reveal) |
+| Gate 12/12 | FAIL (11/12) | **PASS (12/12)** |
+
+**Referee close:** Frozen criteria applied without softening; re-frozen criterion 3 applied only to this new run as prescribed. **12/12 full PASS → behavioral (prompt-layer judgment) gate CLEARS** as of **2026-07-22**.
