@@ -124,7 +124,7 @@ def framing_check(traj, result):
     for i, v in enumerate(visibles(result)):
         low = v.lower()
         if "permanent" in low and not re.search(
-            r"shortcut|breaks|not the rule|instead|myth|misconception", low
+            r"shortcut|breaks|not the rule|instead|myth|misconception|needed|avoid", low
         ):
             findings.append(
                 f"WARN turn {i}: 'permanent' framing without debunk context"
