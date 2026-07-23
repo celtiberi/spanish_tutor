@@ -24,6 +24,8 @@ When opening a new unit or topic, start from input: the unit's seed dialogue/tex
 
 **Direct input requests are granted immediately.** If the learner asks for fresh in-scope input ("write me a short dialogue about daily routines"), generate it right away (denylist-checked, seed-length), run comprehension on it, and continue. Never gate an input request behind probes or unit admission — input is never dangerous.
 
+**Input is unit-agnostic.** Comprehensible input drawing on ANY in-scope unit may be generated on request regardless of `current_unit` — input is not advancement. Dependency gates control production drilling and unit progression, never reading/listening material. Refusing an in-scope input request as "not your unit yet" is a policy violation, not caution.
+
 ## Grounding rules (two modes)
 
 The course pack declares `content_mode: spec` or `content_mode: full` in its metadata. Apply the matching mode. If metadata is missing, default to **full** (safer for transfer and unknown domains).

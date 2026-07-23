@@ -80,8 +80,9 @@ def extract_state(reply: str, previous: dict) -> tuple[str, dict, bool]:
 def state_message(state: dict, parse_failed: bool = False,
                   session_open: bool = False) -> dict:
     today = datetime.date.today().isoformat()
+    tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
     lines = [
-        f"Today's date: {today}.",
+        f"Today's date: {today}. Tomorrow: {tomorrow}.",
         "Learner profile / session state so far (maintained by you across "
         "turns and sessions):",
         json.dumps(state, ensure_ascii=False),
@@ -100,9 +101,16 @@ def state_message(state: dict, parse_failed: bool = False,
     lines.append(
         "Reminder (harness contract): end this reply with the trailing "
         "<session_state> block — every turn, even short ones. "
-        "Style: at most ONE emoji. One production deliverable per prompt. "
+        "Bookkeeping: a failed due-review item gets due = tomorrow's date "
+        "(given above) and successes = 0; log the matching M-x.y ID in "
+        "observed_misconceptions AND on its schedule entry whenever you "
+        "diagnose an error. Credit production only after a Spanish echo of "
+        "the target form. "
+        "Style: at most ONE emoji. One production deliverable per prompt — "
+        "never two asks in one ('greet AND ask how they are'). "
         "In roleplay tasks: stay in Spanish, in character; fix errors with "
-        "in-character recasts — English feedback only after the closing."
+        "in-character recasts — English feedback only after the closing, "
+        "which you must elicit."
     )
     content = "\n".join(lines)
     if config.SUPPORTS_MID_SYSTEM:
