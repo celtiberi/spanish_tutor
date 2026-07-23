@@ -130,7 +130,7 @@ def _repair_state(client, system, history, previous):
                 ),
             }],
         )
-    except anthropic.APIError:
+    except Exception:  # any provider's failure -> keep previous state
         return previous, False
     reply = "".join(b.text for b in final.content if b.type == "text")
     _, state, ok = extract_state(reply, previous)
@@ -230,6 +230,9 @@ def main() -> None:
             continue
         except anthropic.APIConnectionError:
             print("[Network error — check your connection and resend.]")
+            continue
+        except Exception as e:
+            print(f"[Provider error: {type(e).__name__}: {str(e)[:150]} — resend.]")
             continue
         log_turn(log_path, user_input, visible, state, final)
         save_profile(config.PROFILE_PATH, state)

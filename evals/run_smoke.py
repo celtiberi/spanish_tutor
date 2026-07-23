@@ -73,10 +73,10 @@ def main():
     for traj in selected:
         try:
             result = run_trajectory(client, system, traj)
-        except anthropic.APIStatusError as e:
+        except Exception as e:  # provider-agnostic: log and continue the suite
             summary.append({"id": traj["id"], "status": "ERROR",
-                            "error": f"{e.status_code}: {e.message}"})
-            print(f"\n[{traj['id']}] API error {e.status_code}; continuing")
+                            "error": f"{type(e).__name__}: {str(e)[:300]}"})
+            print(f"\n[{traj['id']}] {type(e).__name__}; continuing")
             continue
         findings, passed = run_checks(traj, result)
         result["findings"] = findings

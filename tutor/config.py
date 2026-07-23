@@ -29,7 +29,12 @@ load_env()
 MODEL = os.environ.get("TUTOR_MODEL", "grok-4-fast")
 MAX_TOKENS = 8192
 
-PROVIDER = "xai" if MODEL.startswith("grok") else "anthropic"
+if MODEL.startswith("grok"):
+    PROVIDER = "xai"
+elif MODEL.startswith("gemini"):
+    PROVIDER = "google"
+else:
+    PROVIDER = "anthropic"
 # Mid-conversation {"role": "system"} messages are Claude Opus 4.8-only.
 SUPPORTS_MID_SYSTEM = MODEL == "claude-opus-4-8"
 SUPPORTS_ADAPTIVE_THINKING = MODEL.startswith(
@@ -46,4 +51,10 @@ def make_client():
         if not key:
             raise RuntimeError("GROK_API_KEY not set (needed for grok models)")
         return anthropic.Anthropic(api_key=key, base_url="https://api.x.ai")
+    if PROVIDER == "google":
+        from .providers import GeminiClient
+        key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        if not key:
+            raise RuntimeError("GEMINI_API_KEY not set (needed for gemini models)")
+        return GeminiClient(key)
     return anthropic.Anthropic()
