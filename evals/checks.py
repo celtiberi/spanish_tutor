@@ -132,9 +132,10 @@ def framing_check(traj, result):
     return findings
 
 
-EMOJI_RE = re.compile(
-    "[\U0001F300-\U0001FAFF☀-➿⬀-⯿←-⇿️]"
-)
+# True emoji only: misc-symbols/dingbats + emoji blocks + star. Deliberately
+# excludes typographic arrows (→) and variation selectors — pedagogy notation
+# is not decoration.
+EMOJI_RE = re.compile("[\U0001F300-\U0001FAFF☀-➿⭐⭕]")
 
 
 def emoji_cap(traj, result):
