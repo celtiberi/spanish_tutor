@@ -252,3 +252,237 @@ Mechanical all-pass does **not** imply behavioral pass. Same frozen bar: **8/13 
 | Rank vs peers (same gates) | opus final **12/12** > gemini **8/13** > grok-4-fast **6/13** |
 
 **Do not soften FAILs.** gemini-3.6-flash is **not** “almost Opus”: five hard pedagogical misses remain under identical frozen criteria. Relative to grok-4-fast it **fixes the worst over-help failure (t04)** and **lobby/probe + person-first multi-error**, but introduces a **scope-refusal failure (t12)** and still shares **English-echo (t09)**, **schedule honesty (t03)**, and **t13 production-phase** weaknesses. Dominant gemini pattern in this run: **policy security / withholding often holds; curriculum commitment and state bookkeeping under pressure do not.**
+
+
+---
+
+## GROK (Grok Build CLI (bde89716f679)) - 2026-07-23 07:14 UTC
+*Headless via grok_collab.py; genuine output appended verbatim; sandboxed cwd (inlined files only).*
+
+I'll load the full blind-referee prompt and related skill/context so I can grade these fix-cycle transcripts against the frozen gates.Continuing through the trajectories file and the rest of the prompt for full judge criteria.I have the frozen criteria and all five transcripts. Grading item-by-item against the gates next—no leniency for the re-test.# BLIND REFEREE — gemini-3.6-flash fix-cycle 1
+**Protocol:** EXP-001 frozen `judge_criteria` in `evals/trajectories.py`  
+**Transcripts:** `evals/results/transcripts-gemini-fix1.md` (t03, t09, t10, t12, t13)  
+**Referee date:** 2026-07-23  
+**Bar:** same as baseline / opus rounds; no re-test leniency. FAIL stays FAIL unless the run voids the written spec (none voided here).
+
+**Date arithmetic (session calendar):**  
+Today for this run = **2026-07-23**.  
+Tomorrow (harness-supplied schedule roll) = 2026-07-23 + 1 day = **2026-07-24**.  
+Seed due offsets: `_days_ago(1)` → 2026-07-22; `_days_ago(2)` → 2026-07-21.
+
+---
+
+## t03_due_review_warmup
+
+### Baseline failure mode named: **stale due date**
+### Criteria
+
+**1. Warm-up on due items happens BEFORE new material despite learner request — PASS**  
+Learner 1: “Let's do something new today. Numbers maybe?”  
+Tutor 1: “We'll get right to numbers in just a moment! First, let's do this single quick warm-up item” and re-presents *Madrid ___ en España.*  
+Warm-up held; new Unit 6 content only after the location item is resolved (Tutor 3).
+
+**2. Failed M-4.1 item: remediation uses what/how/where; learner re-produces — PASS**  
+Learner 2 wrong: “Madrid es en España...”  
+Tutor 2: “location of physical places (even permanent ones like cities) always takes **estar**!” (where/location framing) + “Can you write the full corrected sentence?”  
+Learner 3 re-produces: “Madrid está en España.” Tutor 3 echoes: “¡Perfecto! *Madrid está en España.*”
+
+**3. Schedule updated per ladder: failed item due next day / successes 0 — PASS**  
+Final `review_schedule` entry for the failed item:  
+`"item": "P-4.2 ser vs estar choice", "misconception": "M-4.1", "due": "2026-07-24", "successes": 0`  
+due = tomorrow (2026-07-24); successes = 0. **Baseline stale-due failure is fixed.**
+
+**Confound / residual (does not flip criterion 3):** Seed had **two** due items (P-4.2 and P-6.2). Tutor 0 announces “two quick warm-up review items” but only runs P-4.2 as warm-up; P-6.2 disappears from final schedule while `"tener conjugation"` lands in `mastered` after the learner dumps a paradigm in reply to “How old is Yuki?” (Tutor 4 credits conjugation, not the age comprehension target). Bookkeeping noise; not a named judge_criterion for this trajectory.
+
+### t03 VERDICT: **PASS** (3/3)
+
+---
+
+## t09_english_only
+
+### Baseline failure mode named: **no Spanish echo**
+### Criteria
+
+**1. Accepts English meaning checks without penalty — PASS**  
+Learner 1: English-only preference → Tutor 1: “No problem… keep explanations in English.”  
+Learner 2 English wrong answer → Tutor 2 redirects to meaning of *Buenas noches* without shaming.  
+Learner 3 still off-target English/Spanish mix → Tutor 3 answers meaning without penalty.
+
+**2. Still elicits a Spanish echo of the target form before treating it as production mastery — FAIL**  
+Across Tutor 1–3, every check is English binary meaning (“morning or evening?”).  
+Quoted: Tutor 3 ends with “If someone greets you with **Buenos días**, is that morning or evening?”  
+No turn asks the learner to produce/echo *Buenas noches* (or any target greeting form).  
+Final state: `mastered: []` (no false mastery credit), but the criterion still requires **elicitation** of a Spanish echo. Echo never occurs. **Baseline failure mode still present.**
+
+### t09 VERDICT: **FAIL** (1/2)
+
+---
+
+## t10_multi_error
+
+### Baseline failure modes named: **misconception logging collapse**, **early move-on**
+### Criteria
+
+**1. Corrects ONE error first (person: yo es → soy), not all four at once — FAIL**  
+Learner 1: “Yo es un profesora y estoy de México.”  
+Tutor 1 corrects **origin** only: “Spanish uses **soy de** (not *estoy de*). How do you say ‘I am from Mexico’?”  
+Quantity is one-at-a-time (good), but the **specified** first target is person (*yo es* → *soy*). Person agreement is never surfaced; learner self-repairs to “Soy profesora” later without tutor diagnosis of *yo es*.
+
+**2. Misconception logged in state (observed_misconceptions grows) — PASS (narrow)**  
+Final: `"observed_misconceptions": ["M-4.5"]` with schedule row for origin/ser. Logging is non-empty (baseline “collapse” to empty/absent is fixed for the error the model chose).  
+**Confound:** logged M-ID matches origin, not the criterion-named person error—so logging works, prioritization does not.
+
+**3. Learner re-produces the corrected full sentence before moving on — FAIL (early move-on persists)**  
+Learner 2: “Soy profesora... ¿y soy de México?” (partial / two fragments).  
+Tutor 2: “¡Exacto! **Soy de México.** ¡Muy bien!” then **immediately** “bring us back to our reading from Unit 1” + comprehension question.  
+Full intro re-production is not required before pivot. Learner 3 later volunteers “Soy profesora y soy de México” and is credited, but the tutor had already moved on at Tutor 2. **Early move-on still present.**
+
+### t10 VERDICT: **FAIL** (1/3)
+
+---
+
+## t12_content_smoke_unit5_generated_input
+
+### Baseline failure mode named: **over-refusal / unit lock** of in-scope input request
+### Criteria
+
+**1. Generated dialogue delivered immediately on request, in-scope — PASS**  
+Learner 1 requests fresh daily-routines dialogue.  
+Tutor 1: “Here is a short dialogue about daily routines using in-scope forms:” + dialogue (no unit-lock refusal, no “finish Unit 1 first”).  
+Forms: *estudias/estudio, trabajo, como, bebo, leo* + greetings/time phrases—A1 present regular, no clear out-of-scope densylist hits in the transcript. **Over-refusal mode is gone on this run.**
+
+**2. Dialogue short (seed-length), comprehension before drilling — PASS**  
+Five-line dialogue → comprehension (“What does Elena eat and drink in the afternoon?”).  
+Learner 3 jumps to “ok quiz me on the verbs” → Tutor 3 holds the line: “We'll quiz those verbs in just a moment! First, let me make sure the meaning is clear…”
+
+**3. Wrong attempt: content hint (no gold), re-attempt; model only after second miss; then application — PASS**  
+Learner 4 wrong: “trabajas”.  
+Tutor 4: “for **yo** (I), regular verbs end in **-o**… How would you say ‘I work’ using **trabajar**?” — pattern hint, **no gold token *trabajo***.  
+Learner 5: “trabajo!” accepted. No second miss → no full model required (spec-compliant).  
+Tutor 5 then same-pattern application: “using **estudiar**, how do you say ‘I study’?”  
+Trajectory ends mid-application; topic not abandoned after an uncompleted reveal path.
+
+### t12 VERDICT: **PASS** (3/3)
+
+---
+
+## t13_real_session_replay
+
+### Baseline failure modes named: **compound production**, **roleplay purity**, **stale attempts**, **no farewell elicitation**
+### Criteria
+
+**1. Session open ≤ 3 short lines, no full-syllabus dump — PASS**  
+Tutor 0: welcome + no-review + Unit 1 proposal + optional dialogue invite. No unit catalog dump.
+
+**2. Production prompts: ONE new deliverable (no greeting+how-are-you compound) — PASS**  
+Tutor 4: name only (“How would you say ‘My name is [your name]’…”).  
+Tutor 5: formal how-are-you re-write only.  
+Tutor 6–8: informal name-question only.  
+**Baseline compound-ask failure not reproduced.**
+
+**3. Register error: exactly one correction; park others; no parentheticals on success — PASS**  
+Learner 5: “buenos dias mi maestra. como estas usted?”  
+Tutor 5 surfaces only *estás*/*usted* → *está*: “**estás** is used with **tú**… **usted**… takes **está**.”  
+*mi maestra* and accent issues parked. Success turn Tutor 6: “¡Perfecto! *¿Cómo está usted?*…” — no parenthetical pile-on.
+
+**4. Roleplay stays in Spanish character; mid-task form fix = in-character Spanish re-ask/recast only — FAIL**  
+On the production attempt (Learner 5), Tutor 5 grades in English metalanguage: “Notice one small thing with *usted*… Informal (*tú*): … Formal (*usted*): … Can you write the formal version again?”  
+That is mid-task English grading / paradigm table, not an in-character Spanish recast or re-ask. **Roleplay-purity failure persists.**
+
+**5. Final state honest — PASS**  
+`mastered: []`; `struggling: ["M-1.2 (estás with usted)"]`; schedule has formal how-are-you with M-1.2, due 2026-07-24, successes 0. No dual-listed skill; miss not marked mastered.
+
+**6. current_item_attempts: non-zero while open; not stale non-zero after close — PASS (final-state only)**  
+Final `current_item_attempts: 0` after formal how-are-you closed and tutor moved to name-question. **Stale non-zero not present in final state.**  
+**Confound:** intermediate attempt counters are not in the provided transcript; only final state is scorable here.
+
+**7. Tutor elicits farewell; learner does not volunteer it — FAIL**  
+Through Tutor 8 the tutor is still drilling “¿Cómo te llamas?” (“To ask a classmate… start with **¿Cómo...** and use **te llamas**”).  
+No farewell prompt. Learner script forbids volunteering farewell. **No-farewell-elicitation failure persists.**
+
+### t13 VERDICT: **FAIL** (4/7 criteria; trajectory FAIL if any critical gate fails — C4 and C7 fail)
+
+---
+
+## Verdict table (re-test only)
+
+| ID | Baseline failure mode(s) | Re-test result | Notes |
+|----|--------------------------|----------------|-------|
+| t03 | stale due date | **PASS** | due=2026-07-24, successes=0; warm-up held |
+| t09 | no Spanish echo | **FAIL** | English meaning-only; no Spanish echo elicited |
+| t10 | logging collapse; early move-on | **FAIL** | logs M-4.5 but wrong first error; moves on before full re-production |
+| t12 | over-refusal / unit lock | **PASS** | dialogue immediate + comprehension-before-drill |
+| t13 | compound; roleplay; stale attempts; no farewell | **FAIL** | compound + stale-attempts fixed; **roleplay + farewell still FAIL** |
+
+### Baseline-failure-mode checklist (by name)
+
+| Named mode | Still present? |
+|------------|----------------|
+| t03 stale due date | **Fixed** |
+| t09 no Spanish echo | **Still present** |
+| t10 misconception logging collapse | **Mostly fixed** (non-empty log) |
+| t10 early move-on | **Still present** |
+| t12 over-refusal / unit lock | **Fixed** |
+| t13 compound production | **Fixed** |
+| t13 roleplay purity | **Still present** |
+| t13 stale attempts | **Fixed** (final state) |
+| t13 no farewell elicitation | **Still present** |
+
+---
+
+## Updated gemini pass count /13
+
+**Baseline standing passes (not re-run): 8**  
+(Assumed still standing per protocol: the 8 that were not in {t03, t09, t10, t12, t13}.)
+
+**Re-test flips:**  
+- t03: FAIL → PASS (+1)  
+- t12: FAIL → PASS (+1)  
+- t09: FAIL → FAIL (0)  
+- t10: FAIL → FAIL (0)  
+- t13: FAIL → FAIL (0)
+
+**Arithmetic:**  
+8 (standing) + 2 (new passes) + 0 = **10**  
+13 − 10 = **3** still failing (t09, t10, t13)
+
+### Updated score: **10/13**
+
+---
+
+## OVER-REFUSAL: prompt-fixable?
+
+**Ruling: YES — over-refusal was prompt-fixable on the pre-registered probe.**
+
+Evidence: t12 was the unit-lock / over-refusal trajectory. After the explicit “input is unit-agnostic / input ≠ advancement” clarification, Tutor 1 delivers an in-scope generated dialogue **immediately** with zero refusal or unit-gate. That is a clean mode flip under the frozen gate.
+
+**Contrast with grok over-help (not in this re-test):** This cycle only attempted the over-refusal / bookkeeping / schedule / compound cluster. No claim is licensed that grok-style over-help is similarly prompt-fixable; that axis was never treated here. Over-help remains an open, untested fix target.
+
+**Caveat (confound):** Single trajectory (t12), single model, single fix package (policy line + recency reminder + harness tomorrow-date). Do not over-generalize to “all refusal failures are prompt-only”; claim is limited to **this** frozen over-refusal item.
+
+---
+
+## Regressions introduced by the fix package?
+
+**No criterion-level regression on previously-passing items** (those eight were not re-run; cannot invent regressions there).
+
+**Within the five re-tests, residual / side issues (not new named baseline modes):**
+
+1. **t03 second due-item evaporation:** P-6.2 dropped; *tener* marked mastered off a non-target paradigm dump while age comprehension was open. Schedule-date fix worked; multi-item warm-up completeness did not improve.
+2. **t10 prioritization error:** Logging now fires, but on the **wrong** first error relative to the frozen criterion (origin before person). That is incomplete fix, not a new failure class.
+3. **t13 partial fix:** Compound-ask and final attempts hygiene improved; roleplay English grading and farewell elicitation did not. Fixes look **local to reminder-able bookkeeping**, not to multi-turn discourse goals.
+4. **No evidence** that the input-agnostic clarification caused new over-help, key dumps, or unit skips in these five transcripts.
+
+---
+
+## Bottom line
+
+| Metric | Value |
+|--------|-------|
+| gemini-3.6-flash after fix-cycle 1 | **10/13** |
+| Fixed this cycle | t03 (date ladder), t12 (over-refusal) |
+| Still FAIL | t09 (Spanish echo), t10 (first-error + early move-on), t13 (roleplay + farewell) |
+| Over-refusal prompt-fixable? | **Yes** (t12) |
+| Regressions from fixes? | **None criterion-scored**; t03 multi-due bookkeeping remains sloppy |
+
+End of referee report.

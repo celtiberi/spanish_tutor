@@ -37,6 +37,19 @@ gemini-3.6-flash lands between the peers (8/13) and **fails in the opposite dire
 
 **Implication upgrade:** failure modes are model-idiosyncratic and *bidirectional* — one model over-helps, another over-withholds, under one identical prompt stack. Phase 4 preference data must therefore cover both directions (dump-vs-hint AND refuse-vs-generate), and no prompt iteration tuned on one model can be assumed to transfer.
 
+## Fix-cycle results and the two-class taxonomy (2026-07-23)
+
+One prompt-fix cycle per non-Opus model was budgeted; Gemini's ran (grok's was not attempted). Gemini: 8/13 → **10/13**. Over-refusal (t12) flipped cleanly with a one-paragraph spec clarification ("input is unit-agnostic; input ≠ advancement"); schedule arithmetic fixed by having the harness supply tomorrow's date. Still failing after the cycle: Spanish-echo crediting, first-error prioritization, and roleplay purity/farewell elicitation.
+
+Across all three models and nine fix cycles, a two-class taxonomy has emerged:
+
+| Class | Examples | Prompt-fixable? |
+|---|---|---|
+| **Bookkeeping & single-turn rules** — state blocks, emoji caps, date math, M-ID logging, permission clarifications, task granularity | state omission (opus), schedule roll (gemini), over-refusal (gemini), compound asks (both) | **Yes** — recency injection or spec clarification, usually one cycle |
+| **Multi-turn discourse goals** — sustained in-character roleplay, holding evaluation until closure, eliciting closings, choosing *which* error to correct first | roleplay purity (**failed on opus AND gemini** — cross-model convergent ceiling), farewell elicitation, error prioritization, grok's omitted middle moves | **No** — resistant to every prompting channel tried |
+
+The referee's phrasing: fixes are "local to reminder-able bookkeeping, not to multi-turn discourse goals." The resistant class is precisely the **teaching-move selection and discourse-management behavior the project proposes to train** — Phase 4's target is now empirically characterized rather than assumed.
+
 ## Operational decisions
 
 - gemini-3.6-flash = **working default** (`TUTOR_MODEL` unset): best cheap-tier adherence, holds the over-help line, user's platform preference.
