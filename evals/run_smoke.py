@@ -26,16 +26,7 @@ RESULTS_ROOT = Path(__file__).resolve().parent / "results"
 
 
 def load_env():
-    import os
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        return
-    env = config.REPO_ROOT / ".env"
-    if env.exists():
-        for line in env.read_text().splitlines():
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                key, _, value = line.partition("=")
-                os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+    config.load_env()
 
 
 def run_trajectory(client, system, traj):

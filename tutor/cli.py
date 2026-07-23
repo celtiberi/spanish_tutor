@@ -155,6 +155,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    config.load_env()
     client = anthropic.Anthropic()
     system = build_system(config.POLICY_PATH, args.pack)
     state = load_profile(config.PROFILE_PATH)
