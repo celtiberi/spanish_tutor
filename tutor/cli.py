@@ -95,7 +95,34 @@ def run_turn(client, system, history, state, user_input,
         {"role": "user", "content": user_input},
         {"role": "assistant", "content": visible},
     ]
+    if not parse_ok:
+        state, parse_ok = _repair_state(client, system, history, state)
     return history, state, final, visible, parse_ok
+
+
+def _repair_state(client, system, history, previous):
+    """One-shot side call when a reply omitted its state block: ask for only
+    the block, against the same cached prefix. Not appended to history."""
+    try:
+        final = client.messages.create(
+            model=config.MODEL,
+            max_tokens=1024,
+            system=system,
+            thinking={"type": "adaptive"},
+            messages=history + [{
+                "role": "user",
+                "content": (
+                    "(harness) Your previous reply omitted the session_state "
+                    "block. Reply with ONLY the session_state block for the "
+                    "turn just completed — no other text."
+                ),
+            }],
+        )
+    except anthropic.APIError:
+        return previous, False
+    reply = "".join(b.text for b in final.content if b.type == "text")
+    _, state, ok = extract_state(reply, previous)
+    return state, ok
 
 
 def log_turn(log_path: Path, user_input, visible, state, final):
