@@ -4,3 +4,5 @@ logs/
 .venv/
 dist/
 *.egg-info/
+.env
+evals/results/
