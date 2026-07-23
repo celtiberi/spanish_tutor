@@ -72,18 +72,27 @@ def run_turn(client, system, history, state, user_input,
         {"role": "user", "content": user_input},
         state_message(state, parse_failed=parse_failed, session_open=session_open),
     ]
-    scrubber = StreamScrubber()
-    with client.messages.stream(
+    kwargs = dict(
         model=config.MODEL,
         max_tokens=config.MAX_TOKENS,
         system=system,
-        thinking={"type": "adaptive"},
         messages=messages,
-    ) as stream:
-        for text in stream.text_stream:
-            scrubber.feed(text)
-        scrubber.close()
-        final = stream.get_final_message()
+    )
+    if config.SUPPORTS_ADAPTIVE_THINKING:
+        kwargs["thinking"] = {"type": "adaptive"}
+    if config.SUPPORTS_STREAMING:
+        scrubber = StreamScrubber()
+        with client.messages.stream(**kwargs) as stream:
+            for text in stream.text_stream:
+                scrubber.feed(text)
+            scrubber.close()
+            final = stream.get_final_message()
+    else:
+        final = client.messages.create(**kwargs)
+        reply_text = "".join(b.text for b in final.content if b.type == "text")
+        marker_at = reply_text.find(STATE_MARKER)
+        print(reply_text if marker_at == -1 else reply_text[:marker_at],
+              end="", flush=True)
 
     if final.stop_reason == "refusal":
         print("[The tutor declined this request.]")
@@ -103,12 +112,15 @@ def run_turn(client, system, history, state, user_input,
 def _repair_state(client, system, history, previous):
     """One-shot side call when a reply omitted its state block: ask for only
     the block, against the same cached prefix. Not appended to history."""
+    repair_kwargs = {}
+    if config.SUPPORTS_ADAPTIVE_THINKING:
+        repair_kwargs["thinking"] = {"type": "adaptive"}
     try:
         final = client.messages.create(
             model=config.MODEL,
             max_tokens=1024,
             system=system,
-            thinking={"type": "adaptive"},
+            **repair_kwargs,
             messages=history + [{
                 "role": "user",
                 "content": (
@@ -155,8 +167,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    config.load_env()
-    client = anthropic.Anthropic()
+    client = config.make_client()
     system = build_system(config.POLICY_PATH, args.pack)
     state = load_profile(config.PROFILE_PATH)
     history: list[dict] = []

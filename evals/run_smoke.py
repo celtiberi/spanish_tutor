@@ -52,16 +52,17 @@ def run_trajectory(client, system, traj):
                     final.usage, "cache_read_input_tokens", 0) or 0,
             },
         })
-    return {"id": traj["id"], "turns": turns}
+    return {"id": traj["id"], "model": config.MODEL, "turns": turns}
 
 
 def main():
     load_env()
-    import anthropic
+    import anthropic  # noqa: F401 (error types)
     prefixes = sys.argv[1:]
     selected = [t for t in TRAJECTORIES
                 if not prefixes or any(t["id"].startswith(p) for p in prefixes)]
-    client = anthropic.Anthropic()
+    client = config.make_client()
+    print(f"model under test: {config.MODEL} (provider {config.PROVIDER})")
     system = build_system(config.POLICY_PATH, config.DEFAULT_PACK_DIR)
 
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")

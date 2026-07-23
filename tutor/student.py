@@ -86,6 +86,7 @@ def state_message(state: dict, parse_failed: bool = False,
         "turns and sessions):",
         json.dumps(state, ensure_ascii=False),
     ]
+    from . import config
     if parse_failed:
         lines.append(
             "Previous turn state parse failed; re-emit full state from evidence."
@@ -103,4 +104,13 @@ def state_message(state: dict, parse_failed: bool = False,
         "In roleplay tasks: stay in Spanish, in character; fix errors with "
         "in-character recasts — English feedback only after the closing."
     )
-    return {"role": "system", "content": "\n".join(lines)}
+    content = "\n".join(lines)
+    if config.SUPPORTS_MID_SYSTEM:
+        return {"role": "system", "content": content}
+    # Fallback for models without mid-conversation system messages: a
+    # clearly-framed harness message in a user turn (not learner text).
+    return {
+        "role": "user",
+        "content": "<harness_context>\n(This is from the tutoring system, "
+                   "not the learner.)\n" + content + "\n</harness_context>",
+    }
