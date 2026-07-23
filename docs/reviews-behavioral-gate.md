@@ -567,3 +567,116 @@ Arithmetic:
 2. **Or** pre-register a split of criterion 3 into separate reveal-limb and re-production-limb items before the next run — do not re-score this transcript under a new text.
 
 **Referee close:** Frozen criteria applied without softening; re-test bar identical to rounds 1–2. **11/12 full PASS → behavioral (prompt-layer judgment) gate still FAIL** as of **2026-07-22**, with **t12** remaining.
+
+
+---
+
+## GROK (Grok Build CLI (bde89716f679)) - 2026-07-23 02:31 UTC
+*Headless via grok_collab.py; genuine output appended verbatim; sandboxed cwd (inlined files only).*
+
+I'll grade t12 blind against the frozen criteria, verify the re-production limb with the updated script, and check scope/vocab against the pack and prior protocol notes.# Behavioral-gate referee report — Round 4 (cycle-4 re-test: t12 only)
+
+**Date:** 2026-07-22  
+**Role:** Independent blind referee of pre-registered protocol (frozen `judge_criteria` in `evals/trajectories.py`; tutor prompts unchanged; recovery-turn script fix only).  
+**Scope:** pedagogical `judge_criteria` only on **t12_content_smoke_unit5_generated_input**. Prior locked full-PASS trajectories are not re-litigated: **t01, t04, t06, t07, t10, t11** (rounds 2–3) and **t02, t03, t05, t08, t09** (round 1) → **11** already full-PASS.  
+**Rule:** PASS only if the transcript shows the criterion; charm does not convert FAIL → PASS. No leniency creep — same bar as rounds 1–3. Retro-fitting gates after results is forbidden.  
+**Full-trajectory PASS** = every `judge_criteria` item is PASS (any PARTIAL or FAIL → trajectory does not clear full criteria).  
+**Round-3 prescription under verification (not a new gate):** option 1 — recovery turn added so the learner can re-produce whichever verb the tutor drills; verify the **re-production limb** of criterion 3 specifically.
+
+---
+
+## t12_content_smoke_unit5_generated_input (cycle-4)
+
+| # | Criterion | Verdict | Evidence |
+|---|-----------|---------|----------|
+| 1 | Generated dialogue delivered immediately on request; in-scope structures/vocab (denylist scan corroborates) | **PASS** | LEARNER 1 requests a fresh daily-routines dialogue; **TUTOR 1** delivers on that turn (*trabajas / trabajo / estudio / comes / como / bebo / leo / escribo / vives / vivo* — regular present; routines scope). No Unit-1 gate blocking generation. Spot-check against mechanical denylist patterns: no progressive, no *ir a* + infinitive, no stem-changers, no past tenses in the generated exchange. Incidental recognition words (*ciudad, amigo, hoy*) are pack-style input filler, not out-of-scope structure teaching. |
+| 2 | Dialogue short (seed-length); comprehension before drilling | **PASS** | ~8-line dialogue (Sofía/Daniel), comparable to Unit 5 seed length. **TUTOR 1** ends with comprehension (*Who works today, Sofía or Daniel?*). **TUTOR 2** re-points meaning on the same dialogue before any conjugation drill. Form work begins only at **TUTOR 3** after the learner asks to be quizzed. |
+| 3 | Wrong attempt on a just-taught form: remediation + content hint **before any full reveal**; learner re-produces the corrected form | **FAIL** | **Hint-before-reveal limb: PASS.** Item under drill after TUTOR 3 model: *comes* — “**I** eat” or “**you** eat?” LEARNER 4: *trabajas*; **TUTOR 4** remediates (wrong target; points back to *comes*) and gives Level-1/2 content only: “the **-s** ending points to ‘you’” — **does not** state the gold token *comes = “you eat.”* LEARNER 5: *trabajo!*; **TUTOR 5** then full-reveals: “**comes = “you eat.”** … **como = “I eat.”**” — full form only after the second miss (policy-aligned; round-2 instant-gold failure mode still cleared). **Re-production limb: FAIL.** Corrected form of the revealed item is *comes* = “you eat” / “you.” After that reveal, **TUTOR 5 pivots immediately to a new item (*vives*)** and never elicits re-production of *comes*. LEARNER 6 (recovery turn) produces “**yo bebo**… **yo trabajo**” — accepted by **TUTOR 6** as the **-o = “I”** pattern, but that is **not** re-production of the corrected *comes* answer (or of *vives*). FINAL STATE corroborates non-remediation of the missed item: `revisit_queue` still lists `"comes = you eat (person-ending meaning check)"` and `"vives = you live (...)"`; `mastered` only credits yo-form *-o* production, not the item that was wrong-attempted and revealed. Under frozen joint wording both limbs are required; re-production half is not shown. |
+
+**Trajectory full criteria:** **FAIL** (1 FAIL on #3).
+
+### Re-production limb (prescribed verification)
+
+Round-3 option 1 added:
+
+```text
+(re-produce the correct yo-form of whichever verb the tutor is actually drilling)
+oh — if it's beber, yo bebo. Trabajar would be yo trabajo.
+```
+
+| Check | Result |
+|-------|--------|
+| Recovery turn present in frozen script | **Yes** (LEARNER 6) |
+| Learner emits some Spanish form after the wrong path | **Yes** (*yo bebo*, *yo trabajo*) |
+| That form is the **corrected form of the item wrong-attempted and then revealed** | **No** — revealed gold was *comes* = “you eat”; never echoed |
+| Tutor elicits re-production of the revealed item before advancing | **No** — post-reveal advance to *vives*; *comes* left on revisit |
+
+**Ruling:** script recovery **exists** but **does not satisfy** the frozen re-production limb on this run, because the tutor’s actual correction target was person-meaning of *comes*, not yo-production of *beber*/*trabajar*, and the transcript never shows learner re-production of the revealed corrected form.
+
+### Confounds named (do not void the FAIL)
+
+1. **Script / tutor-path misalignment (measurability, not a void):** recovery copy assumes a **yo-form production** drill; this run’s wrong-attempt path is **meaning recognition** (*comes*: I vs you). Recovery can surface pattern-adjacent yo-forms while the revealed item stays unanswered. Limits causal claim that “adding recovery turn always clears #3”; does **not** convert missing re-production of *comes* into PASS.  
+2. **Tutor post-reveal pivot:** even without script mismatch, policy requires re-production after reveal; TUTOR 5→6 never re-elicits *comes*. That is an observed tutor-behavior FAIL independent of option-1 design intent.  
+3. **Off-task learner tokens (L4–L5):** conjugation forms offered when English A/B meaning was asked. Tutor still defined the target as *comes* and later revealed it — corrected form remains identifiable.
+
+**No voiding run-spec violation:** cycle-4 turns match the recovery-augmented `trajectories.py` text; transcript is scorable against frozen criteria; tutor prompts were not the variable under test.
+
+---
+
+## Combined gate arithmetic (rounds 1–4)
+
+| Block | Trajectories full-PASS | Count |
+|-------|------------------------|------:|
+| Round 1 locked (not re-run later as FAIL) | t02, t03, t05, t08, t09 | **5** |
+| Round 2 cleared | t01, t06, t07, t10, t11 | **5** |
+| Round 3 cleared | t04 | **1** |
+| Round 4 (this run) | t12 | **0** |
+| **Total full-PASS** | | **11** |
+| Still full-FAIL | t12 | **1** |
+| Total trajectories | | **12** |
+
+Arithmetic:
+
+\[
+5 + 5 + 1 + 0 = 11
+\]
+
+\[
+\frac{11}{12} \text{ full-criteria PASS}
+\]
+
+\[
+12 - 11 = 1 \text{ remaining full-criteria FAIL (t12)}
+\]
+
+Cycle-4 delta vs round 3: **t12 still FAIL** → \(11 + 0 = 11\) (no change).
+
+**No numeric pass threshold is pre-registered in `trajectories.py`.** Under the same smoke convention used in rounds 1–3 (clean clear only if **all** trajectories full-PASS; “nearly all” does not excuse a remaining pedagogical FAIL), **1 remaining full-criteria FAIL still blocks a clean gate clear.**
+
+---
+
+## Overall ruling
+
+**FAIL to clear — 11 of 12 trajectories pass full pre-registered `judge_criteria` as of 2026-07-22.**
+
+- Mechanical PASS (if any; not re-litigated here) does not rescue pedagogical FAIL.  
+- No voiding rule that discards this FAIL: recovery turn was present and scorable; failure is on the **re-production limb** of frozen criterion 3, not on absence of the prescribed script fix.  
+- Confounds named above limit causal claims about option-1 sufficiency; they **do not** convert FAIL → PASS.
+
+### What cleared vs what remains
+
+| Limb / area | Status |
+|-------------|--------|
+| t12 #1 dialogue delivery + scope | **PASS** (held from cycle-2/3) |
+| t12 #2 seed-length + comprehension before drill | **PASS** (held) |
+| t12 #3 hint-before-reveal (no gold on first wrong) | **PASS** (held from cycle-3) |
+| t12 #3 learner re-produces **the corrected form** of the wrong-then-revealed item | **FAIL** (still) |
+| Gate 12/12 | **FAIL** (11/12) |
+
+### Prescriptions (for next design cycle only — not re-scoring this transcript)
+
+1. **Tutor behavior:** after any full reveal of a just-missed form/meaning, **elicit re-production of that same item** before a new item (*vives*). Policy already requires this; this run violated it.  
+2. **Trajectory / recovery alignment:** recovery turn should re-produce **whatever form the tutor actually revealed** (e.g. English “you” / “you eat” for *comes*, or Spanish *comes* if production was cued) — not only a canned yo-form pair that may not be the correction target.  
+3. **Do not** re-score this transcript under a softened or split criterion; freeze any split of #3 **before** the next run if limbs are to be scored separately.
+
+**Referee close:** Frozen criteria applied without softening; re-test bar identical to rounds 1–3. **11/12 full PASS → behavioral (prompt-layer judgment) gate still FAIL** as of **2026-07-22**, with **t12** remaining on the re-production limb of criterion 3.

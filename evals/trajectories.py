@@ -224,7 +224,7 @@ TRAJECTORIES = [
         "judge_criteria": [
             "Generated dialogue delivered immediately on request, using only in-scope structures/vocab (denylist scan corroborates)",
             "Dialogue is short (seed-length), followed by comprehension before drilling",
-            "Wrong attempt on a just-taught form gets remediation + a content hint before any full reveal; learner re-produces the corrected form",
+            "Wrong attempt on a just-cued form: content hint (no gold token) then re-attempt; full model only after second miss. After a model/reveal, the tutor elicits APPLICATION — either re-production of the same item (practiced material) or a fresh same-pattern item (first exposure) — and the learner completes it before the topic moves on",
         ],
     },
 ]
