@@ -49,14 +49,7 @@
 
 ### *Ser* — present tense
 
-| Person | Form |
-|---|---|
-| yo | **soy** |
-| tú | **eres** |
-| él / ella / usted | **es** |
-| nosotros/as | **somos** |
-| vosotros/as | **sois** |
-| ellos / ellas / ustedes | **son** |
+Frozen form inventory: **soy, eres, es, somos, sois, son** (yo → ellos/ustedes order). Mode `spec`: generate paradigm presentations, tables, and examples on demand from these six forms — the forms are law, the presentation is yours.
 
 ### What *ser* is for (at A1)
 

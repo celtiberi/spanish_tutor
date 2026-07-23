@@ -59,14 +59,7 @@ People-nouns usually pair: *el amigo / la amiga*, *el profesor / la profesora*, 
 
 ### Articles
 
-| | Definite ("the") | Indefinite ("a/an", pl. "some") |
-|---|---|---|
-| masc. sing. | **el** | **un** |
-| fem. sing. | **la** | **una** |
-| masc. pl. | **los** | **unos** |
-| fem. pl. | **las** | **unas** |
-
-The article must agree with the noun in **gender and number**: *el libro → los libros*; *una casa → unas casas*.
+Frozen inventory — definite: **el, la, los, las**; indefinite: **un, una, unos, unas**. The article must agree with the noun in **gender and number**: *el libro → los libros*; *una casa → unas casas*. Mode `spec`: present in whatever format fits.
 
 Do not confuse **el** (the) with **él** (he) — the accent distinguishes them.
 

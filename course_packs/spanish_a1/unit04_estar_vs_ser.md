@@ -34,16 +34,7 @@
 
 ### *Estar* — present tense
 
-| Person | Form |
-|---|---|
-| yo | **estoy** |
-| tú | **estás** |
-| él / ella / usted | **está** |
-| nosotros/as | **estamos** |
-| vosotros/as | **estáis** |
-| ellos / ellas / ustedes | **están** |
-
-Note the written accents (*estás, está, estáis, están*) — they mark stress and are part of correct spelling.
+Frozen form inventory: **estoy, estás, está, estamos, estáis, están**. The written accents (*estás, está, estáis, están*) mark stress and are part of correct spelling — never present these forms without them. Mode `spec`: generate paradigm presentations on demand from this inventory.
 
 ### What *estar* is for (at A1)
 

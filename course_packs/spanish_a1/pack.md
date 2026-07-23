@@ -1,9 +1,9 @@
 # Course Pack: Spanish A1 — Foundations
 
 **Pack ID:** `spanish_a1_foundations`
-**Version:** 0.5 (architecture revision — dual-mode grounding; see `docs/architecture-pack-debate.md`)
+**Version:** 0.6 (D7 executed post-smoke — paradigm tables demoted to frozen form inventories; presentations generated on demand)
 **Content mode:** `spec`
-*(Known-domain pack: curriculum + PCK + frozen eval constrain the tutor; in-scope explanations/input may be generated. See teaching policy grounding rules. Canonical tables and dialogues below are retained as reference/seed material pending the live smoke test — measurement artifacts, not exclusive content.)*
+*(Known-domain pack: curriculum + PCK + frozen eval constrain the tutor; in-scope explanations/input may be generated. See teaching policy grounding rules. Form inventories in the units are law; their presentation is generated. Seed dialogues remain as scope exemplars.)*
 **Level:** CEFR A1 grammar-core slice (absolute beginner), first ~6 weeks — **not** a complete A1 inventory. Covers greetings/courtesy, noun gender/articles/plurals, subject pronouns, *ser*, *estar* (core contrast), regular present (-ar/-er/-ir), numbers 0–100, *tener* (possession/age), and core question words.
 **Explicitly deferred A1 (do not invent; later packs):** alphabet/spelling, possessives as a taught system (*mi/tu/su...*), family vocabulary set (**except** the Unit 6 production collocations *hermano(s)/hermana(s)* with *tener*), days/dates/clock time, *hay* (recognition-only where it already appears), *ir*, food/drink noun sets beyond Unit 5's closed production set, colors, demonstratives, *cuál*, money/*costar*.
 **Instruction language:** English (metalanguage), Spanish (target content)

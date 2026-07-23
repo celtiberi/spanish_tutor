@@ -38,14 +38,7 @@ Closed noun set for **free-production drills** in this unit: *agua, café, pan, 
 
 ### Endings
 
-| Person | -ar (*hablar*) | -er (*comer*) | -ir (*vivir*) |
-|---|---|---|---|
-| yo | habl**o** | com**o** | viv**o** |
-| tú | habl**as** | com**es** | viv**es** |
-| él/ella/usted | habl**a** | com**e** | viv**e** |
-| nosotros/as | habl**amos** | com**emos** | viv**imos** |
-| vosotros/as | habl**áis** | com**éis** | viv**ís** |
-| ellos/ellas/ustedes | habl**an** | com**en** | viv**en** |
+Frozen ending inventory (yo → ellos/ustedes order) — **-ar:** -o, -as, -a, -amos, -áis, -an · **-er:** -o, -es, -e, -emos, -éis, -en · **-ir:** -o, -es, -e, -imos, -ís, -en. Model verbs: *hablar, comer, vivir*. Mode `spec`: generate paradigm presentations and drills on demand from this inventory.
 
 Patterns worth pointing out:
 

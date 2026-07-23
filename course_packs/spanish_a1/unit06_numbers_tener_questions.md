@@ -50,14 +50,7 @@ Tens: 40 cuarenta, 50 cincuenta, 60 sesenta, 70 setenta, 80 ochenta, 90 noventa,
 
 ### *Tener* — present tense (irregular; memorize)
 
-| Person | Form |
-|---|---|
-| yo | **tengo** |
-| tú | **tienes** |
-| él / ella / usted | **tiene** |
-| nosotros/as | **tenemos** |
-| vosotros/as | **tenéis** |
-| ellos / ellas / ustedes | **tienen** |
+Frozen form inventory: **tengo, tienes, tiene, tenemos, tenéis, tienen**. Only the *nosotros/vosotros* forms look regular — teach it as a memorized unit. Mode `spec`: generate presentations on demand.
 
 Uses at A1:
 
