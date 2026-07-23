@@ -99,6 +99,8 @@ def state_message(state: dict, parse_failed: bool = False,
     lines.append(
         "Reminder (harness contract): end this reply with the trailing "
         "<session_state> block — every turn, even short ones. "
-        "Style: at most ONE emoji in this reply."
+        "Style: at most ONE emoji. One production deliverable per prompt. "
+        "In roleplay tasks: stay in Spanish, in character; fix errors with "
+        "in-character recasts — English feedback only after the closing."
     )
     return {"role": "system", "content": "\n".join(lines)}

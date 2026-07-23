@@ -273,3 +273,170 @@ Do **not** invent a new priority row this round.
 ---
 
 *End countersign — 2026-07-22 — independent ruling on policy v0.6 + t13 against real-session-1 audit top-5.*
+
+
+---
+
+## GROK (Grok Build CLI (bde89716f679)) - 2026-07-23 03:53 UTC
+*Headless via grok_collab.py; genuine output appended verbatim; sandboxed cwd (inlined files only).*
+
+# Blind referee — cycle-6 close-out (policy v0.6 + countersign amendments)
+
+**Role:** pre-registered gate referee. Gates frozen in `evals/trajectories.py` as of this run. No retro-fit.  
+**Materials:** `evals/results/transcripts-cycle6.md` runs `20260722-214137` (t01, t10), `20260722-214748` (t13).  
+**Date of ruling:** 2026-07-22.
+
+Scoring bar: PASS only if the criterion is met on the transcript evidence; PARTIAL for partial satisfaction with named shortfall; FAIL otherwise. Quoted evidence required.
+
+---
+
+## t01_happy_path_unit1
+
+### 1. Opens with Spanish input / meaning work, not a rule table  
+**PASS**  
+TUTOR 1 leads with a short friend dialogue (`¡Hola, Marta! Buenos días…`) and a meaning check (“What time of day is this?”), not a conjugation/paradigm table.
+
+### 2. Turns are short; one question or task at a time  
+**PARTIAL**  
+Early turns are mostly one-task (T1–T3: dialogue + single MC). Failures of economy:
+- **TUTOR 4** packs (a) register affirmation, (b) answer to the MC, (c) a three-formula dump (`Me llamo` / `Soy` / `Mucho gusto`), then (d) a production ask.
+- **TUTOR 5** introduces *Igualmente* and immediately assigns a new production task in the same turn.
+
+Not catastrophic, but not “one question or task at a time.”
+
+### 3. Register error (tú vs usted) remediated per M-1.2 with learner re-production  
+**PARTIAL**  
+**Evidence of contrast teaching:** L4 self-notices stranger → formal; T4 affirms `¿Cómo se llama usted?` vs `¿Cómo te llamas?`.  
+**Missing:** there is no learner *error* on register that the tutor remediates, and no elicited re-production of the formal (or informal) form. L5 is `Me llamo Sam. Mucho gusto.` — name/greeting, not register re-production.
+
+**Confound:** trajectory turns never force a register production miss; criterion assumes an M-1.2 remediation path that this script barely triggers.
+
+### Final state (t01) — coherence note (not a t01 gate)
+`mastered: []`, no dual-list. `revisit_queue: ["igualmente as reply to Mucho gusto"]` is reasonable (form shown after partial success; not marked mastered). `current_item_attempts: 0` with an open production prompt at end is slightly soft but not dual-list dishonest.
+
+---
+
+## t10_multi_error
+
+### 1. Corrects ONE error first (person: yo es → soy), not all four at once  
+**PASS**  
+TUTOR 1: “Let me fix just **one** thing for now… *ser* is **soy**, not *es*.” Does not surface gender (`un profesora`), origin *estar*→*ser*, or article agreement in that turn.
+
+### 2. Misconception logged in state (observed_misconceptions grows)  
+**PASS**  
+FINAL STATE: `"observed_misconceptions": ["M-3.1"]` (non-empty after the multi-error turn).
+
+### 3. Learner re-produces the corrected full sentence before moving on  
+**PASS** (narrow)  
+L2: `Soy profesora... ¿y soy de México?` — person/origin repaired relative to L1. T2 then advances to name.  
+**Named softness (not enough to FAIL):** L2 is fragmented; tutor supplies the assembled full sentence (`Soy profesora y soy de México`) rather than requiring one clean unscaffolded full string before the name ask. L3 then repeats profession/origin while the tutor had already moved to name — sequence is messy but re-production of the *corrected* target occurred before new material was *accepted as complete*.
+
+### Final state (t10) — coherence note
+- `mastered: []` — no hinted-only mastery. Good.
+- `struggling` keeps yo-ser; `revisit_queue` has `yo soy` + `me llamo`. No dual-list.
+- `current_item_attempts: 0` after leaving the soy item is consistent with item transition.
+- **Confound:** L2/L3 both produce *soy* forms; state text claims “clean unscaffolded retry this turn — recheck later” — slightly under-credits L3, but errs honest (not inflated mastery).
+
+---
+
+## t13_real_session_replay (audit top-5 regression)
+
+### 1. Session open is ≤ 3 short lines with no full-syllabus dump  
+**PASS**  
+TUTOR 0 = 2 non-blank blocks / 3 sentences: welcome + no reviews; unit-1 suggestion with brief gloss (“saying hello, giving your name, being polite”); choice ask. No multi-unit syllabus dump.  
+**Arithmetic:** non-blank paragraphs = 2; sentences ≈ 3; criterion threshold ≤ 3 short lines → 2 ≤ 3.
+
+### 2. When the tutor assigns production, each prompt asks for ONE new deliverable (no greeting+how-are-you compound in a single ask)  
+**FAIL**  
+TUTOR 4 (first production assign):  
+> “**It's morning. Greet a friend and ask her name.** (Two pieces: a morning greeting + asking a friend's name.)”  
+
+Explicit compound = two new deliverables in one ask. Later prompts (fill-in `¿Cómo _____?`, “say the friend version,” “just say that one line”) are single-deliverable, but **each** prompt must be single; the first production prompt fails the gate.
+
+### 3. Register error: exactly one correction surfaced; other errors (mi maestra, accents) parked silently; no parentheticals on the success turn  
+**PASS**  
+L5: `buenos dias mi maestra. como estas usted?`  
+T5 surfaces **only** tú/usted mix (`estás` + `usted`). No mention of `mi maestra`, missing accents on *días*, or orthography.  
+No success turn occurs (L6 still formal; L7 off-task), so “no parentheticals on the success turn” is vacuously OK (no success turn to pollute).
+
+### 4. Roleplay stays in Spanish character — no English stage directions or mid-task English grading; any mid-task form fix is in-character Spanish re-ask/recast only  
+**FAIL**  
+Mid-task fixes are English metalinguistic grading, not in-character Spanish recast:
+- T5: “Good start… One thing to fix: you mixed the two ‘you’ forms…” + English contrast lesson.
+- T6: English friend vs stranger mini-table; “Say the friend version back to me.”
+- T7: English grading (“Those are all correct phrases. But you slipped past…”) + English model of `¿Cómo estás?`.
+
+**No** in-character Spanish re-ask/recast (e.g. peer-voice `¿Cómo estás?` only, without English staging). Register-in-roleplay resolution from the countersign package **does not appear** in this live run.
+
+### 5. Final state honest: no dual mastered/struggling; no hinted-only mastery; miss → struggling + review_schedule until spaced success  
+**PASS**  
+```
+mastered: []
+struggling: ["tú/usted register mixing …"]
+review_schedule: [{item: informal 'how are you?' …, misconception: M-1.2, due: 2026-07-23, successes: 0}]
+observed_misconceptions: ["M-1.2"]
+```
+- Dual-list: none (mastered empty).  
+- Hinted-only mastery: none (gold was given at T6/T7; not entered in `mastered`).  
+- Miss path: skill remains struggling; schedule entry with `successes: 0`, due 2026-07-23 (next calendar day after run date 2026-07-22).
+
+State-discipline rewrite **holds** on this trajectory.
+
+### 6. current_item_attempts: non-zero while how-are-you/register item open after attempts; not stale non-zero after close  
+**PASS**  
+`current_item_attempts: 2` with goal still “Ask a friend how they are using informal tú”; item not closed.  
+**Arithmetic:** attempts = 2 > 0 while open. Close did not occur → “not left stale non-zero after close” not violated.  
+**Note:** frozen wording says “formal how-are-you item”; actual open target is **informal** `¿Cómo estás?` after formal contamination — treat as the open how-are-you/register item (same construct family). Not a void.
+
+### 7. Tutor elicits the closing element (farewell) itself — the learner does not volunteer it  
+**PARTIAL**  
+- Learner never volunteers a farewell (good half).  
+- Tutor never elicits a farewell either; transcript ends mid-drill at T7.  
+
+**Confound:** frozen turn list has no closing phase, so the positive half of the gate is untested. Cannot award PASS for “tutor elicits.” Not a void of the run — a trajectory design limit. Real-session failure mode (learner-volunteered closer treated as taught success) does **not** recur here.
+
+---
+
+## Scoreboard
+
+| Trajectory | C1 | C2 | C3 | C4 | C5 | C6 | C7 |
+|---|---|---|---|---|---|---|---|
+| t01 | PASS | PARTIAL | PARTIAL | — | — | — | — |
+| t10 | PASS | PASS | PASS | — | — | — | — |
+| t13 | PASS | **FAIL** | PASS | **FAIL** | PASS | PASS | PARTIAL |
+
+**Trajectory-level (strict: any FAIL → not clean):**  
+- t01: not clean (2 PARTIAL)  
+- t10: **CLEAN**  
+- t13: **not clean** (2 FAIL + 1 PARTIAL)
+
+---
+
+## Cycle verdict: do the audit’s top-5 hold under regression?
+
+**No.**
+
+Mapping t13 criteria to the audit top-5:
+
+| Audit top-5 | Gate | Result |
+|---|---|---|
+| Opener economy | t13-1 | **Holds** (PASS) |
+| Single-deliverable tasks | t13-2 | **Does not hold** (FAIL — explicit “Two pieces”) |
+| Silent parking of secondary errors | t13-3 | **Holds** (PASS) |
+| Spanish-only roleplay / in-character register fix | t13-4 | **Does not hold** (FAIL — English mid-task grading; no Spanish recast) |
+| Honest state (no dual-list / no hinted mastery / miss→schedule) | t13-5 (+6) | **Holds** (PASS); attempts discipline PASS |
+
+**Supporting extras:** tutor-elicited closing only PARTIAL (untested positive half). t10 multi-error one-at-a-time path still holds. t01 remains soft on turn economy and M-1.2 re-production.
+
+### What improved vs what still leaks
+- **Improved / holding:** opener length, silent parking (`mi maestra` / accents), state honesty under spaced-success bar, non-zero attempts while item open, no false mastery after scaffolded gold.  
+- **Still open under regression:** task granularity (compound first production prompt), roleplay purity / in-character Spanish register repair (the countersign resolution is **not** evidenced in this live transcript).
+
+### Confounds to name (do not soften FAILs)
+1. t13 script ends before farewell → criterion 7 under-powered.  
+2. t13 criterion 6 wording “formal how-are-you” vs actual informal target after formal intrusion — interpret as open register/how-are-you item; does not void.  
+3. t01 criterion 3 poorly matched to cooperative self-correction turns — PARTIAL is not a free pass for M-1.2 re-production.  
+4. Single run per id (`20260722-214137` / `214748`); no multi-seed reliability claim.
+
+### Referee bottom line
+Cycle-6 does **not** clear the audit close-out. State discipline and parking look real; **compound production** and **English mid-roleplay register repair** remain FAIL against frozen gates. Do not declare top-5 regression-green until t13-2 and t13-4 pass on a fresh frozen run without gate edits.

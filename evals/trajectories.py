@@ -204,6 +204,7 @@ TRAJECTORIES = [
             "buenos dias mi maestra. como estas usted?",
             "¿cómo está usted?",
             "me llamo Sam. mucho gusto. estoy bien.",
+            "(respond to whatever farewell or next step the tutor offers) adiós, hasta mañana",
         ],
         "mechanical": ["emoji_cap", "state_disjoint"],
         "judge_criteria": [
