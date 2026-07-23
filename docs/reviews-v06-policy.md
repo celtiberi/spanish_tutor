@@ -440,3 +440,249 @@ Mapping t13 criteria to the audit top-5:
 
 ### Referee bottom line
 Cycle-6 does **not** clear the audit close-out. State discipline and parking look real; **compound production** and **English mid-roleplay register repair** remain FAIL against frozen gates. Do not declare top-5 regression-green until t13-2 and t13-4 pass on a fresh frozen run without gate edits.
+
+
+---
+
+## GROK (Grok Build CLI (bde89716f679)) - 2026-07-23 03:58 UTC
+*Headless via grok_collab.py; genuine output appended verbatim; sandboxed cwd (inlined files only).*
+
+I'll grade t13 strictly against the frozen judge_criteria using the cycle-7 transcript and policy context—no softening, evidence-quoted.Checking the recency-reminder wording for the two fixed rules so C2/C4 are graded against the intended bar.# Blind referee — t13 cycle-7 (audit close-out)
+
+**Protocol date:** 2026-07-22  
+**Role:** pre-registered gate referee (no gate edits; FAIL stays FAIL)  
+**Materials scored:** `evals/results/transcripts-cycle7.md` (t13 only) against frozen `judge_criteria` in `evals/trajectories.py` (`t13_real_session_replay`)  
+**Prior cycle-6 finding (for regression map only, not re-litigated):** t13-2 FAIL, t13-4 FAIL, t13-7 under-powered  
+**Run context claimed by header:** recency-extended rules; closing turn re-frozen before run; criteria unchanged  
+
+---
+
+## Criterion-by-criterion
+
+### 1. Session open is ≤ 3 short lines with no full-syllabus dump  
+**PASS**
+
+**Quoted open (TUTOR 0):**
+> ¡Hola! Welcome. No review items are due yet — this looks like our first session, so we start fresh.  
+> I'd suggest we begin with **Unit 1: greetings and introductions**. Sound good, or is there something specific you'd like to work on?  
+> To kick off, here's a little scene — read it and tell me, in English, what's happening:  
+> [4-line dialogue]  
+> What time of day is it, and do these two people seem to know each other?
+
+**Arithmetic / mapping to frozen policy shape** (review status · one-line proposal · first move):
+| Slot | Content | Count |
+|------|---------|------:|
+| 1 review status | “No review items… first session” | 1 |
+| 2 proposal/ask | Unit 1 suggestion + choice | 1 |
+| 3 first move | scene + dialogue + meaning Q | 1 |
+| Full-syllabus dump (units 2–6 listed) | none | 0 |
+| **Total open slots** | | **3** |
+| Threshold | ≤ 3 short lines | **3 ≤ 3** |
+
+No multi-unit brochure. Dual meaning question inside the first move is a turn-economy nit, not a C1 syllabus-dump fail. **PASS.**
+
+---
+
+### 2. When the tutor assigns production, each prompt asks for ONE new deliverable (no greeting+how-are-you compound in a single ask)  
+**PASS** (cycle-6 failure mode does not recur)
+
+**Tutor-assigned production prompts only** (learner-volunteered L5 is not a tutor assign):
+
+| Turn | Ask | Deliverables | New? |
+|------|-----|-------------:|------|
+| T5 | “Say the whole formal question again — ‘How are you?’ to your teacher” | 1 (`¿Cómo está usted?`) | yes (remediation) |
+| T6 | “greet her for the time of day **and** ask how she is” | 2 forms in one line | **no** — each half already accepted alone |
+| T7 | “just that one line — … greet … and ask *her* how she is” | recombine | not new |
+| T8 | “say them together as one line” after listing both halves | scaffolded recombine | not new |
+
+**Evidence halves succeeded alone before T6 combine:**
+- T5 on L5: “¡Muy bien — *buenos días* is exactly right for the morning!”
+- T6 on L6: “¡Perfecto! *¿Cómo está usted?* — that's the formal question, matched correctly.”
+
+**Contrast to cycle-6 FAIL:** cycle-6 first production assign was explicit compound (“Greet a friend and ask her name. (Two pieces…)”) before either piece alone. Here first production assign (T5) is single-deliverable.
+
+Frozen parenthetical names the audit bug (stacked *new* greeting+how-are-you). Policy also allows compound only after solo success. T6 is post-solo recombine, not first-load compound. **PASS.**
+
+**Confound named:** T6/T7 still *surface* “and” wording; a stricter absolute ban on any multi-clause ask would FAIL — that would rewrite the gate after results. Not applied.
+
+---
+
+### 3. Register error: exactly one correction surfaced; other errors (mi maestra, accents) parked silently; no parentheticals on the success turn  
+**PASS**
+
+**L5 error string:** `buenos dias mi maestra. como estas usted?`
+
+**T5 surfaces exactly one target (M-1.2 register match):**
+> One thing to fix: you mixed two registers. *¿Cómo **estás**?* is the informal *tú* form, but *usted* is formal. They need to match…  
+> Since you're speaking to your teacher (*maestra*), go formal.
+
+**Silently parked (no mention):** missing accents (*días*, *cómo*, *estás*); orthography; any secondary note on *mi maestra* as error.
+
+**Success turn T6 (after L6 `¿cómo está usted?`):**
+> ¡Perfecto! *¿Cómo está usted?* — that's the formal question, matched correctly. 🙂
+
+No parenthetical “also fix accents / mi…” on that success turn. Emoji count on T6 = 1 (🙂) — not a C3 issue. **PASS.**
+
+---
+
+### 4. Roleplay stays in Spanish character — no English stage directions or mid-task English grading; any mid-task form fix is in-character Spanish re-ask/recast only  
+**FAIL** (cycle-6 leak **not** cleared)
+
+**Required positive behavior:** mid-task form fix = Spanish in-character re-ask/recast only; no mid-task English grading.
+
+**What the transcript shows instead:**
+
+1. **Register fix is English mini-lesson, not Spanish recast (T5):**
+> One thing to fix: you mixed two registers. *¿Cómo **estás**?* is the informal *tú* form, but *usted* is formal. They need to match:  
+> - Informal: *¿Cómo **estás**?*  
+> - Formal: *¿Cómo **está** usted?*  
+> Since you're speaking to your teacher (*maestra*), go formal. Say the whole formal question again…
+
+2. **No in-character Spanish re-ask/recast appears anywhere** (no teacher-voice Spanish-only pushback; no *¿Cómo está usted, por favor?* without English staging).
+
+3. **Mid-task English grading on the open production task (T7, after T6 opened “one line” task):**
+> Nice — *me llamo Sam* and *mucho gusto* are both spot-on for introducing yourself!  
+> But I asked for a different piece: the **greeting for the time of day** plus **asking her** how she is.
+
+4. **T8 continues English scorekeeping mid-task:**
+> *Adiós* and *hasta mañana* are both correct farewells — good ones to know!  
+> But before we part, we still owe that one opening line…
+
+No English stage-direction string of the form “still in character:” — that sub-clause alone is clean — but the gate is conjunctive. English mid-task grading + English register lesson + zero Spanish recast = **FAIL**.
+
+**Confound named:** tutor never fully enters a T-item can-do roleplay frame (no sustained Spanish character). That does **not** void C4: frozen text still requires mid-task form fixes to be Spanish recast when a production task is open (T6–T8). Recency reminder (“In roleplay tasks: stay in Spanish… English feedback only after the closing”) is not evidenced as controlling this run.
+
+---
+
+### 5. Final state honest: no dual mastered/struggling; no hinted-only mastery; miss → struggling + schedule until spaced success  
+**PASS**
+
+**Final state (quoted):**
+```json
+{"current_unit": 1,
+ "goal": "Greet by time of day + ask how-are-you in formal register (combined line)",
+ "observed_misconceptions": ["M-1.2"],
+ "mastered": [],
+ "struggling": ["M-1.2 register tú/usted match in how-are-you"],
+ "current_item_attempts": 0,
+ "revisit_queue": ["formal greeting + ¿cómo está usted? combined line",
+                   "farewells adiós/hasta mañana (recognition ok)"],
+ "review_schedule": [{"item": "¿Cómo está usted? (formal register match, M-1.2)",
+                      "misconception": "M-1.2",
+                      "due": "2026-07-23",
+                      "successes": 0}]}
+```
+
+| Check | Evidence | Result |
+|-------|----------|--------|
+| Dual-list (mastered ∩ struggling, paraphrase) | `mastered: []`; struggling only M-1.2 register | PASS |
+| Hinted-only mastery banned | nothing written to `mastered` after T5 gold contrast / L6 re-prod | PASS |
+| Miss → struggling + schedule | `observed_misconceptions: ["M-1.2"]`; struggling note; schedule `successes: 0`, `due: 2026-07-23` | PASS |
+
+**Arithmetic on schedule honesty:** `successes = 0` (not inflated); due is next calendar day after 2026-07-22 → 2026-07-23. Combined goal never completed; formal line alone does not clear spaced-success mastery. **PASS.**
+
+---
+
+### 6. current_item_attempts: non-zero while formal how-are-you item open after attempts; not left stale non-zero after that item closes  
+**FAIL**
+
+**Timeline:**
+
+| Event | Open item (from tutor goal/prompt) | Learner move | Attempt? |
+|-------|-----------------------------------|--------------|----------|
+| T5 → L6 | formal how-are-you | L6 correct `¿cómo está usted?` | yes; item can close after remediated success |
+| T6 sets new goal | **combined** greeting + formal how-are-you | — | new item opens |
+| L7 | combined line open | `me llamo Sam. mucho gusto. estoy bien.` (wrong deliverable) | **yes — response to open item** |
+| L8 | combined line still open | `adiós, hasta mañana` (wrong deliverable) | **yes** |
+| FINAL | goal still combined line (not closed) | `current_item_attempts: 0` | **illegal zero** |
+
+**Arithmetic:**
+- Attempts on open combined item after T6: L7 + L8 = **2**
+- Reported: `current_item_attempts = 0`
+- Gate: non-zero while open after attempts → need `attempts ≥ 1` (strictly `2 > 0` expected)
+- `0 ≥ 1`? **False** → FAIL  
+- “Not stale non-zero after close”: close of combined item never happened (goal still open) → second clause not the violation path; the **open-after-attempts zero** is the violation.
+
+Cycle-6 had `attempts: 2` while open → PASS. This run **regresses** attempts honesty. **FAIL.**
+
+---
+
+### 7. Tutor elicits the closing element (farewell) itself — the learner does not volunteer it  
+**FAIL**
+
+**What tutor offered immediately before the closing-slot turn (T7):**
+> So give me just that one line — it's morning, greet your teacher and ask *her* how she is (formal):
+
+**No farewell elicitation.** No “now say goodbye,” no leave-taking prompt, no can-do close move.
+
+**What learner produced (L8):**
+> (respond to whatever farewell or next step the tutor offers) **adiós, hasta mañana**
+
+Learner **volunteers** farewells without tutor first eliciting them.
+
+**T8 reaction (post-volunteer only):**
+> *Adiós* and *hasta mañana* are both correct farewells — good ones to know!  
+> But before we part, we still owe that one opening line…
+
+| Half of gate | Observed | Result |
+|--------------|----------|--------|
+| Tutor elicits farewell itself | Tutor never asks for farewell | FAIL |
+| Learner does not volunteer it | L8 volunteers `adiós, hasta mañana` | FAIL |
+
+Re-frozen closing turn made the *opportunity* visible; it did not produce tutor-led elicitation. Learner-supplied closer free-ride (named as risk in prior countersign) **recurs**. **FAIL.**
+
+---
+
+## Scoreboard (t13 cycle-7)
+
+| # | Criterion | Ruling |
+|---|-----------|--------|
+| 1 | Open ≤3 lines; no syllabus dump | **PASS** |
+| 2 | One new production deliverable per ask | **PASS** |
+| 3 | One register correction; silent park; no success-turn parentheticals | **PASS** |
+| 4 | Spanish-character roleplay / in-character form fix; no mid-task English grading | **FAIL** |
+| 5 | Final state honest (dual-list / hinted mastery / miss→schedule) | **PASS** |
+| 6 | `current_item_attempts` discipline | **FAIL** |
+| 7 | Tutor elicits farewell; learner does not volunteer | **FAIL** |
+
+**Trajectory-level (strict: any FAIL → not clean):** **NOT CLEAN** — 3 FAIL (C4, C6, C7).
+
+---
+
+## Final audit-cycle verdict: do the real-session top-5 hold under regression?
+
+Mapping frozen t13 gates → audit top-5 (silent parking / state honesty / opener held in cycle-6; this run was to close the remaining two + closing):
+
+| Audit top-5 item | Gate | Cycle-6 | Cycle-7 | Holds under regression? |
+|------------------|------|---------|---------|-------------------------|
+| Opener economy | t13-1 | PASS | **PASS** | **Yes** |
+| Single-deliverable production | t13-2 | **FAIL** | **PASS** | **Yes — newly holds** |
+| Silent parking of secondary errors | t13-3 | PASS | **PASS** | **Yes** |
+| Spanish-only roleplay / no mid-task English grading | t13-4 | **FAIL** | **FAIL** | **No** |
+| Honest state (no dual-list / no false mastery / miss→schedule) | t13-5 | PASS | **PASS** | **Yes** |
+
+**Supporting gates:**
+| Gate | Cycle-6 | Cycle-7 |
+|------|---------|---------|
+| t13-6 attempts discipline | PASS | **FAIL (regression)** |
+| t13-7 tutor-elicited farewell | PARTIAL (untested) | **FAIL (tested; failed both halves)** |
+
+### What improved vs what still leaks (2026-07-22 close-out)
+- **Now holding:** opener; single-*new*-deliverable first production (compound first-ask bug fixed); silent park; spaced-success state honesty (empty `mastered`, M-1.2 on schedule with `successes: 0`).
+- **Still open:** roleplay purity / in-character Spanish register repair and mid-task English grading (**t13-4 FAIL** — same class as cycle-6).
+- **New regression this run:** `current_item_attempts: 0` while combined goal open after two off-target responses (**t13-6 FAIL**).
+- **Closing elicitation:** script slot present; behavior absent; learner still volunteers farewell (**t13-7 FAIL**).
+
+### Confounds (do not soften FAILs)
+1. No multi-seed: single cycle-7 transcript; no reliability claim.  
+2. C2 PASS rests on “new deliverable” + post-solo recombine reading; absolute multi-clause ban would differ — not retrofitted.  
+3. C4: absence of full T-item roleplay does not void mid-task English grading rules once a production task is open (T6–T8).  
+4. C7 meta-instruction on L8 (“respond to whatever farewell…”) still embeds learner farewell text — confounds clean elicitation tests even when tutor fails first.  
+5. Mechanical pair (`emoji_cap`, `state_disjoint`) not re-judged here; visible emoji on T6 = 1 (🙂) is within cap if mechanical agrees.
+
+### Referee bottom line
+**Audit close-out: NOT CLEARED.**
+
+Top-5 under regression: **4/5 hold** (opener, single-new-deliverable, silent park, state honesty). **Spanish-only mid-task form repair does not hold** (t13-4 still FAIL). Closing elicitation and attempts counters also FAIL on this re-frozen run.
+
+Do **not** declare real-session audit regression-green until a fresh frozen t13 run shows **PASS on t13-4** (and preferably restores t13-6 and turns t13-7 green without rewriting criteria after seeing results). Compound production is no longer the blocker; **English mid-task register/production grading is.**
