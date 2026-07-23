@@ -10,7 +10,13 @@ import anthropic
 
 from . import config
 from .policy import build_system
-from .student import STATE_MARKER, default_state, extract_state, state_message
+from .student import (
+    STATE_MARKER,
+    extract_state,
+    load_profile,
+    save_profile,
+    state_message,
+)
 
 HELP = """Commands:
   /state   show the tutor's current model of you
@@ -123,7 +129,7 @@ def main() -> None:
 
     client = anthropic.Anthropic()
     system = build_system(config.POLICY_PATH, args.pack)
-    state = default_state()
+    state = load_profile(config.PROFILE_PATH)
     history: list[dict] = []
 
     config.LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -148,6 +154,7 @@ def main() -> None:
         print("[Network error — check your connection and restart.]")
         return
     log_turn(log_path, "(session start)", visible, state, final)
+    save_profile(config.PROFILE_PATH, state)
     print("\n")
 
     while True:
@@ -182,6 +189,7 @@ def main() -> None:
             print("[Network error — check your connection and resend.]")
             continue
         log_turn(log_path, user_input, visible, state, final)
+        save_profile(config.PROFILE_PATH, state)
         print("\n")
 
     print(f"Session log: {log_path}")

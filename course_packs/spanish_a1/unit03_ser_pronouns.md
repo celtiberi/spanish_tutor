@@ -1,5 +1,30 @@
 # Unit 3 — Subject Pronouns and *Ser*
 
+## Input (start here)
+
+*El primer día en la clase de español.*
+
+— Hola. Soy Andrés. ¿Cómo te llamas?
+— Me llamo Yuki. Mucho gusto.
+— ¿De dónde eres, Yuki?
+— Soy de Japón. ¿Y tú?
+— Soy de Colombia. Mi amigo Tomás y yo somos de Bogotá.
+— ¿Tomás es estudiante?
+— No, no es estudiante. Es profesor de inglés.
+— ¡La profesora de español es de Bogotá también!
+— Sí, es la señora Flores. Es muy amable.
+
+**Comprehension checks (before any drill):**
+
+**C-3.1** — Where is Yuki from? And Andrés?
+**Key:** Japan; Colombia (Bogotá).
+
+**C-3.2** — Is Tomás a student?
+**Key:** No — he's an English teacher (*no es estudiante; es profesor de inglés*).
+
+**C-3.3** — Who is *la señora Flores*?
+**Key:** The Spanish teacher; she is from Bogotá and very kind.
+
 ## Learning objectives
 
 1. Use the subject pronouns and know when Spanish drops them.
@@ -70,6 +95,14 @@ Learner writes *Yo soy..., Yo no soy..., Yo...* in every line (English transfer)
 ### M-3.4 — *ustedes* is formal-only everywhere
 Learner avoids *ustedes* with friends, looking for *vosotros* in a Latin American context. **Diagnosis cue:** learner asks how to be informal-plural in Latin America or misuses *vosotros*. **Remediation:** in Latin America *ustedes* is the only plural "you," formal and informal alike; *vosotros* is peninsular Spain's informal plural.
 
+## Structured-input items (meaning before production)
+
+**SI-3.1** — You hear only: *Es de Perú.* Who could this be about — I, you (informal), or she?
+**Key:** She (also he or *usted*) — *es* is third person; it cannot be *yo* (*soy*) or *tú* (*eres*).
+
+**SI-3.2** — You hear: *Somos estudiantes.* How many people — and does that include the speaker?
+**Key:** Two or more, including the speaker (*-mos* = we).
+
 ## Practice items
 
 **P-3.1** — Conjugate *ser* for: yo, tú, usted, nosotros, ellas.
@@ -87,7 +120,13 @@ Learner avoids *ustedes* with friends, looking for *vosotros* in a Latin America
 **P-3.5 (production)** — Introduce a friend in three sentences: name, origin, profession.
 **Key (model):** *Es mi amiga Laura. Es de Argentina. Es ingeniera.* Check: *es* forms, no article before profession, pronouns dropped where natural.
 
+## Can-do tasks
+
+**T-3.1** — *Introduce yourself and a friend.* Tell the tutor (playing a new classmate) who you are and who a friend of yours is: names, origins, professions/roles. 4–6 sentences.
+**Success criteria:** (1) correct *ser* forms for each subject; (2) no article before unmodified professions; (3) subject pronouns dropped where natural (used only for contrast/emphasis).
+
 ## Scope notes
 
 - Do not contrast with *estar* yet — that is Unit 4. If the learner asks "why not *está*?", preview one sentence and defer.
 - *Vos* forms are out of scope (see pack scope boundaries).
+- Input incidentals (*mi amigo*, *también*) are recognition-only; do not teach possessives here.

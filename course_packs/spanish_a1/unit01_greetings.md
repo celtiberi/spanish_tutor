@@ -1,5 +1,39 @@
 # Unit 1 — Greetings, Introductions, Courtesy
 
+## Input (start here)
+
+*En una recepción, por la noche. Dos personas no se conocen.*
+
+— Buenas noches, señora.
+— Buenas noches. ¿Cómo se llama usted?
+— Me llamo Roberto Díaz. ¿Y usted?
+— Soy Carmen Flores. Mucho gusto.
+— Igualmente. ¿Cómo está usted?
+— Muy bien, gracias. ¿Y usted?
+— Bien, gracias.
+— Hasta luego, señor Díaz.
+— Adiós, señora Flores. Buenas noches.
+
+*Al día siguiente, dos amigos, por la mañana.*
+
+— ¡Hola, Marta! Buenos días.
+— ¡Hola! ¿Cómo estás?
+— Muy bien. ¿Y tú?
+— Más o menos.
+— Hasta mañana, Marta.
+— Adiós.
+
+**Comprehension checks (before any drill):**
+
+**C-1.1** — Do Roberto and Carmen know each other? Name one Spanish word from the dialogue that tells you.
+**Key:** No — *usted / se llama / señora / señor* signal formal distance.
+
+**C-1.2** — What time of day is each conversation? What's the evidence?
+**Key:** First: evening (*buenas noches*); second: morning (*buenos días*).
+
+**C-1.3** — Which two people use *tú* with each other?
+**Key:** The friends in the second dialogue (Marta and her friend).
+
 ## Learning objectives
 
 By the end of this unit the learner can:
@@ -79,6 +113,14 @@ Learners avoid *buenas noches* as an evening greeting, thinking it means only "g
 ### M-1.4 — "Mucho gusto" means "much taste" so it must be about food
 Rare but real literal-translation trap. **Diagnosis cue:** learner translates *gusto* literally or misuses the phrase outside introductions. **Remediation:** teach it as a fixed formula said when meeting someone new; the reply is *igualmente* or *mucho gusto* back.
 
+## Structured-input items (meaning before production)
+
+**SI-1.1** — You hear: *¿Cómo te llamas?* Is the speaker talking to (a) their boss or (b) a classmate?
+**Key:** (b) — *te llamas* is informal *tú*. (Targets M-1.2.)
+
+**SI-1.2** — It is 8 p.m. Someone **arriving** at a dinner says *Buenas noches.* Are they greeting or leaving?
+**Key:** Greeting — *buenas noches* opens evening encounters too. (Targets M-1.3.)
+
 ## Practice items
 
 **P-1.1** — It is 9 a.m. Greet your teacher (a woman you address formally) and ask how she is.
@@ -96,7 +138,15 @@ Rare but real literal-translation trap. **Diagnosis cue:** learner translates *g
 **P-1.5 (production)** — Write a short dialogue (about 4–6 turns): two strangers meet in the evening, greet, exchange names, and part.
 **Key (model answer):** *— Buenas noches. — Buenas noches. ¿Cómo se llama usted? — Me llamo Ana, ¿y usted? — Soy Luis. Mucho gusto. — Igualmente. Hasta luego.* Accept variations with correct register and agreement; do not require this exact wording or turn count.
 
+## Can-do tasks
+
+**T-1.1** — *Meet a stranger (formal).* Roleplay with the tutor: it is evening; the tutor is an adult stranger. Greet, exchange names, ask and answer how you both are, and take leave. 6–8 turns.
+**Success criteria:** (1) formal register maintained throughout (*usted* forms, no *te llamas*); (2) greeting matches the time of day; (3) a closing formula is used. Any wording meeting the criteria passes — do not score against a fixed script.
+
+**T-1.2** — *Meet a friend (informal).* Same roleplay, morning, with a peer. Success criteria as above with informal register.
+
 ## Scope notes
 
 - Do not introduce *ser* vs *estar* theory here (Units 3–4); *soy* and *estás* appear only inside fixed phrases.
 - Do not teach reflexive-verb grammar behind *me llamo*; it is a formula at this stage.
+- Input-dialogue incidentals (*al día siguiente*, names) are recognition-only.

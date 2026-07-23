@@ -1,5 +1,22 @@
 # Unit 5 — Present Tense: Regular -ar / -er / -ir Verbs
 
+## Input (start here)
+
+*Un día normal.*
+
+Marta y Andrés viven en una casa pequeña. Marta trabaja en la ciudad y estudia inglés. Andrés no trabaja los lunes: lee libros y escribe. Los dos comen en casa: comen pan, fruta y carne. Marta bebe café; Andrés bebe agua. Por la noche, hablan mucho.
+
+**Comprehension checks (before any drill):**
+
+**C-5.1** — Who works in the city?
+**Key:** Marta.
+
+**C-5.2** — What does Andrés do on Mondays?
+**Key:** He doesn't work — he reads books and writes.
+
+**C-5.3** — Who drinks coffee, and who drinks water?
+**Key:** Marta coffee; Andrés water.
+
 ## Learning objectives
 
 1. Identify a verb's family from its infinitive ending (-ar, -er, -ir).
@@ -71,6 +88,14 @@ Learner overgeneralizes a difference into all persons, or panics about which fam
 ### M-5.5 — Questions need an auxiliary like English "do"
 Learner looks for a "do" word: \**¿Haces tú hablar inglés?* or hesitates forming questions. **Diagnosis cue:** attempts to insert an auxiliary or *hacer* into questions. **Remediation:** Spanish has no "do"-support; rising intonation on the statement (*¿Hablas inglés?*) is enough.
 
+## Structured-input items (meaning before production)
+
+**SI-5.1** — You hear only: *¿Comes en casa?* Is the question about **you** or about someone else?
+**Key:** About you — the *-es* ending is *tú*. (Targets M-5.2's ending awareness.)
+
+**SI-5.2** — You hear: *Vivimos en la ciudad.* One person or more? Does it include the speaker?
+**Key:** More than one, including the speaker (*-imos* = we).
+
 ## Practice items
 
 **P-5.1** — Conjugate: *trabajar* (yo), *comer* (tú), *vivir* (nosotros), *estudiar* (ellos), *escribir* (usted).
@@ -87,6 +112,11 @@ Learner looks for a "do" word: \**¿Haces tú hablar inglés?* or hesitates form
 
 **P-5.5 (production)** — Write four sentences about yourself using at least one verb from each family, including one negative.
 **Key (model):** *Hablo español y estudio inglés. Como pan y bebo café. Vivo en una casa grande. No trabajo hoy.* Check endings match subjects and families; production nouns should come from this unit's closed set.
+
+## Can-do tasks
+
+**T-5.1** — *Interview.* The learner asks the tutor (playing a new acquaintance) three questions using verbs from three different families, then reports the answers back in the third person ("You said that...").
+**Success criteria:** (1) questions formed without any auxiliary; (2) second-person forms in the questions, third-person in the report; (3) at least one negative used somewhere; (4) production nouns from the unit's closed set.
 
 ## Scope notes
 

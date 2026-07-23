@@ -1,7 +1,7 @@
 # Course Pack: Spanish A1 — Foundations
 
 **Pack ID:** `spanish_a1_foundations`
-**Version:** 0.3 (post-review — Grok round 1 countersign + round 2 referee C-1/C-2/C-3 fixes applied)
+**Version:** 0.4 (pedagogy revision — input blocks, can-do tasks, structured input, spaced review; see `docs/pedagogy-comparison.md`)
 **Level:** CEFR A1 grammar-core slice (absolute beginner), first ~6 weeks — **not** a complete A1 inventory. Covers greetings/courtesy, noun gender/articles/plurals, subject pronouns, *ser*, *estar* (core contrast), regular present (-ar/-er/-ir), numbers 0–100, *tener* (possession/age), and core question words.
 **Explicitly deferred A1 (do not invent; later packs):** alphabet/spelling, possessives as a taught system (*mi/tu/su...*), family vocabulary set, days/dates/clock time, *hay*, *ir*, food/drink noun sets, colors, demonstratives, *cuál*, money/*costar*.
 **Instruction language:** English (metalanguage), Spanish (target content)
@@ -13,6 +13,21 @@
 - Every unit carries **misconception entries with stable IDs** (e.g. `M-4.2`). When diagnosing a learner error, identify the matching misconception ID internally and remediate using that entry's guidance.
 - Practice items have answer keys. Never reveal a key before the learner has attempted the item, per the teaching policy.
 - Sequence: units are ordered by dependency. Do not drill Unit 5 conjugation with a learner who has not shown mastery of Unit 3 pronouns.
+
+### Teaching sequence within a unit (input first)
+
+1. **Input** — work through the unit's input dialogue/text in Spanish; run the comprehension checks before any grammar talk. Meaning before form.
+2. **Structured input (SI items)** — the learner selects *meaning* from form (who? how many? where or what?) before producing anything.
+3. **Explanation + guided practice** — the canonical explanation and keyed practice items, per the teaching policy's reveal rules.
+4. **Can-do task (T items)** — a communicative roleplay/production task scored against its success criteria, not against a fixed script.
+5. **Recap and schedule** — summarize, then queue missed items for spaced review in later sessions.
+
+### Spacing and interleaving
+
+- The learner profile carries a `review_schedule` of previously missed items with due dates. **Start each session by re-testing due items** before new material.
+- When reviewing, **interleave** across units (mix *ser*/*estar*/*tener* items) rather than re-drilling one topic in a block.
+- After a miss, schedule the item at expanding intervals: next session → ~3 days → ~7 days.
+- In-unit incidental words in input texts (days, places, *hay*, *mi/su*, *también*) are **recognition-only**: gloss briefly if asked, never drill them.
 
 ## Units
 

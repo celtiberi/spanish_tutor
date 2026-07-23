@@ -1,5 +1,28 @@
 # Unit 4 — *Estar*, and *Ser* vs *Estar*
 
+## Input (start here)
+
+*Una llamada por teléfono.*
+
+— ¿Hola? ¿Marta? ¿Dónde estás?
+— Estoy en el carro, con una amiga.
+— ¿Cómo están?
+— Estamos bien, pero cansadas. ¿Y tú? ¿Estás en casa?
+— No, estoy en la casa de Luis. La fiesta es en la casa de Luis.
+— ¡Ah! ¿Cómo es la casa?
+— Es grande y muy bonita. Pero Luis está nervioso: ¡no está listo!
+
+**Comprehension checks (before any drill):**
+
+**C-4.1** — Where is Marta right now? Where is the other speaker?
+**Key:** In the car (with a friend); at Luis's house.
+
+**C-4.2** — How do Marta and her friend feel?
+**Key:** Fine but tired (*bien, pero cansadas*).
+
+**C-4.3** — The dialogue says *¿Cómo **es** la casa?* but *Luis **está** nervioso.* What different kinds of information are those two asking/giving?
+**Key:** What the house is like (inherent → *ser*) vs how Luis feels right now (state → *estar*).
+
 ## Learning objectives
 
 1. Conjugate *estar* in the present tense.
@@ -72,6 +95,14 @@ Learner writes *esta* for *está*. **Diagnosis cue:** missing accents on estar f
 ### M-4.5 — *ser* and *estar* are interchangeable because both mean "to be"
 Learner picks whichever comes to mind, guessing 50/50. **Diagnosis cue:** inconsistent choices with no stated reason. **Remediation:** don't correct item-by-item; teach the decision table, then have the learner *explain the reason* (what / how / where) before answering each drill item.
 
+## Structured-input items (meaning before production)
+
+**SI-4.1** — You hear: *La profesora está en el banco.* Is this about **where** she is or **what** she is?
+**Key:** Where — location → *estar*. (Targets M-4.1.)
+
+**SI-4.2** — Compare: *¿Cómo es Luis?* vs *¿Cómo está Luis?* Which asks about his personality, which about his mood right now?
+**Key:** *es* = what he's like (inherent); *está* = how he is feeling now. (Targets M-4.5.)
+
 ## Practice items
 
 **P-4.1** — Conjugate *estar* for: yo, tú, ella, nosotros, ustedes.
@@ -89,7 +120,13 @@ Learner picks whichever comes to mind, guessing 50/50. **Diagnosis cue:** incons
 **P-4.5 (production)** — Write four sentences about a family member: who they are, what they're like, where they are now, how they feel today.
 **Key (model):** *Mi hermana es doctora. Es muy inteligente. Está en el trabajo. Está cansada hoy.* Check the verb choice matches each information type.
 
+## Can-do tasks
+
+**T-4.1** — *Status report.* Tell the tutor about two people you know. For each person: one sentence about **what** they are (identity/description), one about **where** they are right now, one about **how** they feel today.
+**Success criteria:** (1) verb choice matches information type in all 6 sentences; (2) the learner explains one of their choices using the what/how/where question; (3) *estar* forms carry their written accents.
+
 ## Scope notes
 
 - Do not introduce the present progressive (*estar + -ando/-iendo*) — out of scope.
 - The meaning-changing pairs are recognition-only; do not drill production of them.
+- Input incidentals (*llamada*, *por teléfono*) are recognition-only.

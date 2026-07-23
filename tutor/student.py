@@ -6,8 +6,10 @@ persists it, and re-injects it next turn as a mid-conversation system message
 (supported on Opus 4.8; keeps the cached prefix intact).
 """
 
+import datetime
 import json
 import re
+from pathlib import Path
 
 STATE_RE = re.compile(r"<session_state>\s*(\{.*?\})\s*</session_state>", re.DOTALL)
 STATE_MARKER = "<session_state>"
@@ -22,7 +24,33 @@ def default_state() -> dict:
         "struggling": [],
         "current_item_attempts": 0,
         "revisit_queue": [],
+        "review_schedule": [],
     }
+
+
+def load_profile(path: Path) -> dict:
+    """Cross-session learner profile: last session's final state.
+
+    Session-local fields are reset; the durable fields (misconceptions,
+    mastery, review_schedule) carry over so spaced review works.
+    """
+    if not path.exists():
+        return default_state()
+    try:
+        stored = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return default_state()
+    state = default_state()
+    for key in ("current_unit", "observed_misconceptions", "mastered",
+                "struggling", "review_schedule"):
+        if key in stored:
+            state[key] = stored[key]
+    return state
+
+
+def save_profile(path: Path, state: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state, ensure_ascii=False, indent=2))
 
 
 def extract_state(reply: str, previous: dict) -> tuple[str, dict]:
@@ -48,10 +76,13 @@ def extract_state(reply: str, previous: dict) -> tuple[str, dict]:
 
 
 def state_message(state: dict) -> dict:
+    today = datetime.date.today().isoformat()
     return {
         "role": "system",
         "content": (
-            "Session state so far (maintained by you in earlier turns):\n"
+            f"Today's date: {today}.\n"
+            "Learner profile / session state so far (maintained by you across "
+            "turns and sessions):\n"
             + json.dumps(state, ensure_ascii=False)
         ),
     }

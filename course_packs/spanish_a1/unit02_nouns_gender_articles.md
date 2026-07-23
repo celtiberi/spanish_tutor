@@ -1,5 +1,29 @@
 # Unit 2 — Nouns, Gender, Articles, Plurals
 
+## Input (start here)
+
+*El álbum de fotos de Ana. Lee los títulos de las fotos.*
+
+- la casa de Ana
+- el carro nuevo
+- unos amigos de la escuela
+- la ciudad por la noche
+- un mapa de Colombia
+- las sillas y la mesa
+- una foto de la profesora
+- el problema: ¡los lápices y los papeles en la mesa!
+
+**Comprehension checks (before any drill):**
+
+**C-2.1** — Which captions show **more than one** thing?
+**Key:** *unos amigos, las sillas, los lápices, los papeles.*
+
+**C-2.2** — Is the map of Spain?
+**Key:** No — of Colombia.
+
+**C-2.3** — Two captions use words that break the -o/-a gender pattern. Which?
+**Key:** *el mapa* and *el problema* (masculine despite -a); also accept *la foto* (feminine despite -o).
+
 ## Learning objectives
 
 1. Classify common nouns as masculine or feminine using ending patterns.
@@ -78,6 +102,14 @@ Learner reasons "a dress is feminine so *vestido* must be *la*." **Diagnosis cue
 ### M-2.5 — él and el are the same word
 Learner writes *él libro* or reads *el* as "he." **Diagnosis cue:** accent misuse on el/él in writing. **Remediation:** *el* = "the" (no accent), *él* = "he" (accent). Minimal pair: *el libro* vs *él*; full sentence using only known patterns once *ser* is available: *Él es el amigo.* Until then, contrast the written forms in isolation.
 
+## Structured-input items (meaning before production)
+
+**SI-2.1** — You hear: *las amigas.* One friend or several? Men, women, or can't tell?
+**Key:** Several; women (*las... -as*).
+
+**SI-2.2** — You read: *el mapa.* Is *mapa* masculine or feminine — and is the -a ending a reliable guide here?
+**Key:** Masculine; no — it is an exception word, the article is the evidence. (Targets M-2.1.)
+
 ## Practice items
 
 **P-2.1** — Add the correct definite article: ___ mapa, ___ mano, ___ ciudad, ___ problema, ___ noche.
@@ -95,7 +127,13 @@ Learner writes *él libro* or reads *el* as "he." **Diagnosis cue:** accent misu
 **P-2.5 (production)** — Write three sentences of the form "The ___ is ___" using one regular noun, one -ma word, and one exception word.
 **Key (model):** e.g. *La casa es grande. El idioma es difícil. La mano es pequeña.* Check article agreement; adjectives may be any the learner knows (do not require adjective-agreement mastery — that's previewed, not tested, at this point).
 
+## Can-do tasks
+
+**T-2.1** — *Caption your own album.* The learner writes 5 photo captions for their real or imagined room/life, as noun phrases with articles (definite or indefinite).
+**Success criteria:** (1) article–noun agreement correct in all 5; (2) at least one plural; (3) at least one exception word (*mapa, problema, mano, foto, día, moto*) used with the right article.
+
 ## Scope notes
 
 - Adjective agreement is used lightly in examples but is not an objective of this unit; correct gently, don't drill it here.
 - Do not introduce *lo* (neuter article) or contractions *al/del*.
+- Input incidentals (*álbum*, *escuela*, *por la noche*) are recognition-only.

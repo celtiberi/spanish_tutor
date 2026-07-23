@@ -1,5 +1,30 @@
 # Unit 6 — Numbers 0–100, *Tener*, Age, Question Words
 
+## Input (start here)
+
+*En la escuela de idiomas.*
+
+— ¿Cuántos estudiantes hay en la clase?
+— Hay veintidós estudiantes.
+— ¿Y cuántos años tienes, Yuki?
+— Tengo diecinueve años. ¿Y tú?
+— Tengo treinta y dos años.
+— ¿Tienes hermanos?
+— Sí, tengo dos hermanos. Ellos tienen veinticinco y veintiocho años.
+— ¿Dónde está la profesora?
+— Está en la oficina, en la sala número cien.
+
+**Comprehension checks (before any drill):**
+
+**C-6.1** — How many students are in the class?
+**Key:** Twenty-two.
+
+**C-6.2** — Who is older, Yuki or the other speaker?
+**Key:** The other speaker (32 vs 19).
+
+**C-6.3** — How old are Yuki's brothers, and where is the teacher?
+**Key:** Twenty-five and twenty-eight; in the office, room 100.
+
 ## Learning objectives
 
 1. Count and use numbers 0–100.
@@ -87,6 +112,14 @@ All question words carry a **written accent**, and questions open with an invert
 ### M-6.6 — *porque* and *¿por qué?* are the same
 \**Porque estudias español?* or \**estudio español ¿por que?* **Diagnosis cue:** missing accent/split or using the answer-form as a question. **Remediation:** question = two words + accent *¿por qué?*; answer-word *porque* ("because") is out of scope for production — recognition only if it appears.
 
+## Structured-input items (meaning before production)
+
+**SI-6.1** — You hear: *Tiene veintiún años.* Whose age is this — yours, or someone else's?
+**Key:** Someone else's (he/she/*usted*) — *tiene* is third person; your own age would be *tengo*. (Targets M-6.2.)
+
+**SI-6.2** — Which is right for asking how many chairs there are: *¿Cuánto sillas?* or *¿Cuántas sillas?* Why?
+**Key:** *¿Cuántas sillas?* — *cuánto* agrees in gender and number. (Discrimination item; targets M-6.5.)
+
 ## Practice items
 
 **P-6.1** — Write out: 15, 18, 22, 47, 76, 100.
@@ -104,9 +137,15 @@ All question words carry a **written accent**, and questions open with an invert
 **P-6.5 (production)** — Write three sentences: your age, how many siblings (*hermanos*) you have, and one question asking a stranger (formal) their age.
 **Key (model):** *Tengo veinticinco años. Tengo dos hermanos. ¿Cuántos años tiene usted?* Check *tener* forms, number spelling, formal register in the question.
 
+## Can-do tasks
+
+**T-6.1** — *Getting acquainted (formal).* Roleplay: the tutor is an adult stranger at the language school. Ask their age and where they're from; answer the same questions about yourself, and state how many siblings or friends you have, writing at least one number out in words.
+**Success criteria:** (1) age question uses formal *¿Cuántos años tiene usted?*; (2) age answers include *años*; (3) number words correctly formed (one-word 21–29 vs three-word 31–99).
+
 ## Scope notes
 
 - Assumes Unit 4: *estar* for location appears in question-word examples and P-6.4(c).
+- Input incidentals (*hay*, *oficina*, *sala*) are recognition-only (*hay* per the existing note below).
 - Numbers above 100, dates, and telling time are out of scope.
 - *Tener que* + infinitive ("have to") and *tener hambre/sed/frío* idioms are out of scope; if asked, acknowledge and defer.
 - *Hay* ("there is/are") may appear in drills as recognition vocabulary but is not an objective.
