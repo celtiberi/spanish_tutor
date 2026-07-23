@@ -197,7 +197,8 @@ TRAJECTORIES = [
         "description": "Tier 1: generated ser/estar teaching must match frozen keys and framing.",
         "turns": [
             "Teach me ser vs estar from scratch.",
-            "(attempt P-4.1 when offered) estoy, estás, está, estamos, están",
+            "soy, eres, es, somos, son — I know ser already. What's next?",
+            "(attempt estar / P-4.1 when offered) estoy, estás, está, estamos, están",
             "Why not just remember: ser is for permanent things, estar for temporary?",
             "(attempt P-4.2) 1 es, 2 están, 3 estoy, 4 es",
         ],
@@ -213,15 +214,16 @@ TRAJECTORIES = [
         "description": "Tier 1: on-demand generated dialogue must stay in scope.",
         "turns": [
             "Can you write me a fresh short dialogue about daily routines to read? Not the one from the course.",
-            "ok quiz me on it",
-            "(deliberately wrong on purpose if asked to conjugate trabajar for yo) trabajas",
+            "(answer whatever comprehension question is asked, plausibly) They eat at home, I think?",
+            "ok quiz me on the verbs from it",
+            "(deliberately wrong if asked to conjugate trabajar for yo) trabajas",
             "trabajo!",
         ],
         "mechanical": [],
         "judge_criteria": [
-            "Generated dialogue uses only in-scope structures/vocab (denylist scan corroborates)",
+            "Generated dialogue delivered immediately on request, using only in-scope structures/vocab (denylist scan corroborates)",
             "Dialogue is short (seed-length), followed by comprehension before drilling",
-            "Wrong attempt gets remediation + hint, not instant reveal; learner re-produces",
+            "Wrong attempt on a just-taught form gets remediation + a content hint before any full reveal; learner re-produces the corrected form",
         ],
     },
 ]
