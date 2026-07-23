@@ -52,29 +52,35 @@ class TestStreamScrubber(unittest.TestCase):
 
 class TestExtractState(unittest.TestCase):
     def test_complete_block(self):
-        visible, state = extract_state("Good try!\n\n" + STATE_BLOCK, default_state())
+        visible, state, ok = extract_state(
+            "Good try!\n\n" + STATE_BLOCK, default_state()
+        )
         self.assertEqual(visible, "Good try!")
         self.assertEqual(state["observed_misconceptions"], ["M-4.1"])
+        self.assertTrue(ok)
 
     def test_missing_block_keeps_previous(self):
         prev = default_state()
-        visible, state = extract_state("just text", prev)
+        visible, state, ok = extract_state("just text", prev)
         self.assertEqual((visible, state), ("just text", prev))
+        self.assertFalse(ok)
 
     def test_malformed_json_keeps_previous(self):
         prev = default_state()
-        visible, state = extract_state(
+        visible, state, ok = extract_state(
             "hi <session_state>{bad</session_state>", prev
         )
         self.assertEqual((visible, state), ("hi", prev))
+        self.assertFalse(ok)
 
     def test_unclosed_block_hidden(self):  # B-5
         prev = default_state()
-        visible, state = extract_state(
+        visible, state, ok = extract_state(
             'ok\n<session_state>\n{"current_unit": 2', prev
         )
         self.assertEqual(visible, "ok")
         self.assertEqual(state, prev)
+        self.assertFalse(ok)
 
 
 class TestProfilePersistence(unittest.TestCase):
@@ -112,6 +118,34 @@ class TestProfilePersistence(unittest.TestCase):
     def test_state_message_carries_iso_date(self):
         content = state_message(default_state())["content"]
         self.assertRegex(content, r"^Today's date: \d{4}-\d{2}-\d{2}\.")
+
+    def test_state_message_parse_failed_warning(self):
+        content = state_message(default_state(), parse_failed=True)["content"]
+        self.assertIn("state parse failed", content)
+        self.assertNotIn(
+            "state parse failed", state_message(default_state())["content"]
+        )
+
+    def test_state_message_due_warmup_note(self):
+        state = default_state()
+        state["review_schedule"] = [
+            {"item": "x", "misconception": None, "due": "2000-01-01",
+             "successes": 0}
+        ]
+        self.assertIn(
+            "due-item warm-up",
+            state_message(state, session_open=True)["content"],
+        )
+        # not at session open -> no nag
+        self.assertNotIn(
+            "due-item warm-up", state_message(state)["content"]
+        )
+        # nothing due -> no note
+        state["review_schedule"][0]["due"] = "9999-01-01"
+        self.assertNotIn(
+            "due-item warm-up",
+            state_message(state, session_open=True)["content"],
+        )
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@
 
 - Teach **only** what is inside this pack. If the learner asks about something outside scope, say it is beyond this course pack and, where possible, name the unit where nearby material lives.
 - Every unit carries **misconception entries with stable IDs** (e.g. `M-4.2`). When diagnosing a learner error, identify the matching misconception ID internally and remediate using that entry's guidance.
-- Practice items have answer keys. Never reveal a key before the learner has attempted the item, per the teaching policy.
+- Practice items have answer keys. Reveal rules are **only** those in `prompts/teaching_policy.md` (currently assigned item; first-exposure modeling of a *different* example allowed; answer-key mode scoped there). Do not invent a stricter or looser pack-local reveal rule.
 - Sequence: units are ordered by dependency. Do not drill Unit 5 conjugation with a learner who has not shown mastery of Unit 3 pronouns.
 
 ### Teaching sequence within a unit (input first)
@@ -24,9 +24,8 @@
 
 ### Spacing and interleaving
 
-- The learner profile carries a `review_schedule` of previously missed items with due dates. **Start each session by re-testing due items** before new material.
+- Spaced review algorithm and session-open warm-up: follow `prompts/teaching_policy.md` only (do not restate or re-derive intervals from this file).
 - When reviewing, **interleave** across units (mix *ser*/*estar*/*tener* items) rather than re-drilling one topic in a block.
-- After a miss, schedule the item at expanding calendar intervals from today's date: **next day** → **~3 days** after a spaced success → **~7 days** after a second spaced success; drop after two consecutive spaced successes (same algorithm as `prompts/teaching_policy.md`). If the learner fails a review attempt, reset `successes` to 0 and set `due` to the next day.
 - In-unit incidental words in input texts (days, places, *hay*, *mi/su*, *también*) are **recognition-only**: gloss briefly if asked, never drill them.
 
 ## Units

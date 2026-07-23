@@ -66,10 +66,11 @@ class StreamScrubber:
         self.buffer = ""
 
 
-def run_turn(client, system, history, state, user_input):
+def run_turn(client, system, history, state, user_input,
+             parse_failed=False, session_open=False):
     messages = history + [
         {"role": "user", "content": user_input},
-        state_message(state),
+        state_message(state, parse_failed=parse_failed, session_open=session_open),
     ]
     scrubber = StreamScrubber()
     with client.messages.stream(
@@ -86,15 +87,15 @@ def run_turn(client, system, history, state, user_input):
 
     if final.stop_reason == "refusal":
         print("[The tutor declined this request.]")
-        return history, state, final, ""
+        return history, state, final, "", True
 
     reply = "".join(b.text for b in final.content if b.type == "text")
-    visible, state = extract_state(reply, state)
+    visible, state, parse_ok = extract_state(reply, state)
     history = history + [
         {"role": "user", "content": user_input},
         {"role": "assistant", "content": visible},
     ]
-    return history, state, final, visible
+    return history, state, final, visible, parse_ok
 
 
 def log_turn(log_path: Path, user_input, visible, state, final):
@@ -138,11 +139,13 @@ def main() -> None:
 
     print(f"Tutor ready ({args.pack.name}, {config.MODEL}). {HELP}\n")
     print("tutor> ", end="", flush=True)
-    # Let the tutor open the session (goal-setting per the teaching policy).
+    # Harness seed: neutral wording so the model can't read it as a content
+    # preference (per teaching policy, session-open order still applies).
     try:
-        history, state, final, visible = run_turn(
+        history, state, final, visible, parse_ok = run_turn(
             client, system, history, state,
-            "Hi, I'm ready to start.",
+            "Please open the session per policy.",
+            session_open=True,
         )
     except anthropic.RateLimitError:
         print("[Rate limited — wait a moment and restart.]")
@@ -176,8 +179,9 @@ def main() -> None:
 
         print("tutor> ", end="", flush=True)
         try:
-            history, state, final, visible = run_turn(
-                client, system, history, state, user_input
+            history, state, final, visible, parse_ok = run_turn(
+                client, system, history, state, user_input,
+                parse_failed=not parse_ok,
             )
         except anthropic.RateLimitError:
             print("[Rate limited — wait a moment and resend.]")
