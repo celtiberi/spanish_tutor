@@ -1,7 +1,9 @@
 # Course Pack: Spanish A1 — Foundations
 
 **Pack ID:** `spanish_a1_foundations`
-**Version:** 0.4 (pedagogy revision — input blocks, can-do tasks, structured input, spaced review; see `docs/pedagogy-comparison.md`)
+**Version:** 0.5 (architecture revision — dual-mode grounding; see `docs/architecture-pack-debate.md`)
+**Content mode:** `spec`
+*(Known-domain pack: curriculum + PCK + frozen eval constrain the tutor; in-scope explanations/input may be generated. See teaching policy grounding rules. Canonical tables and dialogues below are retained as reference/seed material pending the live smoke test — measurement artifacts, not exclusive content.)*
 **Level:** CEFR A1 grammar-core slice (absolute beginner), first ~6 weeks — **not** a complete A1 inventory. Covers greetings/courtesy, noun gender/articles/plurals, subject pronouns, *ser*, *estar* (core contrast), regular present (-ar/-er/-ir), numbers 0–100, *tener* (possession/age), and core question words.
 **Explicitly deferred A1 (do not invent; later packs):** alphabet/spelling, possessives as a taught system (*mi/tu/su...*), family vocabulary set (**except** the Unit 6 production collocations *hermano(s)/hermana(s)* with *tener*), days/dates/clock time, *hay* (recognition-only where it already appears), *ir*, food/drink noun sets beyond Unit 5's closed production set, colors, demonstratives, *cuál*, money/*costar*.
 **Instruction language:** English (metalanguage), Spanish (target content)
@@ -9,14 +11,14 @@
 
 ## How the tutor should use this pack
 
-- Teach **only** what is inside this pack. If the learner asks about something outside scope, say it is beyond this course pack and, where possible, name the unit where nearby material lives.
+- Grounding follows the **two-mode rules** in `prompts/teaching_policy.md`. This pack declares `content_mode: spec`: the in-scope inventory and denylist below are law; in-scope content may be generated; frozen items/keys/M-IDs are authoritative.
 - Every unit carries **misconception entries with stable IDs** (e.g. `M-4.2`). When diagnosing a learner error, identify the matching misconception ID internally and remediate using that entry's guidance.
 - Practice items have answer keys. Reveal rules are **only** those in `prompts/teaching_policy.md` (currently assigned item; first-exposure modeling of a *different* example allowed; answer-key mode scoped there). Do not invent a stricter or looser pack-local reveal rule.
 - Sequence: units are ordered by dependency. Do not drill Unit 5 conjugation with a learner who has not shown mastery of Unit 3 pronouns.
 
 ### Teaching sequence within a unit (input first)
 
-1. **Input** — work through the unit's input dialogue/text in Spanish; run the comprehension checks before any grammar talk. Meaning before form.
+1. **Input** — open with in-scope Spanish input: the unit's seed dialogue/text, or freshly generated input that stays inside the unit's structures and vocabulary (mode `spec`). Run comprehension checks before any grammar talk. Meaning before form.
 2. **Structured input (SI items)** — the learner selects *meaning* from form (who? how many? where or what?) before producing anything.
 3. **Explanation + guided practice** — the canonical explanation and keyed practice items, per the teaching policy's reveal rules.
 4. **Can-do task (T items)** — a communicative roleplay/production task scored against its success criteria, not against a fixed script.
@@ -38,6 +40,10 @@
 | 4 | `unit04_estar_vs_ser.md` | *Estar*; contrast with *ser* | 3 |
 | 5 | `unit05_present_regular.md` | Present tense: regular -ar/-er/-ir verbs | 3 |
 | 6 | `unit06_numbers_tener_questions.md` | Numbers 0–100, *tener*, age, question words | 3, 4, 5 |
+
+## In-scope inventory (what the tutor may teach and drill)
+
+Closed list; details live in the unit files. Structures: greeting/courtesy/introduction formulas incl. *me llamo/te llamas/se llama* (U1); noun gender, definite/indefinite articles, plurals, the six listed exception nouns (U2); subject pronouns and *ser*, negation with *no* (U3); *estar* and the ser/estar what/how/where contrast, event-location *ser* as recognition (U4); regular present -ar/-er/-ir with the listed verbs and Unit 5's closed production noun set (U5); numbers 0–100, *tener* for possession and age, the listed question words, *hermano(s)/hermana(s)* with *tener* (U6). Production vocabulary = the words appearing in unit tables, items, and closed sets — not open-world Spanish.
 
 ## Scope boundaries (do not teach these)
 

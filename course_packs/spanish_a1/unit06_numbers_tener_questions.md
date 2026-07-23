@@ -1,6 +1,6 @@
 # Unit 6 — Numbers 0–100, *Tener*, Age, Question Words
 
-## Input (start here)
+## Seed input (start here — exemplar of allowed scope; generated input may substitute in mode `spec`)
 
 *En la escuela de idiomas.*
 

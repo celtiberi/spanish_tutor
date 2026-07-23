@@ -1,6 +1,6 @@
 # Unit 5 — Present Tense: Regular -ar / -er / -ir Verbs
 
-## Input (start here)
+## Seed input (start here — exemplar of allowed scope; generated input may substitute in mode `spec`)
 
 *Un día normal.*
 

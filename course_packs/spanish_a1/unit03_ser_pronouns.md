@@ -1,6 +1,6 @@
 # Unit 3 — Subject Pronouns and *Ser*
 
-## Input (start here)
+## Seed input (start here — exemplar of allowed scope; generated input may substitute in mode `spec`)
 
 *El primer día en la clase de español.*
 

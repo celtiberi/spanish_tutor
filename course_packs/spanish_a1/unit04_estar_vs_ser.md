@@ -1,6 +1,6 @@
 # Unit 4 — *Estar*, and *Ser* vs *Estar*
 
-## Input (start here)
+## Seed input (start here — exemplar of allowed scope; generated input may substitute in mode `spec`)
 
 *Una llamada por teléfono.*
 

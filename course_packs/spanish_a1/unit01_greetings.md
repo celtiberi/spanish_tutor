@@ -1,6 +1,6 @@
 # Unit 1 — Greetings, Introductions, Courtesy
 
-## Input (start here)
+## Seed input (start here — exemplar of allowed scope; generated input may substitute in mode `spec`)
 
 *En una recepción, por la noche. Dos personas no se conocen.*
 

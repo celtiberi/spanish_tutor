@@ -181,6 +181,8 @@ A “course pack” should eventually support:
 
 v0 can start with unstructured notes + automatic chunking; structure improves quality later.
 
+**Dual-mode packs (decided 2026-07-22; see `docs/architecture-pack-debate.md`):** packs declare `content_mode: spec` or `content_mode: full`. **Mode `spec`** (domains the base model already knows, e.g. Spanish A1): the pack is a thin curriculum contract + PCK + frozen measurement — in-scope inventory, denylist, sequence/dependencies, misconception taxonomy, keyed eval items, task criteria, pedagogical directives, optional seed inputs — and the tutor generates in-scope content from its own knowledge under those constraints. **Mode `full`** (unknown domains, the Phase 3/5 transfer subject C, high-stakes truth): full content corpus with strict teach-only-from-pack grounding. Missing metadata defaults to `full`. Measurement artifacts (scope, sequence, M-IDs, item keys, task criteria) are frozen in both modes so research comparability survives. Rationale: writing content the model already knows is redundant authoring that suppresses superior parametric knowledge; the residual known-domain risks are scope creep and framing drift, which the frozen spec — not conjugation tables — mitigates.
+
 ---
 
 ## 5. Plan outline
@@ -439,3 +441,4 @@ Use these as starting points for deeper literature review; not exhaustive.
 | 0.1 | 2026-07-22 | Initial research synthesis and plan outline |
 | 0.2 | 2026-07-22 | Applied countersigned review change set R1–R9 (see `docs/review-research-and-plan.md`): Phase 3 renamed to policy value test; new Phase 5 trained-behavior transfer (thesis test); rater protocol + pre-registered success bars; adversarial scenario class; diagnostic-accuracy rubric dimension; ethics gate; base-model feasibility matrix; citations and dataset shortlist |
 | 0.3 | 2026-07-22 | Locked Phase 0/2 build decisions: pilot domain A = Spanish A1; corpus = Claude-generated course pack; vertical slice = Python CLI app on `claude-opus-4-8` |
+| 0.4 | 2026-07-22 | Dual-mode pack architecture (`spec` vs `full`) adopted after user challenge + Grok debate (`docs/architecture-pack-debate.md`); Spanish A1 pack set to mode `spec`; §4.3 corpus contract updated |

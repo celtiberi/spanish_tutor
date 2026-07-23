@@ -1,6 +1,6 @@
 # Unit 2 — Nouns, Gender, Articles, Plurals
 
-## Input (start here)
+## Seed input (start here — exemplar of allowed scope; generated input may substitute in mode `spec`)
 
 *El álbum de fotos de Ana. Lee los títulos de las fotos.*
 
