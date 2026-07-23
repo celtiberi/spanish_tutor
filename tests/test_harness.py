@@ -117,7 +117,16 @@ class TestProfilePersistence(unittest.TestCase):
 
     def test_state_message_carries_iso_date(self):
         content = state_message(default_state())["content"]
-        self.assertRegex(content, r"^Today's date: \d{4}-\d{2}-\d{2}\.")
+        self.assertRegex(content, r"Today's date: \d{4}-\d{2}-\d{2}\.")
+
+    def test_state_message_role_matches_model_capability(self):
+        from tutor import config
+        msg = state_message(default_state())
+        if config.SUPPORTS_MID_SYSTEM:
+            self.assertEqual(msg["role"], "system")
+        else:
+            self.assertEqual(msg["role"], "user")
+            self.assertIn("<harness_context>", msg["content"])
 
     def test_state_message_parse_failed_warning(self):
         content = state_message(default_state(), parse_failed=True)["content"]
