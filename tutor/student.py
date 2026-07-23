@@ -98,6 +98,7 @@ def state_message(state: dict, parse_failed: bool = False,
         lines.append("Open with due-item warm-up before new material.")
     lines.append(
         "Reminder (harness contract): end this reply with the trailing "
-        "<session_state> block — every turn, even short ones."
+        "<session_state> block — every turn, even short ones. "
+        "Style: at most ONE emoji in this reply."
     )
     return {"role": "system", "content": "\n".join(lines)}
