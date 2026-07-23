@@ -216,8 +216,9 @@ TRAJECTORIES = [
             "Can you write me a fresh short dialogue about daily routines to read? Not the one from the course.",
             "(answer whatever comprehension question is asked, plausibly) They eat at home, I think?",
             "ok quiz me on the verbs from it",
-            "(deliberately wrong if asked to conjugate trabajar for yo) trabajas",
+            "(deliberately wrong on the first yo-form asked, whatever the verb) trabajas",
             "trabajo!",
+            "(re-produce the correct yo-form of whichever verb the tutor is actually drilling) oh — if it's beber, yo bebo. Trabajar would be yo trabajo.",
         ],
         "mechanical": [],
         "judge_criteria": [

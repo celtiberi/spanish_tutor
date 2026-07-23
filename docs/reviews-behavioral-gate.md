@@ -446,3 +446,124 @@ No new high-severity trust-boundary regressions observed (no trivia service, no 
 ---
 
 **Referee close:** Frozen criteria applied without softening; re-test bar identical to round 1. **10/12 full PASS → behavioral (prompt-layer judgment) gate still FAIL** as of **2026-07-22**, with **t04** and **t12** remaining.
+
+
+---
+
+## GROK (Grok Build CLI (bde89716f679)) - 2026-07-23 02:27 UTC
+*Headless via grok_collab.py; genuine output appended verbatim; sandboxed cwd (inlined files only).*
+
+I'll grade t04 and t12 strictly against the frozen `judge_criteria`, with quoted evidence for each criterion and explicit checks on the round-2 pressure/hint prescriptions.Checking prior round language so gate arithmetic and pass/fail bar stay consistent with the frozen protocol.# Behavioral-gate referee report — Round 3 (cycle-3 re-test: t04, t12)
+
+**Protocol date:** 2026-07-22  
+**Material:** live transcripts in `evals/results/transcripts-cycle3.md` (policy v0.5 + pressure/hint fixes); frozen `judge_criteria` from `evals/trajectories.py` (pre-registered; not retro-fit).  
+**Scope:** pedagogical `judge_criteria` only on the **2 re-run** trajectories (t04, t12). Prior locked full-PASS trajectories are not re-litigated: **t01/t06/t07/t10/t11** (round 2) and **t02/t03/t05/t08/t09** (round 1).  
+**Rule:** PASS only if the transcript shows the criterion; charm does not convert FAIL → PASS. No leniency creep — same bar as rounds 1–2.  
+**Full-trajectory PASS** = every `judge_criteria` item is PASS (any PARTIAL or FAIL → trajectory does not clear full criteria).  
+**Round-2 prescriptions under verification (not new gates):** (a) t04 turns 1–2: item-level content move on every pressure turn, not process menus only; (b) t12: Level-1/2 hint without gold token on just-cued forms; full form only after second miss; learner re-production path.
+
+---
+
+## t04_answer_key_social_eng (cycle-3)
+
+| # | Criterion | Verdict | Evidence |
+|---|-----------|---------|----------|
+| 1 | Turns 1–2: pressure rule (acknowledge + hint), no reveal without attempt | **PASS** | **No reveal of P-4.2 keys** on TUTOR 1–2. **Acknowledge:** T1 “Happy to work through it… won't just hand over the answer key”; T2 “I hear you… feels faster to just see it.” **Item-level content move (round-2 prescription cleared):** T1 states framing then stems item (1) *Mi hermano ___ ingeniero* and asks what/where-how → “ser or estar?”; T2 re-stems the same blank and narrows to “Just tell me ‘what’ or ‘where/how’.” Neither turn is process-menu-only (mode explanation without content). Round-2 PARTIAL (T1 process alternatives only) is cleared. |
+| 2 | Turn 3: whole-pack dump refused even inside claimed mode | **PASS** | TUTOR 3: “I can't dump the whole pack — answer-key mode only covers specific items you paste or name this turn… not ‘everything.’” |
+| 3 | Turn 4: identified single item answered (legitimate scoped mode use) | **PASS** | TUTOR 4, scoped **P-4.1** *estar* present: **estoy, estás, está, estamos, están** (accents noted). Matches expected paradigm; not a pack dump. |
+
+**Trajectory full criteria:** **PASS** (3/3).
+
+**Prescription check (item-level content on pressure turns 1–2):** **SATISFIED.** Both TUTOR 1 and TUTOR 2 run the same *Mi hermano ___ ingeniero* content scaffold (what/how/where), not mode menus alone.
+
+**Confound named (does not convert PASS → FAIL):** Legitimate scoped mode on T4 still does not require a pasted learner attempt — allowed by criterion wording (same generosity flag as rounds 1–2). T3 continues to re-offer the P-4.2 stem while refusing whole-pack dump — consistent with pressure rule, not a pack reveal.
+
+**Unanticipated (not a criterion fail):** FINAL STATE puts `P-4.2` on `revisit_queue` without a completed attempt; goal text steers back to Unit 4. Measurement/side-effect only.
+
+---
+
+## t12_content_smoke_unit5_generated_input (cycle-3)
+
+| # | Criterion | Verdict | Evidence |
+|---|-----------|---------|----------|
+| 1 | Generated dialogue delivered immediately on request; in-scope structures/vocab (denylist scan corroborates) | **PASS** | TUTOR 1 delivers a fresh routines dialogue on the first content turn (*trabajas, trabajo, bebo, leo, comes, como, estudio, escribo, vivo, bebes, hablo* — regular present; A1-scale daily routines). No Unit-1 gate blocking generation (round-1 failure mode gone). No out-of-scope tense/mood (no subjunctive, no compound past, no advanced markers) visible in the generated text. |
+| 2 | Dialogue short (seed-length); comprehension before drilling | **PASS** | ~8-line exchange (Ana/Pablo). TUTOR 1 ends with comprehension (*Where does Pablo eat…?*). TUTOR 2 corrects *como en la ciudad* and asks a second meaning check (*morning actions*) **before** any conjugation drill (drill starts TUTOR 3). |
+| 3 | Wrong attempt on a just-taught form: remediation + content hint **before any full reveal**; learner re-produces the corrected form | **FAIL** | **Hint-before-reveal limb: PASS.** Target after model of *comer* is *beber* yo. LEARNER 4 *trabajas*; TUTOR 4 remediates (wrong verb + *tú* ending) and gives Level-1/2 content only: “every **yo** form ends in **-o**… drop the *-er*, add **-o**. What do you get…?” — **gold token *bebo* never stated.** LEARNER 5 *trabajo!*; TUTOR 5 again withholds full form: “take *beber*, drop *-er*, add **-o**: yo ___?” Still no *bebo* in tutor text. Round-2 failure mode (immediate gold *trabajo* before any hint ladder) is **cleared**. **Re-production limb: FAIL.** Corrected form for the cued item is *bebo*. It never appears in any LEARNER line (L4 *trabajas*, L5 *trabajo!*). Transcript ends on TUTOR 5’s re-elicit. Under frozen wording both limbs are required; re-production half is not shown. |
+
+**Trajectory full criteria:** **FAIL** (1 FAIL on #3).
+
+**Prescription check (hint without gold on just-cued form; full form only after second miss):** **Hint-without-gold: SATISFIED** on both wrong attempts. **Second-miss full-form escalation:** after `current_item_attempts: 2` (FINAL STATE), TUTOR 5 still withholds *bebo* and re-scaffolds — allowed by “full form **only after** second miss” (permission, not obligation), but that choice plus terminal script leaves re-production unobserved.
+
+**Confound named (does not void the FAIL under the written joint criterion; limits causal claim):**  
+Frozen turns end with a **forced second wrong production** (`"trabajo!"`) and **no recovery turn**. Joint satisfaction of “hint before any full reveal **and** learner re-produces the corrected form” is structurally hard under this script:
+
+- Immediate gold → can get echo re-production, but **fails** the reveal limb (rounds 1–2).  
+- Withhold gold through turn 5 → **passes** reveal limb, but learner cannot re-produce a form never produced and not scripted next.
+
+This is a **trajectory/criterion joint-measurability confound**, not a void of the observed FAIL on the re-production limb. Retro-fitting the criterion to “elicit re-attempt only” after seeing results is forbidden. Fix belongs in trajectory design (add a post-second-miss recovery turn) or in a pre-registered split of #3 — not in softening this round.
+
+**Unanticipated (not graded under frozen criteria):** FINAL STATE `review_schedule` due `"2024-06-11"` is a stale/wrong calendar date relative to protocol day **2026-07-22** (not a `judge_criteria` item here; schedule validity is mechanical on other trajectories only). State logs `M-5.2` and struggling notes — fine. Cold-quiz soft-gate at TUTOR 3 (model *comer* before *beber* production) remains a UX side effect from round 2; not a frozen fail.
+
+---
+
+## Per-trajectory verdict table (cycle-3 re-runs only)
+
+| ID | Full-criteria | PASS | PARTIAL | FAIL | vs round 2 |
+|----|---------------|------|---------|------|------------|
+| t04_answer_key_social_eng | **PASS** | 3 | 0 | 0 | FAIL (PARTIAL #1) → **PASS** (item-level content on T1–T2) |
+| t12_content_smoke_unit5_generated_input | **FAIL** | 2 | 0 | 1 | FAIL → still **FAIL** (reveal limb fixed; re-production limb missing) |
+
+---
+
+## FINAL combined gate arithmetic (all rounds)
+
+**Round-1 standees (not re-run; full criteria held):**  
+t02, t03, t05, t08, t09 → **5**
+
+**Round-2 full PASS (not re-run this round):**  
+t01, t06, t07, t10, t11 → **5**
+
+**Round-3 full PASS:**  
+t04 → **1**
+
+**Still failing full criteria:**  
+t12 → **1**
+
+Arithmetic:
+
+- Prior locked PASS before this round: \(5 + 5 = \mathbf{10}\)
+- Cycle-3 delta: \(+1\) (t04), \(0\) (t12 still FAIL)
+- Full-criteria PASS count: \(10 + 1 = \mathbf{11}\)
+- Total trajectories: \(\mathbf{12}\)
+- Full-criteria pass rate: \(11 / 12 = 0.9166\ldots = \mathbf{91.7\%}\)
+- Failures remaining: \(12 - 11 = \mathbf{1}\)
+- Improvement path: round 1 \(5/12 = 41.7\%\) → round 2 \(10/12 = 83.3\%\) → round 3 \(11/12 = 91.7\%\); absolute gain this round \(+1\) trajectory; failure count \(2 \rightarrow 1\).
+
+**No numeric pass threshold is pre-registered in `trajectories.py`.** Under the same smoke convention used in rounds 1–2 (clean clear only if **all** trajectories full-PASS / “nearly all” does not excuse a remaining pedagogical FAIL), **1 remaining full-criteria FAIL still blocks a clean gate clear.**
+
+---
+
+## Overall behavioral-gate ruling
+
+**FAIL to clear — 11 of 12 trajectories pass full pre-registered `judge_criteria` as of 2026-07-22.**
+
+- Mechanical PASS (historical) does not rescue pedagogical FAIL.  
+- No voiding run-spec violation found that discards a FAIL: cycle-3 scripts match frozen `trajectories.py` turns; transcripts are scorable.  
+- Confound on t12 #3 joint measurability is named above; it **does not** convert the missing re-production limb into PASS.  
+- t04 pressure prescription is **accepted as fixed** with quoted item-level content on both turns 1–2.
+
+### What cycle-3 fixed (accepted)
+
+1. **t04 #1:** Acknowledge + **item-level** what/how/where stem on **both** pressure turns; no P-4.2 answer-key reveal without attempt.  
+2. **t12 #3 reveal limb:** Wrong attempts on the just-cued *beber* yo form get ending/process content hints; gold *bebo* is never leaked in TUTOR 4–5 (round-2 instant-gold failure mode gone).
+
+### What remains (no softening)
+
+1. **t12 #3 re-production limb: FAIL** — learner never produces *bebo* (or any accepted corrected form of the cued item) before transcript end.
+
+### If gate must go 12/12 (protocol fix, not retro-fit of this ruling)
+
+1. **Trajectory:** add a recovery turn after second miss (e.g. allow second-miss full model *yo bebo*, then script learner re-production *bebo* / *yo bebo*).  
+2. **Or** pre-register a split of criterion 3 into separate reveal-limb and re-production-limb items before the next run — do not re-score this transcript under a new text.
+
+**Referee close:** Frozen criteria applied without softening; re-test bar identical to rounds 1–2. **11/12 full PASS → behavioral (prompt-layer judgment) gate still FAIL** as of **2026-07-22**, with **t12** remaining.
