@@ -5,6 +5,7 @@ import unittest
 from tutor.ai_student import (
     PERSONAS,
     TrueAbility,
+    clean_student_utterance,
     get_persona,
     _sheet_diff,
     _verification_checks,
@@ -18,6 +19,16 @@ class TestAiStudent(unittest.TestCase):
         p = get_persona("alex_boat")
         self.assertEqual(p["name"], "Alex")
         self.assertTrue(p["error_tendencies"])
+
+    def test_clean_student_strips_tutor_leak(self):
+        raw = (
+            "Um… estoy en mi barco?"
+            "¡Muy bien, Alex! **Estoy en mi barco.** Perfect!"
+        )
+        cleaned = clean_student_utterance(raw, persona_name="Alex")
+        self.assertIn("estoy", cleaned.lower())
+        self.assertNotIn("Perfect", cleaned)
+        self.assertNotIn("Muy bien", cleaned)
 
     def test_sheet_diff_error_count(self):
         before = {"error_patterns": {}, "skills": {}, "next_best": {}}

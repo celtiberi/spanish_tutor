@@ -95,8 +95,18 @@ PERSONAS: dict[str, dict[str, Any]] = {
             {
                 "id": "ser_estar_confuse",
                 "label": "ser/estar confusion for location and mood",
-                "bad_examples": ["Soy en la casa", "Estoy estudiante"],
-                "good_examples": ["Estoy en la casa", "Soy estudiante"],
+                "bad_examples": [
+                    "Soy nerviosa",
+                    "Soy bien",
+                    "Soy en la casa",
+                    "Estoy estudiante",
+                ],
+                "good_examples": [
+                    "Estoy nerviosa",
+                    "Estoy bien",
+                    "Estoy en la casa",
+                    "Soy estudiante",
+                ],
                 "strength": 0.7,
             },
         ],
@@ -150,19 +160,33 @@ class TrueAbility:
         """Weaken errors when tutor clearly models the good form."""
         notes: list[str] = []
         low = (tutor_text or "").lower()
+        # Strip accents for matching
+        fold = (
+            low.replace("á", "a")
+            .replace("é", "e")
+            .replace("í", "i")
+            .replace("ó", "o")
+            .replace("ú", "u")
+        )
         for err in persona.get("error_tendencies") or []:
             eid = err.get("id") or ""
             goods = err.get("good_examples") or []
             hit = False
             for g in goods:
-                # loose match: key tokens present
                 g_tokens = re.findall(r"[a-záéíóúüñ]{3,}", g.lower())
-                if g_tokens and all(t in low for t in g_tokens[:2]):
+                # need at least one distinctive token present
+                if g_tokens and any(t in low for t in g_tokens[:3]):
                     hit = True
                     break
             # pattern-specific boosts
             if eid == "estar_yo_estoy_vs_esta" and re.search(
                 r"\bestoy\b", low
+            ):
+                hit = True
+            if eid == "ser_estar_confuse" and (
+                re.search(r"\bestoy\s+(nervios|bien|mal|feliz|triste)", fold)
+                or re.search(r"\buse\s+\*?estar\*?\b", fold)
+                or ("estar" in fold and "soy" in fold and "nerv" in fold)
             ):
                 hit = True
             if hit and eid:
@@ -191,6 +215,67 @@ _LEAVE_RE = re.compile(
     r"\b(adi[oó]s|hasta\s+luego|hasta\s+mañana|bye|goodbye|gracias)\b",
     re.I,
 )
+# Student model sometimes pastes tutor praise / models into its own turn
+_TUTOR_LEAK_MARKERS = (
+    "¡muy bien",
+    "muy bien, alex",
+    "natural spanish",
+    "perfect!",
+    "perfecto!",
+    "to say ",
+    "remember,",
+    "remember:",
+    "spot on",
+    "that's wonderful",
+    "that's great",
+    "let's try",
+    "fill in the blank",
+    "**estoy",
+    "**(yo) estoy",
+)
+
+
+def clean_student_utterance(raw: str, *, persona_name: str = "") -> str:
+    """Drop tutor-like leakage and keep a single learner turn."""
+    text = (raw or "").strip()
+    if not text:
+        return "um… hola?"
+    # Strip markdown fences / bold
+    text = re.sub(r"^```.*?\n", "", text)
+    text = re.sub(r"\n```$", "", text)
+    text = text.replace("**", "")
+    # Cut at first tutor-ish segment
+    low = text.lower()
+    cut = len(text)
+    for m in _TUTOR_LEAK_MARKERS:
+        i = low.find(m)
+        if i > 8:
+            cut = min(cut, i)
+    # Also cut if name + praise pattern
+    if persona_name:
+        for pat in (
+            rf"¡?\s*muy bien,?\s*{re.escape(persona_name)}",
+            rf"great job,?\s*{re.escape(persona_name)}",
+        ):
+            mm = re.search(pat, text, re.I)
+            if mm and mm.start() > 5:
+                cut = min(cut, mm.start())
+    text = text[:cut].strip()
+    # Prefer first 1–3 sentences for novices
+    parts = re.split(r"(?<=[\.\!\?])\s+", text)
+    if len(parts) > 3:
+        text = " ".join(parts[:3]).strip()
+    text = text.strip().strip('"').strip()
+    # Drop trailing tutor question prompts accidentally kept
+    text = re.sub(
+        r"\s*(Where is|What's your|How would you|Can you try).*$",
+        "",
+        text,
+        flags=re.I,
+    ).strip()
+    if not text or len(text) < 2:
+        return "um… hola?"
+    return text
 
 
 class AIStudentAgent:
@@ -312,12 +397,9 @@ class AIStudentAgent:
                 if t:
                     texts.append(t)
         raw = "\n".join(texts).strip()
-        # Strip accidental meta wrappers
-        raw = re.sub(r"^```.*?\n", "", raw)
-        raw = re.sub(r"\n```$", "", raw)
-        raw = raw.strip().strip('"')
-        if not raw:
-            raw = "um… hola?"
+        raw = clean_student_utterance(
+            raw, persona_name=str(self.persona.get("name") or "")
+        )
 
         # Soft break if model still only goodbyes while looping
         if self._leave_looping() and _LEAVE_RE.search(raw) and len(raw.split()) <= 6:

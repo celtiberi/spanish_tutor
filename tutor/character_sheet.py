@@ -132,6 +132,26 @@ ERROR_PATTERN_CATALOG: dict[str, dict] = {
         ],
         "resolve": [r"\bsoy\s+de\b"],
     },
+    "ser_estar_confuse": {
+        "label": "ser vs estar (feelings / location / temporary state)",
+        "form_id": "present_estar_person",
+        "can_dos": ["IP-04", "IP-07"],
+        "teach_hint": (
+            "Feelings and location use *estar* (*Estoy nerviosa*, *Estoy en casa*). "
+            "*Ser* is for identity/origin (*Soy estudiante*, *Soy de…*). "
+            "Recast *Soy nerviosa* → *Estoy nerviosa*; *Soy bien* → *Estoy bien*."
+        ),
+        "detect": [
+            (r"\bsoy\s+(nervios[oa]|bien|mal|cansad[oa]|feliz|triste|enferm[oa])\b",
+             "soy + feeling"),
+            (r"\bsoy\s+en\s+\w+", "soy en + place"),
+            (r"\bestoy\s+(estudiante|profesor|maestro|doctor)\b", "estoy + identity"),
+        ],
+        "resolve": [
+            r"\bestoy\s+(nervios[oa]|bien|mal|cansad[oa]|feliz|triste|enferm[oa]|en)\b",
+            r"\bsoy\s+(estudiante|de)\b",
+        ],
+    },
 }
 
 ERROR_PATTERN_PRIORITY_THRESHOLD = 2  # count at/above → force teaching focus
@@ -146,6 +166,9 @@ ERROR_PATTERN_ALIASES: dict[str, str] = {
     "present_estar_person_error": "estar_yo_estoy_vs_esta",
     "me_llamo_es_x": "me_llamo_es",
     "me_llama_es": "me_llamo_es",
+    "ser_vs_estar_feelings": "ser_estar_confuse",
+    "ser_vs_estar": "ser_estar_confuse",
+    "soy_nerviosa": "ser_estar_confuse",
 }
 
 
@@ -176,6 +199,12 @@ def normalize_error_pattern_id(pattern_id: str) -> str:
         return "me_llamo_es"
     if "tango" in key or ("tengo" in key and "error" in key):
         return "tengo_not_tango"
+    if "ser" in key and "estar" in key:
+        return "ser_estar_confuse"
+    if key.startswith("soy_") and any(
+        x in key for x in ("nerv", "bien", "feeling", "emoc")
+    ):
+        return "ser_estar_confuse"
     return pid
 
 
@@ -1212,8 +1241,14 @@ def recompute_next_best(sheet: dict) -> dict:
             # Don't push IP-02 formal if informal greet still unknown
             if cid == "IP-02" and conf(skills, "IP-01") < 0.35:
                 continue
-            # Don't grind IP-01 if already emerging+ and others lag
-            if cid == "IP-01" and conf(skills, "IP-01") >= 0.55:
+            # Don't grind IP-01 after any real greeting evidence — open other can-dos
+            if cid == "IP-01" and (
+                conf(skills, "IP-01") >= 0.25
+                or status(skills, "IP-01") in ("emerging", "fragile", "known")
+            ):
+                continue
+            # Same for leave-taking once shown
+            if cid == "IP-05" and conf(skills, "IP-05") >= 0.35:
                 continue
             pri = {"high": 0, "medium": 1, "low": 2}.get(meta.get("priority"), 3)
             candidates.append((pri, conf(skills, cid), cid))
