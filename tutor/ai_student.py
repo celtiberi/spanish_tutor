@@ -9,7 +9,7 @@ live sheet is untouched.
   python -m tutor.ai_student --sheet logs/ai_student_sheet.json --reset-sheet
 
 Env:
-  AI_STUDENT_MODEL   default grok-3-mini (cheap learner)
+  AI_STUDENT_MODEL   default grok-4.5 (capable learner for useful sims)
   TUTOR_MODEL        teacher model (default gemini-3.6-flash)
   GROK_API_KEY       required for the student
 """
@@ -36,7 +36,7 @@ from .term import paint, palette
 
 STUDENT_PROMPT = config.REPO_ROOT / "prompts" / "ai_student.md"
 DEFAULT_STUDENT_SHEET = config.REPO_ROOT / "logs" / "ai_student_sheet.json"
-DEFAULT_STUDENT_MODEL = "grok-3-mini"
+DEFAULT_STUDENT_MODEL = "grok-4.5"
 DEFAULT_TURNS = 6
 
 # ---------------------------------------------------------------------------

@@ -127,7 +127,7 @@ python -m tutor.ai_student --json-out logs/ai_student_report.json
 ```
 
 - Sheet: `logs/ai_student_sheet.json` (not Patrick’s live sheet)
-- Student model: `AI_STUDENT_MODEL` (default `grok-3-mini`)
+- Student model: `AI_STUDENT_MODEL` (default `grok-4.5`)
 - Teacher model: `TUTOR_MODEL`
 - Personas: `alex_boat` (yo/está errors), `maya_shy` (ser/estar)
 - Prints turn log + verification checks (error tracking, learning, recasts)
