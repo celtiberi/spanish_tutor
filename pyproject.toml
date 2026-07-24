@@ -25,6 +25,7 @@ asr = [
 tutor = "tutor.cli:main"
 tutor-web = "tutor.web_app:main"
 tutor-chat = "tutor.conversational:main"
+tutor-ai-student = "tutor.ai_student:main"
 
 [build-system]
 requires = ["hatchling"]
