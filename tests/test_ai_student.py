@@ -6,6 +6,7 @@ from tutor.ai_student import (
     PERSONAS,
     TrueAbility,
     get_persona,
+    _sheet_diff,
     _verification_checks,
 )
 from tutor.ai_student import SimTurn
@@ -17,6 +18,22 @@ class TestAiStudent(unittest.TestCase):
         p = get_persona("alex_boat")
         self.assertEqual(p["name"], "Alex")
         self.assertTrue(p["error_tendencies"])
+
+    def test_sheet_diff_error_count(self):
+        before = {"error_patterns": {}, "skills": {}, "next_best": {}}
+        after = {
+            "error_patterns": {
+                "estar_yo_estoy_vs_esta": {
+                    "count": 2,
+                    "last_examples": ["Yo está bien"],
+                }
+            },
+            "skills": {"IP-04": {"status": "fragile", "confidence": 0.3}},
+            "next_best": {"can_do": "IP-04"},
+        }
+        diff = _sheet_diff(before, after)
+        self.assertTrue(any("estar_yo_estoy_vs_esta" in d for d in diff))
+        self.assertTrue(any("IP-04" in d for d in diff))
 
     def test_true_ability_learning(self):
         p = get_persona("alex_boat")

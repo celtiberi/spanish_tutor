@@ -18,8 +18,10 @@ from __future__ import annotations
 
 import argparse
 import copy
+import datetime
 import json
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -299,19 +301,245 @@ class SimTurn:
     learn_notes: list[str]
     parts: dict
     true_ability: dict
+    tool_delta: dict | None = None
+    sheet_diff: list[str] = field(default_factory=list)
+
+
+def _jsonable(obj: Any) -> Any:
+    if obj is None or isinstance(obj, (str, int, float, bool)):
+        return obj
+    if isinstance(obj, Path):
+        return str(obj)
+    if isinstance(obj, dict):
+        return {str(k): _jsonable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_jsonable(x) for x in obj]
+    return str(obj)
+
+
+def _sheet_diff(before: dict, after: dict) -> list[str]:
+    """Human-readable high-signal sheet changes."""
+    lines: list[str] = []
+
+    def conf_map(s: dict, key: str) -> dict[str, tuple]:
+        block = s.get(key) or {}
+        out = {}
+        if not isinstance(block, dict):
+            return out
+        for k, v in block.items():
+            if not isinstance(v, dict):
+                continue
+            out[k] = (v.get("status"), v.get("confidence"))
+        return out
+
+    for section in ("skills", "grammar", "lexicon"):
+        b, a = conf_map(before, section), conf_map(after, section)
+        for k in sorted(set(b) | set(a)):
+            if b.get(k) != a.get(k):
+                lines.append(f"{section}.{k}: {b.get(k)} → {a.get(k)}")
+
+    be = before.get("error_patterns") or {}
+    ae = after.get("error_patterns") or {}
+    if not isinstance(be, dict):
+        be = {}
+    if not isinstance(ae, dict):
+        ae = {}
+    b_ids = {k for k, v in be.items() if isinstance(v, dict) and k != "active"}
+    a_ids = {k for k, v in ae.items() if isinstance(v, dict) and k != "active"}
+    for pid in sorted(a_ids - b_ids):
+        ent = ae[pid]
+        lines.append(
+            f"error_patterns.+{pid}: count={ent.get('count')} "
+            f"examples={ent.get('last_examples')}"
+        )
+    for pid in sorted(a_ids & b_ids):
+        bc, ac = (be[pid] or {}).get("count"), (ae[pid] or {}).get("count")
+        if bc != ac:
+            lines.append(
+                f"error_patterns.{pid}: count {bc}→{ac} "
+                f"examples={(ae[pid] or {}).get('last_examples')}"
+            )
+        bex = (be[pid] or {}).get("last_examples")
+        aex = (ae[pid] or {}).get("last_examples")
+        if bex != aex and bc == ac:
+            lines.append(f"error_patterns.{pid}: examples→{aex}")
+
+    bnb = before.get("next_best") or {}
+    anb = after.get("next_best") or {}
+    for k in ("can_do", "activity", "stretch", "form_focus", "error_pattern", "reason"):
+        if bnb.get(k) != anb.get(k) and (bnb.get(k) or anb.get(k)):
+            lines.append(f"next_best.{k}: {bnb.get(k)!r} → {anb.get(k)!r}")
+
+    ba = before.get("affect") or {}
+    aa = after.get("affect") or {}
+    for k in ("energy", "mood", "time_budget"):
+        if ba.get(k) != aa.get(k) and (ba.get(k) or aa.get(k)):
+            lines.append(f"affect.{k}: {ba.get(k)!r} → {aa.get(k)!r}")
+
+    br = before.get("receptive") or {}
+    ar = after.get("receptive") or {}
+    if br.get("needs_english_scaffold") != ar.get("needs_english_scaffold"):
+        lines.append(
+            f"receptive.needs_english_scaffold: "
+            f"{br.get('needs_english_scaffold')} → {ar.get('needs_english_scaffold')}"
+        )
+
+    bi = before.get("identity") or {}
+    ai = after.get("identity") or {}
+    for k in ("name", "L1", "goals"):
+        if bi.get(k) != ai.get(k) and (bi.get(k) or ai.get(k)):
+            lines.append(f"identity.{k}: {bi.get(k)!r} → {ai.get(k)!r}")
+
+    return lines
+
+
+class SimLogger:
+    """Write conversation + sheet deltas to jsonl + markdown under logs/sessions/."""
+
+    def __init__(self, *, label: str, meta: dict | None = None):
+        config.LOG_DIR.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        self.session_id = f"{stamp}-ai-student-{label}"
+        self.jsonl_path = config.LOG_DIR / f"{self.session_id}.jsonl"
+        self.md_path = config.LOG_DIR / f"{self.session_id}.md"
+        self._md_lines: list[str] = []
+        start = {
+            "event": "session_start",
+            "ts": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "session_id": self.session_id,
+            **(meta or {}),
+        }
+        self._write_jsonl(start)
+        self._md_lines.append(f"# AI student simulation `{self.session_id}`\n")
+        self._md_lines.append("```json\n" + json.dumps(meta or {}, indent=2) + "\n```\n")
+        self._flush_md()
+
+    def _write_jsonl(self, obj: dict) -> None:
+        with self.jsonl_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(_jsonable(obj), ensure_ascii=False) + "\n")
+
+    def _flush_md(self) -> None:
+        self.md_path.write_text("\n".join(self._md_lines), encoding="utf-8")
+
+    def open_tutor(self, reply: str, notes: list[str]) -> None:
+        self._write_jsonl({
+            "event": "open",
+            "ts": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "tutor": reply,
+            "sheet_notes": notes,
+        })
+        self._md_lines.append("## Open\n")
+        self._md_lines.append(f"**Tutor:**\n\n{reply}\n")
+        if notes:
+            self._md_lines.append(f"*sheet notes:* `{'`; `'.join(notes)}`\n")
+        self._flush_md()
+
+    def turn(
+        self,
+        *,
+        n: int,
+        student: str,
+        tutor_reply: str,
+        sheet_notes: list[str],
+        sheet_diff: list[str],
+        tool_delta: dict | None,
+        learn_notes: list[str],
+        parts: dict,
+        next_best: dict,
+        true_ability: dict,
+    ) -> None:
+        self._write_jsonl({
+            "event": "turn",
+            "ts": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "n": n,
+            "student": student,
+            "tutor_reply": tutor_reply,
+            "sheet_notes": sheet_notes,
+            "sheet_diff": sheet_diff,
+            "tool_delta": tool_delta,
+            "learn_notes": learn_notes,
+            "parts": parts,
+            "next_best": next_best,
+            "true_ability": true_ability,
+        })
+        self._md_lines.append(f"## Turn {n}\n")
+        self._md_lines.append(f"**Student:**\n\n{student}\n")
+        self._md_lines.append(f"**Tutor:**\n\n{tutor_reply}\n")
+        if parts.get("recast"):
+            self._md_lines.append(f"**Recast:** {parts.get('recast')}\n")
+        if parts.get("explain"):
+            self._md_lines.append(f"**Explain:** {parts.get('explain')}\n")
+        if sheet_notes:
+            self._md_lines.append(
+                f"**Sheet notes:** `{'`; `'.join(sheet_notes)}`\n"
+            )
+        if sheet_diff:
+            self._md_lines.append("**Character sheet changes:**\n")
+            for line in sheet_diff:
+                self._md_lines.append(f"- `{line}`\n")
+        else:
+            self._md_lines.append("**Character sheet changes:** *(none)*\n")
+        if tool_delta:
+            self._md_lines.append(
+                "**Tool delta:**\n\n```json\n"
+                + json.dumps(tool_delta, ensure_ascii=False, indent=2)[:3000]
+                + "\n```\n"
+            )
+        if learn_notes:
+            self._md_lines.append(
+                f"**Student learning (ground truth):** `{'`; `'.join(learn_notes)}`\n"
+            )
+        nb = next_best or {}
+        self._md_lines.append(
+            f"**next_best:** `{nb.get('can_do')}` / `{nb.get('activity') or nb.get('stretch')}` "
+            f"— {nb.get('reason', '')[:200]}\n"
+        )
+        self._flush_md()
+
+    def close(self, report: dict) -> None:
+        self._write_jsonl({
+            "event": "session_end",
+            "ts": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "checks": report.get("checks"),
+            "true_ability_final": report.get("true_ability_final"),
+            "sheet_error_patterns": report.get("sheet_error_patterns"),
+            "sheet_next_best": report.get("sheet_next_best"),
+        })
+        self._md_lines.append("## End\n")
+        self._md_lines.append("### Checks\n")
+        for c in report.get("checks") or []:
+            mark = "PASS" if c.get("ok") else "FAIL"
+            self._md_lines.append(
+                f"- **{mark}** `{c.get('id')}`: {c.get('detail')}\n"
+            )
+        self._md_lines.append("### True ability final\n\n```json\n")
+        self._md_lines.append(
+            json.dumps(report.get("true_ability_final"), indent=2, ensure_ascii=False)
+        )
+        self._md_lines.append("\n```\n")
+        self._md_lines.append("### Sheet error_patterns\n\n```json\n")
+        self._md_lines.append(
+            json.dumps(
+                report.get("sheet_error_patterns"), indent=2, ensure_ascii=False
+            )[:4000]
+        )
+        self._md_lines.append("\n```\n")
+        self._flush_md()
 
 
 def run_simulation(
     *,
-    turns: int = DEFAULT_TURNS,
+    turns: int | None = DEFAULT_TURNS,
+    minutes: float | None = None,
     persona_id: str = "alex_boat",
     student_model: str | None = None,
     tutor_model: str | None = None,
     sheet_path: Path | None = None,
     reset_sheet: bool = True,
     focus_model: str | None = "off",
+    live_print: bool = True,
 ) -> dict[str, Any]:
-    """Run N student↔tutor exchanges. Returns report dict."""
+    """Run student↔tutor exchanges for N turns and/or wall-clock minutes."""
     config.load_env()
     persona = get_persona(persona_id)
     sheet_path = Path(sheet_path or DEFAULT_STUDENT_SHEET)
@@ -341,20 +569,80 @@ def run_simulation(
         persona, model=student_model or default_student_model()
     )
 
+    slog = SimLogger(
+        label=persona.get("id") or "student",
+        meta={
+            "persona": persona.get("id"),
+            "student_model": student.model,
+            "tutor_model": teacher.model,
+            "sheet": str(sheet_path),
+            "turns_cap": turns,
+            "minutes_cap": minutes,
+        },
+    )
+    p = palette() if live_print else None
+
+    def _live(msg: str, style: str = "meta") -> None:
+        if live_print:
+            print(paint(msg, style, p=p) if p else msg, flush=True)
+
     open_turn = teacher.open_session()
     if open_turn.error:
         raise RuntimeError(f"teacher open failed: {open_turn.error}")
 
+    slog.open_tutor(open_turn.reply, list(open_turn.notes or []))
+    _live(f"log: {slog.md_path}", "meta")
+    _live("── open ──", "tutor_label")
+    _live(f"tutor> {open_turn.reply}", "tutor_label")
+
     log: list[SimTurn] = []
     tutor_msg = open_turn.reply
     student.true.on_tutor_reply(tutor_msg, persona)
+    sheet_before = copy.deepcopy(load_sheet(sheet_path))
 
-    for i in range(1, turns + 1):
+    t0 = time.monotonic()
+    max_turns = turns if turns is not None else 10_000
+    i = 0
+    while i < max_turns:
+        if minutes is not None and (time.monotonic() - t0) >= minutes * 60:
+            _live(f"time limit {minutes}m reached after {i} turns", "meta")
+            break
+        i += 1
+        _live(f"── turn {i} ──", "tutor_label")
         student_text, _su = student.respond(tutor_msg)
+        _live(f"student> {student_text}", "ok")
         tr = teacher.user_turn(student_text, input_mode="text")
         if tr.error:
             raise RuntimeError(f"teacher turn {i} failed: {tr.error}")
+        _live(f"tutor> {tr.reply}", "tutor_label")
         ln = student.true.on_tutor_reply(tr.reply, persona)
+        sheet_after = copy.deepcopy(load_sheet(sheet_path))
+        diff = _sheet_diff(sheet_before, sheet_after)
+        if tr.notes:
+            _live(f"  [sheet notes: {'; '.join(tr.notes)}]", "sheet")
+        if diff:
+            _live("  [sheet changes]", "sheet")
+            for line in diff:
+                _live(f"    • {line}", "sheet")
+        else:
+            _live("  [sheet changes: none]", "meta")
+        if ln:
+            _live(f"  [learn: {'; '.join(ln)}]", "ok")
+        if (tr.parts or {}).get("recast"):
+            _live(f"  [recast] {(tr.parts or {}).get('recast')}", "ok")
+
+        slog.turn(
+            n=i,
+            student=student_text,
+            tutor_reply=tr.reply,
+            sheet_notes=list(tr.notes or []),
+            sheet_diff=diff,
+            tool_delta=tr.tool_delta,
+            learn_notes=ln,
+            parts=dict(tr.parts or {}),
+            next_best=dict(tr.next_best or {}),
+            true_ability=student.true.snapshot(),
+        )
         log.append(
             SimTurn(
                 n=i,
@@ -366,10 +654,14 @@ def run_simulation(
                 learn_notes=ln,
                 parts=dict(tr.parts or {}),
                 true_ability=student.true.snapshot(),
+                tool_delta=tr.tool_delta,
+                sheet_diff=diff,
             )
         )
+        sheet_before = sheet_after
         tutor_msg = tr.reply
 
+    elapsed = time.monotonic() - t0
     sheet = load_sheet(sheet_path)
     report = {
         "persona": persona.get("id"),
@@ -377,7 +669,11 @@ def run_simulation(
         "student_model": student.model,
         "tutor_model": teacher.model,
         "sheet_path": str(sheet_path),
-        "turns": turns,
+        "turns": len(log),
+        "elapsed_sec": round(elapsed, 1),
+        "log_md": str(slog.md_path),
+        "log_jsonl": str(slog.jsonl_path),
+        "session_id": slog.session_id,
         "true_ability_final": student.true.snapshot(),
         "sheet_error_patterns": (sheet.get("error_patterns") or {}),
         "sheet_next_best": sheet.get("next_best") or {},
@@ -395,6 +691,8 @@ def run_simulation(
                 "tutor_seen": t.tutor_prompt,
                 "tutor_reply": t.tutor_reply,
                 "sheet_notes": t.sheet_notes,
+                "sheet_diff": t.sheet_diff,
+                "tool_delta": t.tool_delta,
                 "learn_notes": t.learn_notes,
                 "next_best_can_do": (t.next_best or {}).get("can_do"),
                 "has_recast": bool((t.parts or {}).get("recast")),
@@ -404,6 +702,7 @@ def run_simulation(
         ],
         "checks": _verification_checks(sheet, student.true, log),
     }
+    slog.close(report)
     return report
 
 
@@ -477,6 +776,15 @@ def print_report(report: dict, *, verbose: bool = True) -> None:
         "meta",
         p=p,
     ))
+    if report.get("log_md"):
+        print(paint(f"  transcript={report.get('log_md')}", "meta", p=p))
+        print(paint(f"  jsonl={report.get('log_jsonl')}", "meta", p=p))
+    if report.get("elapsed_sec") is not None:
+        print(paint(
+            f"  turns={report.get('turns')}  elapsed={report.get('elapsed_sec')}s",
+            "meta",
+            p=p,
+        ))
     print()
     if verbose:
         for t in report.get("log") or []:
@@ -487,6 +795,8 @@ def print_report(report: dict, *, verbose: bool = True) -> None:
             notes = t.get("sheet_notes") or []
             if notes:
                 print(paint(f"  [sheet: {'; '.join(notes)}]", "sheet", p=p))
+            for line in t.get("sheet_diff") or []:
+                print(paint(f"  [Δ {line}]", "sheet", p=p))
             if t.get("learn_notes"):
                 print(paint(
                     f"  [learn: {'; '.join(t['learn_notes'])}]", "ok", p=p
@@ -520,7 +830,18 @@ def main(argv: list[str] | None = None) -> None:
         choices=sorted(PERSONAS.keys()),
         help="Student persona preset",
     )
-    ap.add_argument("--turns", type=int, default=DEFAULT_TURNS)
+    ap.add_argument(
+        "--turns",
+        type=int,
+        default=None,
+        help=f"Max exchanges (default {DEFAULT_TURNS} if --minutes not set)",
+    )
+    ap.add_argument(
+        "--minutes",
+        type=float,
+        default=None,
+        help="Run until this many wall-clock minutes (optional with --turns)",
+    )
     ap.add_argument(
         "--student-model",
         default=None,
@@ -563,16 +884,25 @@ def main(argv: list[str] | None = None) -> None:
     args = ap.parse_args(argv)
 
     reset = not args.keep_sheet
+    turns = args.turns
+    minutes = args.minutes
+    if turns is None and minutes is None:
+        turns = DEFAULT_TURNS
+    if turns is not None:
+        turns = max(1, turns)
     report = run_simulation(
-        turns=max(1, args.turns),
+        turns=turns,
+        minutes=minutes,
         persona_id=args.persona,
         student_model=args.student_model,
         tutor_model=args.tutor_model,
         sheet_path=args.sheet,
         reset_sheet=reset,
         focus_model=args.focus_model,
+        live_print=not args.quiet,
     )
-    print_report(report, verbose=not args.quiet)
+    # live_print already streamed turns; print summary checks always
+    print_report(report, verbose=False)
     if args.json_out:
         args.json_out.parent.mkdir(parents=True, exist_ok=True)
         args.json_out.write_text(
