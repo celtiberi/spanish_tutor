@@ -187,6 +187,12 @@ class TrueAbility:
 # Student agent
 # ---------------------------------------------------------------------------
 
+_LEAVE_RE = re.compile(
+    r"\b(adi[oó]s|hasta\s+luego|hasta\s+mañana|bye|goodbye|gracias)\b",
+    re.I,
+)
+
+
 class AIStudentAgent:
     """Grok-backed learner that emits one student utterance per tutor turn."""
 
@@ -203,8 +209,23 @@ class AIStudentAgent:
         self.client = config.make_client_for(self.model)
         self.true = TrueAbility.from_persona(persona)
         self.history: list[dict] = []  # student-visible: user=tutor, assistant=self
+        self._leave_streak = 0
 
-    def _system_text(self) -> str:
+    def _leave_looping(self) -> bool:
+        """True if last few student lines were only leave-taking."""
+        recent = [
+            m["content"]
+            for m in self.history
+            if m.get("role") == "assistant"
+        ][-3:]
+        if len(recent) < 2:
+            return False
+        return all(
+            _LEAVE_RE.search(t or "") and len((t or "").split()) <= 6
+            for t in recent
+        )
+
+    def _system_text(self, *, tutor_message: str = "") -> str:
         base = STUDENT_PROMPT.read_text() if STUDENT_PROMPT.exists() else (
             "You are a Spanish learner. Reply only as the student."
         )
@@ -215,11 +236,15 @@ class AIStudentAgent:
             strength = self.true.error_strength.get(
                 eid, float(e.get("strength") or 0.5)
             )
+            prefer = (
+                "PREFER GOOD forms now (strength low)"
+                if strength < 0.4
+                else "usually make the MISTAKE"
+            )
             err_lines.append(
-                f"- {eid} (strength={strength:.2f}): {e.get('label')}\n"
-                f"  prefer mistakes like: {e.get('bad_examples')}\n"
-                f"  only use good forms like {e.get('good_examples')} "
-                f"if strength is low or tutor just modeled them"
+                f"- {eid} (strength={strength:.2f} — {prefer}): {e.get('label')}\n"
+                f"  mistakes: {e.get('bad_examples')}\n"
+                f"  good forms: {e.get('good_examples')}"
             )
         profile = {
             "name": p.get("name"),
@@ -231,6 +256,23 @@ class AIStudentAgent:
             "learning_rate": p.get("learning_rate"),
             "error_strength_now": self.true.error_strength,
         }
+        extra = ""
+        if self._leave_looping():
+            extra += (
+                "\n## Harness override — STOP THE GOODBYE LOOP\n"
+                "You already said goodbye. Do **not** say adiós/gracias only. "
+                "Answer with a real chat line about the boat, weather, coffee, "
+                "or how you feel — or ask a simple question.\n"
+            )
+        # If tutor models estoy and strength is moderate, nudge attempt
+        if re.search(r"\bestoy\b", tutor_message or "", re.I):
+            st = self.true.error_strength.get("estar_yo_estoy_vs_esta", 1.0)
+            if st < 0.55:
+                extra += (
+                    "\n## Harness nudge\n"
+                    "Tutor just modeled **estoy**. Try using *estoy* (not *está*) "
+                    "for yourself this turn if you talk about where you are / how you are.\n"
+                )
         return (
             base
             + "\n\n## Your profile (ground truth)\n"
@@ -238,6 +280,7 @@ class AIStudentAgent:
             + "\n\n## Error tendencies (follow these)\n"
             + ("\n".join(err_lines) if err_lines else "(none)")
             + f"\n\n## Name\nYou are **{p.get('name') or 'the student'}**.\n"
+            + extra
         )
 
     def respond(self, tutor_message: str) -> tuple[str, dict]:
@@ -249,7 +292,10 @@ class AIStudentAgent:
         # history: from student POV, tutor is "user"
         self.history.append({"role": "user", "content": tutor_message})
 
-        system = [{"type": "text", "text": self._system_text()}]
+        system = [{
+            "type": "text",
+            "text": self._system_text(tutor_message=tutor_message),
+        }]
         # Keep last few exchanges only (cheap + focused)
         msgs = self.history[-12:]
 
@@ -273,7 +319,18 @@ class AIStudentAgent:
         if not raw:
             raw = "um… hola?"
 
+        # Soft break if model still only goodbyes while looping
+        if self._leave_looping() and _LEAVE_RE.search(raw) and len(raw.split()) <= 6:
+            interests = self.persona.get("interests") or ["the boat"]
+            topic = interests[self.true.turns % len(interests)]
+            raw = f"Um… wait — about {topic}, it is nice today."
+
         self.history.append({"role": "assistant", "content": raw})
+        if _LEAVE_RE.search(raw) and len(raw.split()) <= 6:
+            self._leave_streak += 1
+        else:
+            self._leave_streak = 0
+
         usage = {
             "input_tokens": getattr(
                 getattr(final, "usage", None), "input_tokens", 0

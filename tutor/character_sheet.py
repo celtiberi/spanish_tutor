@@ -136,6 +136,48 @@ ERROR_PATTERN_CATALOG: dict[str, dict] = {
 
 ERROR_PATTERN_PRIORITY_THRESHOLD = 2  # count at/above → force teaching focus
 
+# Tool / free-form ids that should collapse into the catalog
+ERROR_PATTERN_ALIASES: dict[str, str] = {
+    "estar_yo_esta": "estar_yo_estoy_vs_esta",
+    "estar_person_yo_esta": "estar_yo_estoy_vs_esta",
+    "yo_esta": "estar_yo_estoy_vs_esta",
+    "yo_está": "estar_yo_estoy_vs_esta",
+    "estoy_vs_esta": "estar_yo_estoy_vs_esta",
+    "present_estar_person_error": "estar_yo_estoy_vs_esta",
+    "me_llamo_es_x": "me_llamo_es",
+    "me_llama_es": "me_llamo_es",
+}
+
+
+def normalize_error_pattern_id(pattern_id: str) -> str:
+    """Map free-form / alias ids onto ERROR_PATTERN_CATALOG keys."""
+    pid = (pattern_id or "").strip()
+    if not pid:
+        return pid
+    if pid in ERROR_PATTERN_CATALOG:
+        return pid
+    key = pid.lower().replace(" ", "_").replace("-", "_")
+    key = key.replace("á", "a").replace("é", "e").replace("í", "i")
+    key = key.replace("ó", "o").replace("ú", "u").replace("ñ", "n")
+    if key in ERROR_PATTERN_CATALOG:
+        return key
+    if key in ERROR_PATTERN_ALIASES:
+        return ERROR_PATTERN_ALIASES[key]
+    # fuzzy: contains catalog id
+    for canon in ERROR_PATTERN_CATALOG:
+        if canon in key or key in canon:
+            return canon
+    # Tool invents names like estar_person_yo_esta
+    if "yo" in key and "esta" in key and (
+        "estar" in key or "person" in key or key.startswith("yo_")
+    ):
+        return "estar_yo_estoy_vs_esta"
+    if "llamo" in key or "llama_es" in key:
+        return "me_llamo_es"
+    if "tango" in key or ("tengo" in key and "error" in key):
+        return "tengo_not_tango"
+    return pid
+
 
 # Session-only energy labels — must NOT haunt the next day/session.
 _SESSION_ENERGY_MARKERS = (
@@ -557,7 +599,26 @@ def note_error_pattern(
 ) -> dict:
     """Increment or ease a recurring error pattern on the sheet."""
     s = sheet  # mutate in place when already a copy
+    pattern_id = normalize_error_pattern_id(pattern_id)
     eps = s.setdefault("error_patterns", {})
+    # Merge any pre-normalization alias entry into the canonical id
+    for alias, canon in ERROR_PATTERN_ALIASES.items():
+        if canon == pattern_id and alias in eps and alias != pattern_id:
+            old = eps.pop(alias) or {}
+            if isinstance(old, dict):
+                base = eps.get(pattern_id) or {}
+                if not base:
+                    eps[pattern_id] = old
+                else:
+                    base["count"] = int(base.get("count") or 0) + int(
+                        old.get("count") or 0
+                    )
+                    ex = list(base.get("last_examples") or [])
+                    for e in old.get("last_examples") or []:
+                        if e not in ex:
+                            ex.append(e)
+                    base["last_examples"] = ex[-5:]
+                    eps[pattern_id] = base
     cat = ERROR_PATTERN_CATALOG.get(pattern_id) or {}
     ent = dict(eps.get(pattern_id) or {
         "count": 0,
@@ -909,20 +970,43 @@ def apply_delta(sheet: dict, delta: dict) -> dict:
             if isinstance(topic, str):
                 _touch_coverage(s, topic)
 
-    # Merge tool-proposed error_patterns (count additive, examples appended)
+    # Tool error_patterns: normalize ids; store examples only (no multi-count).
+    # Counts come from harness apply_error_pattern_updates on learner text —
+    # otherwise one tool call with 4 examples inflated count by +4.
     if "error_patterns" in delta and isinstance(delta["error_patterns"], dict):
         eps = s.setdefault("error_patterns", {})
         for pid, v in delta["error_patterns"].items():
-            if pid not in ERROR_PATTERN_CATALOG and not isinstance(v, dict):
-                continue
             if not isinstance(v, dict):
                 continue
-            # Prefer harness detection; tool can add examples
-            for ex in v.get("last_examples") or []:
-                if isinstance(ex, str) and ex.strip():
-                    note_error_pattern(s, pid, ex.strip(), resolved=False)
+            pid = normalize_error_pattern_id(pid)
+            if pid not in ERROR_PATTERN_CATALOG and not v.get("last_examples"):
+                continue
             if v.get("resolved") or v.get("resolved_streak"):
                 note_error_pattern(s, pid, "tool:resolved", resolved=True)
+                continue
+            cat = ERROR_PATTERN_CATALOG.get(pid) or {}
+            ent = dict(eps.get(pid) or {
+                "count": 0,
+                "priority": "low",
+                "last_examples": [],
+                "label": cat.get("label") or pid,
+                "form_id": cat.get("form_id"),
+                "can_dos": list(cat.get("can_dos") or []),
+                "teach_hint": cat.get("teach_hint") or "",
+                "last_seen": None,
+                "resolved_streak": 0,
+            })
+            ex = list(ent.get("last_examples") or [])
+            for item in v.get("last_examples") or []:
+                if isinstance(item, str) and item.strip() and item not in ex:
+                    ex.append(item.strip()[:100])
+            ent["last_examples"] = ex[-5:]
+            if cat:
+                ent["label"] = cat.get("label") or ent.get("label")
+                ent["form_id"] = cat.get("form_id")
+                ent["can_dos"] = list(cat.get("can_dos") or [])
+                ent["teach_hint"] = cat.get("teach_hint") or ""
+            eps[pid] = ent
 
     _auto_coverage_from_evidence(
         s, skill_ids=touched_skills, grammar_ids=touched_grammar,

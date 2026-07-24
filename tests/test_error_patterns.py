@@ -4,8 +4,10 @@ import unittest
 
 from tutor.character_sheet import (
     active_error_patterns,
+    apply_delta,
     apply_error_pattern_updates,
     default_sheet,
+    normalize_error_pattern_id,
     process_turn,
     recompute_next_best,
 )
@@ -53,6 +55,34 @@ class TestErrorPatterns(unittest.TestCase):
         )
         self.assertTrue(any(n.startswith("err×") for n in notes))
         self.assertIn("estar_yo_estoy_vs_esta", s["error_patterns"])
+
+    def test_normalize_alias(self):
+        self.assertEqual(
+            normalize_error_pattern_id("estar_yo_esta"),
+            "estar_yo_estoy_vs_esta",
+        )
+
+    def test_tool_examples_do_not_multi_count(self):
+        """Tool listing many examples must not +N count; harness counts once."""
+        s = default_sheet()
+        s = apply_delta(s, {
+            "error_patterns": {
+                "estar_yo_esta": {  # alias
+                    "last_examples": [
+                        "Yo está bien",
+                        "Yo está en el bote",
+                        "Yo está en Río Dulce",
+                    ],
+                }
+            }
+        })
+        # examples stored under canonical id, count still 0 until harness
+        ep = s["error_patterns"].get("estar_yo_estoy_vs_esta") or {}
+        self.assertIn("Yo está bien", ep.get("last_examples") or [])
+        self.assertEqual(int(ep.get("count") or 0), 0)
+        self.assertNotIn("estar_yo_esta", s["error_patterns"])
+        s = apply_error_pattern_updates(s, "Yo está en mi bote.")
+        self.assertEqual(s["error_patterns"]["estar_yo_estoy_vs_esta"]["count"], 1)
 
 
 if __name__ == "__main__":
