@@ -19,6 +19,8 @@ def default_state() -> dict:
     return {
         "current_unit": None,
         "goal": None,
+        "lesson_goal": None,
+        "lesson_phase": "input",  # harness-owned arc: review|input|comprehension|...
         "observed_misconceptions": [],
         "mastered": [],
         "struggling": [],
@@ -78,7 +80,9 @@ def extract_state(reply: str, previous: dict) -> tuple[str, dict, bool]:
 
 
 def state_message(state: dict, parse_failed: bool = False,
-                  session_open: bool = False) -> dict:
+                  session_open: bool = False, caps=None) -> dict:
+    """`caps` (from config.caps_for) overrides the module-level capability
+    globals — needed when two models run in one turn (EXP-002)."""
     today = datetime.date.today().isoformat()
     tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
     lines = [
@@ -113,7 +117,8 @@ def state_message(state: dict, parse_failed: bool = False,
         "which you must elicit."
     )
     content = "\n".join(lines)
-    if config.SUPPORTS_MID_SYSTEM:
+    mid_system = caps.mid_system if caps is not None else config.SUPPORTS_MID_SYSTEM
+    if mid_system:
         return {"role": "system", "content": content}
     # Fallback for models without mid-conversation system messages: a
     # clearly-framed harness message in a user turn (not learner text).

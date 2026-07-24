@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Spanish tutor</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <div class="brand">
+        <span class="logo">ES</span>
+        <div>
+          <h1>Spanish tutor</h1>
+          <p class="sub" id="statusLine">Starting…</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <label class="toggle" title="Read tutor replies aloud (browser TTS)">
+          <input type="checkbox" id="speakToggle" checked />
+          <span>Speak replies</span>
+        </label>
+        <button type="button" class="btn ghost" id="sheetToggle" title="Full character sheet">Full sheet</button>
+        <button type="button" class="btn ghost" id="newChat" title="New chat (keep sheet)">New chat</button>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="chat-panel">
+        <div id="messages" class="messages" aria-live="polite"></div>
+        <div id="notes" class="notes hidden"></div>
+        <form id="composer" class="composer">
+          <button type="button" class="btn icon" id="micBtn" title="Click to record, click again to send" aria-label="Microphone" aria-pressed="false">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </button>
+          <textarea
+            id="input"
+            rows="1"
+            placeholder="Type… or click mic, talk, click again"
+            autocomplete="off"
+          ></textarea>
+          <button type="submit" class="btn primary" id="sendBtn">Send</button>
+        </form>
+        <p class="hint mic-status" id="speechHint" data-state="idle" role="status" aria-live="polite">Mic: click → talk → click again. Box stays empty until your words arrive.</p>
+      </section>
+
+      <aside class="rail" id="rail">
+        <article class="card focus-card" id="focusCard">
+          <header class="card-head">
+            <h2>Focus now</h2>
+            <span class="pill" id="focusPill">—</span>
+          </header>
+          <p class="focus-title" id="focusTitle">Loading…</p>
+          <dl class="focus-meta" id="focusMeta"></dl>
+        </article>
+
+        <article class="card morph-card" id="morphCard">
+          <header class="card-head">
+            <h2>Morphology</h2>
+            <span class="pill soft" id="morphPill">forms in play</span>
+          </header>
+          <div id="morphBody" class="morph-body">
+            <p class="muted">Forms for the current stretch will show here.</p>
+          </div>
+        </article>
+
+        <article class="card sheet-card" id="sheetPanel" hidden>
+          <div class="sheet-head">
+            <h2>Character sheet</h2>
+            <button type="button" class="btn ghost danger" id="resetSheet">Reset learner</button>
+          </div>
+          <div id="nextBest" class="next-best"></div>
+          <pre id="sheetBody" class="sheet-body"></pre>
+        </article>
+      </aside>
+    </main>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

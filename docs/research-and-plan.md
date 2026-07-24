@@ -2,7 +2,9 @@
 
 **Status:** Research + plan, post-review (v0.2)  
 **Date:** 2026-07-22  
-**Project:** `ml_teacher`
+**Project:** `ml_teacher`  
+
+**2026-07-23 update:** Plan/realize controller path is **tabled**. Active direction: conversational Spanish + learner character sheet — see `docs/conversational-spanish-and-learner-model.md`.
 
 ---
 

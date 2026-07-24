@@ -1,28 +1,56 @@
 # ml_teacher — pedagogy-first tutoring model
 
-Research project: train/align a model that is an expert in **teaching**, with subject matter supplied by pluggable course packs. Full plan: `docs/research-and-plan.md` (review trail: `docs/review-research-and-plan.md`).
+Research project: train/align a model that is an expert in **teaching**, with subject matter supplied by pluggable course packs. Full plan: `docs/research-and-plan.md`.
 
-## Phase 2 vertical slice
-
-A terminal tutor that teaches Spanish A1 from a structured course pack, grounded by a checked-in teaching policy.
+**Current product path:** conversational Spanish + living **character sheet** (can-dos, scaffold, next_best). Plan/realize controller is tabled.
 
 ```
-prompts/teaching_policy.md     # the teaching brain: moves, reveal policy, state spec
-course_packs/spanish_a1/       # structured corpus: units, misconception IDs, keyed practice
-tutor/                         # CLI app: policy + pack -> claude-opus-4-8, cached prefix
+prompts/conversational_tutor.md   # teaching stance (CLT/TBLT/CI)
+course_packs/spanish_a1/          # legal language palette
+tutor/conv_session.py             # shared session engine
+tutor/conversational.py           # terminal UI
+tutor/web_app.py                  # browser UI (+ browser speech)
 ```
 
-### Run it
+## Conversational Spanish (primary)
 
-Requires `ANTHROPIC_API_KEY` in the environment (or an `ant auth login` profile).
+### CLI
 
 ```sh
 pip install -e .
+# set GEMINI_API_KEY and/or GROK_API_KEY / ANTHROPIC_API_KEY; TUTOR_MODEL=gemini-3.6-flash
+python -m tutor.conversational
+```
+
+### Web (chat + mic + spoken replies)
+
+```sh
+pip install -e ".[web]"
+python -m tutor.web_app
+# open http://127.0.0.1:8765
+```
+
+- **Type** or use the **mic** (browser speech recognition → same chat API).
+- **Speak replies** uses **Gemini neural TTS** (`/api/audio/speak`); browser TTS is fallback.
+- Right rail: **Focus now** + **Morphology** (static pack + optional cheap `FOCUS_MODEL`).
+- Character sheet panel = same model as CLI `/sheet`.
+- Server-side STT/TTS is the next audio step — see `docs/web-and-audio.md`.
+
+```sh
+# optional: cheap Grok for side-rail personalization (default)
+export FOCUS_MODEL=grok-3-mini   # or off / static
+export GROK_API_KEY=...          # needed if FOCUS_MODEL is a grok-* id
+export TUTOR_MODEL=gemini-3.6-flash
+```
+
+Session logs: `logs/sessions/*.jsonl`. Sheet: `logs/character_sheet.json`.
+
+## Legacy single-model pack tutor
+
+```sh
 tutor                # or: python -m tutor.cli
 tutor --pack course_packs/<other_pack>
 ```
-
-Session logs land in `logs/sessions/*.jsonl` (turns, state snapshots, token usage) for later dataset mining.
 
 ### Design notes
 

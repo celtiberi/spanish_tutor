@@ -1,12 +1,30 @@
 [project]
 name = "ml-teacher"
-version = "0.1.0"
-description = "Pedagogy-first AI tutor: teaching-policy prompt + course-pack grounding (Phase 2 vertical slice)"
+version = "0.2.0"
+description = "Pedagogy-first AI tutor: conversational Spanish + character sheet (CLI + web)"
 requires-python = ">=3.10"
-dependencies = ["anthropic>=0.92"]
+dependencies = [
+    "anthropic>=0.92",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+web = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "python-multipart>=0.0.9",
+    "websockets>=12",
+    "google-genai>=1.0",
+]
+# Dedicated Cloud Speech-to-Text (Chirp). Install: pip install -e ".[asr]"
+asr = [
+    "google-cloud-speech>=2.27",
+]
 
 [project.scripts]
 tutor = "tutor.cli:main"
+tutor-web = "tutor.web_app:main"
+tutor-chat = "tutor.conversational:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -14,3 +32,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["tutor"]
+
+# Ship the web UI assets with the package
+[tool.hatch.build.targets.wheel.force-include]
+"tutor/web_static" = "tutor/web_static"
