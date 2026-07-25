@@ -51,8 +51,9 @@ class ChatIn(BaseModel):
 
 
 class StartIn(BaseModel):
-    """fresh=true: ignore cookie session and open a new chat (page restart)."""
-    fresh: bool = False
+    """Page load always wants a clean chat unless resume=true (rare)."""
+    fresh: bool = True
+    resume: bool = False
 
 
 class ResetIn(BaseModel):
@@ -279,15 +280,18 @@ def create_app() -> FastAPI:
         body: StartIn | None = None,
     ):
         body = body or StartIn()
+        # Default: every page load is a clean chat (Ctrl/Cmd+Shift+R expectation).
+        # Only resume when client explicitly sends resume=true.
+        want_fresh = body.fresh or not body.resume
         sid = request.cookies.get(COOKIE)
 
-        # Explicit fresh start: drop cookie session (same as New chat, keep sheet)
-        if body.fresh:
+        if want_fresh:
             if sid and sid in _sessions:
                 with _lock:
                     old = _sessions.pop(sid, None)
                 if old and old.get("session"):
                     try:
+                        # Keep character sheet; only drop chat memory
                         old["session"].close(persist_sheet=True)
                     except Exception:
                         pass
@@ -307,42 +311,23 @@ def create_app() -> FastAPI:
         except Exception:
             pass
 
+        # Always open a new tutor turn on fresh page load
+        session.history = []
+        session.messages_for_ui = []
+        session._focus_panel = None
+        session._focus_key = None
+        turn = session.open_session()
+        if turn.error:
+            raise HTTPException(status_code=502, detail=turn.error)
         with _lock:
-            meta = _sessions[sid]
-            already = meta.get("opened")
-
-        if already and session.messages_for_ui and not body.fresh:
-            # Resume existing browser session (same cookie, F5)
-            result = {
-                "reply": session.messages_for_ui[-1]["content"]
-                if session.messages_for_ui else "",
-                "notes": ["resumed_session"],
-                "next_best": session.sheet.get("next_best"),
-                "skills": {
-                    k: {"status": v.get("status"), "confidence": v.get("confidence")}
-                    for k, v in (session.sheet.get("skills") or {}).items()
-                },
-                "messages": session.messages_for_ui,
-                "sheet": session.sheet_public(),
-                "resumed": True,
-            }
-        else:
-            # New open (or fresh=true wiped the old chat)
-            session.history = []
-            session.messages_for_ui = []
-            session._focus_panel = None
-            session._focus_key = None
-            turn = session.open_session()
-            if turn.error:
-                raise HTTPException(status_code=502, detail=turn.error)
-            with _lock:
-                _sessions[sid]["opened"] = True
-            result = {
-                **turn.to_dict(),
-                "messages": session.messages_for_ui,
-                "sheet": session.sheet_public(),
-                "resumed": False,
-            }
+            _sessions[sid]["opened"] = True
+        result = {
+            **turn.to_dict(),
+            "messages": session.messages_for_ui,
+            "sheet": session.sheet_public(),
+            "resumed": False,
+            "fresh": True,
+        }
         response.set_cookie(
             COOKIE, sid, httponly=True, samesite="lax", max_age=SESSION_TTL_SEC,
         )
