@@ -366,6 +366,35 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
   font-weight: 500;
 }
 .part-try .part-label { color: var(--warn); }
+.part-image {
+  background: #1a222c;
+  border: 1px solid #3a4a5c;
+  padding: 0.55rem 0.65rem 0.7rem;
+}
+.part-image .part-label { color: #9ec5ff; }
+.teach-figure {
+  margin: 0.35rem 0 0;
+  padding: 0;
+}
+.teach-img {
+  display: block;
+  width: 100%;
+  max-width: 280px;
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #0f1419;
+}
+.teach-cap {
+  margin: 0.4rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+.teach-cap strong {
+  color: var(--tutor);
+  font-weight: 650;
+}
 .part-continue {
   background: #1a2430;
   border: 1px solid #2d4660;

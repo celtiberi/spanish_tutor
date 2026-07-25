@@ -528,6 +528,13 @@ class ConversationalSession:
             gate_notes = ["plan_gate_ok"]
 
         self.last_plan = card.as_dict()
+        from .teach_assets import assets_for_plan
+
+        teach_images = assets_for_plan(card)
+        if teach_images and not card.image_concept:
+            card.image_concept = teach_images[0].get("concept")
+            self.last_plan = card.as_dict()
+
         system = build_executor_system(
             sheet_summary=format_sheet_for_prompt(self.sheet),
             pack_palette=load_pack(self.pack_dir)[:8000],
@@ -583,7 +590,12 @@ class ConversationalSession:
                 **result.parts,
                 "plan": card.as_dict(),
                 "open_phase": phase if is_open else result.parts.get("open_phase"),
+                "teach_images": teach_images,
             }
+            if teach_images:
+                result.notes = list(result.notes or []) + [
+                    f"teach_image:{teach_images[0].get('concept')}"
+                ]
         return result
 
     def open_session(self) -> TurnResult:

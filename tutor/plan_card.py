@@ -204,6 +204,7 @@ def fallback_diagnostic_card() -> PlanCard:
             can_do="IP-01",
             concepts=["hola", "estoy_bien"],
         ),
+        image_concept="hola",
         scaffold="en_rescue",
         allow_new_topic=False,
         max_sentences=5,

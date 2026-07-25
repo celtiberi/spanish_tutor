@@ -74,6 +74,8 @@ def plan_turn(
                 can_do="IP-01",
                 concepts=["hola", "estoy_bien"],
             ),
+            # Primary visual: wave hello → associates Hola without English dump
+            image_concept="hola",
             scaffold="en_rescue" if blank else scaffold,
             allow_new_topic=False,
             max_sentences=5,
@@ -199,6 +201,7 @@ def _diagnostic_followup(
                 can_do="IP-04",
                 concepts=["estoy_bien"],
             ),
+            image_concept="estoy_bien",
             scaffold="en_rescue",
             reason="diagnostic_after_hola",
             sheet_update_hints=["observe_estoy"],

@@ -10,6 +10,7 @@ from tutor.plan_card import (
     gate_plan_card,
 )
 from tutor.rules_planner import plan_turn
+from tutor.teach_assets import assets_for_plan, resolve_concept
 
 
 class TestPlanCard(unittest.TestCase):
@@ -67,6 +68,17 @@ class TestRulesPlanner(unittest.TestCase):
         card = plan_turn(sheet, learner="Hola", is_open=False)
         self.assertEqual(card.phase, "diagnostic")
         self.assertTrue(any("Estoy" in m for m in card.models))
+
+    def test_diagnostic_has_hola_image(self):
+        sheet = default_sheet()
+        card = plan_turn(sheet, learner="", is_open=True)
+        self.assertEqual(card.image_concept, "hola")
+        assets = assets_for_plan(card)
+        self.assertTrue(assets, "hola teach asset should resolve")
+        self.assertEqual(assets[0]["concept"], "hola")
+        self.assertIn("/static/teach_assets/", assets[0]["url"])
+        self.assertIsNotNone(resolve_concept("hola"))
+        self.assertIsNotNone(resolve_concept("estoy_bien"))
 
 
 if __name__ == "__main__":

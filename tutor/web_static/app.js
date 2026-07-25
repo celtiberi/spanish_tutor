@@ -47,14 +47,47 @@ function esc(s) {
     .replace(/"/g, "&quot;");
 }
 
+function renderTeachImages(parts) {
+  const imgs = parts?.teach_images;
+  if (!imgs || !imgs.length) return "";
+  return imgs
+    .map((img) => {
+      const form = esc(img.form || img.concept || "");
+      const cap = esc(img.caption || "");
+      const url = esc(img.url || "");
+      if (!url) return "";
+      return (
+        `<div class="part part-image">` +
+        `<span class="part-label">See · ${form}</span>` +
+        `<figure class="teach-figure">` +
+        `<img class="teach-img" src="${url}" alt="${form}" loading="lazy" />` +
+        (cap ? `<figcaption class="teach-cap"><strong>${form}</strong> — ${cap}</figcaption>` : `<figcaption class="teach-cap"><strong>${form}</strong></figcaption>`) +
+        `</figure></div>`
+      );
+    })
+    .join("");
+}
+
 function renderTutorParts(parts, fallbackContent) {
   if (!parts || !parts.structured) {
-    return esc(fallbackContent || "");
+    // Still show teach images if present on unstructured reply
+    const img = renderTeachImages(parts);
+    return img + esc(fallbackContent || "");
   }
   const blocks = [];
+  // Teach image first: associate form with meaning before/with the models
+  const imgBlock = renderTeachImages(parts);
+  if (imgBlock) blocks.push(imgBlock);
+
   if (parts.acknowledge) {
+    const plan = parts.plan || {};
+    const isOpenFrame =
+      plan.phase === "diagnostic" ||
+      plan.move === "english_frame" ||
+      (parts.open_phase === "diagnostic");
+    const ackLabel = isOpenFrame ? "Welcome" : "Got it";
     blocks.push(
-      `<div class="part part-ack"><span class="part-label">Got it</span>${esc(
+      `<div class="part part-ack"><span class="part-label">${ackLabel}</span>${esc(
         parts.acknowledge
       )}</div>`
     );
