@@ -20,12 +20,15 @@ root cause was structural:
 **Rule:** Pedagogy is a **system**. Experiments expand it on purpose. A tone
 tweak must not delete teaching.
 
-## Contract v1 (invariants)
+## Contract v1.1 (invariants)
 
 1. Every turn has a **teach move**: non-empty `model` and/or `try` and/or `recast`.
 2. **Open** requires `model` **and** `try` (not a bare greeting).
 3. **Recast** should pair with **try** (same-form retry).
 4. `continue` alone = **violation**.
+5. **Blank sheet** (no ability evidence) → **diagnostic open**, not intermediate
+   pure-Spanish chat. English frame + two tiny models + one try. Code chooses
+   `OPEN_HARNESS_DIAGNOSTIC` via `is_blank_learner(sheet)`.
 
 Enforcement today: non-blocking for the learner (reply still shown) but
 **always** attached to turn notes / `parts.pedagogy` / session logs:

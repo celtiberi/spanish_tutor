@@ -3,6 +3,7 @@
 import unittest
 from pathlib import Path
 
+from tutor.character_sheet import default_sheet
 from tutor.pedagogy_contract import (
     CONTRACT_VERSION,
     TEACH_MODALITIES,
@@ -12,6 +13,8 @@ from tutor.pedagogy_contract import (
     check_tutor_parts,
     evaluate_turn,
     has_teach_move,
+    is_blank_learner,
+    open_phase,
 )
 from tutor.tutor_response import parse_tutor_response
 
@@ -19,6 +22,23 @@ from tutor.tutor_response import parse_tutor_response
 class TestPedagogyContract(unittest.TestCase):
     def test_version_pinned(self):
         self.assertTrue(CONTRACT_VERSION)
+
+    def test_blank_sheet_is_diagnostic(self):
+        s = default_sheet()
+        self.assertTrue(is_blank_learner(s))
+        self.assertEqual(open_phase(s), "diagnostic")
+
+    def test_known_sheet_not_blank(self):
+        s = default_sheet()
+        s["identity"]["preferred_name"] = "Alex"
+        s["skills"]["IP-01"] = {
+            **s["skills"]["IP-01"],
+            "status": "known",
+            "confidence": 0.8,
+            "evidence": ["hola"],
+        }
+        self.assertFalse(is_blank_learner(s))
+        self.assertEqual(open_phase(s), "known")
 
     def test_visual_image_is_registered_modality(self):
         """Images are pedagogy (planned), not an afterthought feature."""
@@ -95,6 +115,8 @@ class TestPedagogyContract(unittest.TestCase):
             "<try>",
             "Teach cycle",
             "not a chat buddy",
+            "Diagnostic / feel-out",
+            "Blank sheet",
         ):
             self.assertIn(needle, text, f"prompt missing {needle!r}")
 

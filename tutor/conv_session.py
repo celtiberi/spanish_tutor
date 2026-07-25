@@ -38,23 +38,48 @@ CONV_PROMPT = config.REPO_ROOT / "prompts" / "conversational_tutor.md"
 DEFAULT_SHEET_PATH = config.REPO_ROOT / "logs" / "character_sheet.json"
 SHEET_TOOLS = [UPDATE_CHARACTER_SHEET_TOOL]
 
-OPEN_HARNESS = (
-    "(harness) Open a TEACHING session — not a chat-buddy hello. "
-    "You are a Spanish tutor. Every turn must teach. "
-    "Use the character sheet (next_best / form_focus / scaffold). "
-    "OPEN RECIPE: "
-    "(1) brief Spanish greeting; "
-    "(2) one plain micro-goal if useful (e.g. 'vamos a practicar estoy'); "
-    "(3) <model> 2–3 short answer phrases they can use; "
-    "(4) <try> one clear production task (answer ¿cómo estás? / say where you are). "
-    "Do NOT open with only ¡Hola! ¿Cómo estás? and no models. "
-    "LANGUAGE: Spanish-forward CI; English is a light rescue only. "
-    "Praise in Spanish. No dual-subtitle walls. Keep Spanish short. "
-    "TIME: Do NOT assume short on time unless they say so THIS session. "
-    "Use structured <tutor> parts (model + try required on open). "
-    "Call update_character_sheet only if you already know something new "
-    "(usually skip on session open)."
+# Known learner: sheet has evidence — still teach, but can go a bit faster
+OPEN_HARNESS_KNOWN = (
+    "(harness) Open a TEACHING session for a learner we already have evidence on. "
+    "Use the character sheet (next_best / form_focus / scaffold / name). "
+    "OPEN RECIPE: short warm open → <model> 1–2 targets → <try> one production. "
+    "Do NOT dump a long Spanish monologue. Do NOT fake 'Got it' with no learner line. "
+    "Skip leave-taking and multi-question stacks. "
+    "LANGUAGE: Spanish-forward; English only if scaffold still true. "
+    "Use structured <tutor> parts (model + try required). "
+    "Skip update_character_sheet on open unless you already know something new."
 )
+
+# Blank / wiped sheet: DIAGNOSTIC feel-out — we do not know their level
+OPEN_HARNESS_DIAGNOSTIC = (
+    "(harness) DIAGNOSTIC OPEN — character sheet is EMPTY / all can-dos unknown. "
+    "You do NOT know this learner's ability. Do NOT open like an intermediate chat. "
+    "Do NOT pure-Spanish monologue. Do NOT say 'cuéntame cómo va todo' or long "
+    "unmodeled questions. Do NOT invent that you 'know' them. "
+    "GOAL OF THIS TURN: feel-out / placement probe + first teach move. "
+    "OPEN RECIPE (required): "
+    "(1) 1–2 short English sentences: who you are + that you'll start tiny "
+    "to see what they already know; "
+    "(2) <model> only 2 ultra-short Spanish forms they can copy: "
+    "**Hola.** and **Estoy bien.**; "
+    "(3) <try> ONE easy production: say **Hola** — or try **Estoy bien** if they can. "
+    "Optional: one plain English gloss only on the try line (not dual-subtitle walls). "
+    "Keep the whole turn SHORT (TTS will speak it). "
+    "No <acknowledge> pretending they already spoke. "
+    "Use structured <tutor> tags. Skip sheet tools on open."
+)
+
+
+def open_harness_for_sheet(sheet: dict) -> str:
+    from .pedagogy_contract import open_phase
+
+    if open_phase(sheet) == "diagnostic":
+        return OPEN_HARNESS_DIAGNOSTIC
+    return OPEN_HARNESS_KNOWN
+
+
+# Back-compat name
+OPEN_HARNESS = OPEN_HARNESS_DIAGNOSTIC
 
 
 @dataclass
@@ -126,6 +151,13 @@ def build_conversational_system(pack_dir: Path, sheet: dict) -> list[dict]:
                 + "Use this to choose Spanish level, scaffolding, and what to "
                 + "weave in next. Do not ignore next_best / avoid / "
                 + "active error patterns.\n\n"
+                + (
+                    "**BLANK LEARNER:** all can-dos unknown — still in feel-out / "
+                    "placement. Keep models tiny; English frame OK; do not assume "
+                    "intermediate comprehension.\n\n"
+                    if _sheet_looks_blank(sheet)
+                    else ""
+                )
                 + "When you have NEW evidence about the learner, call the "
                 + "update_character_sheet tool with a partial delta (same turn "
                 + "as your spoken reply). Skip the tool if nothing changed.\n\n"
@@ -139,6 +171,12 @@ def build_conversational_system(pack_dir: Path, sheet: dict) -> list[dict]:
             "cache_control": {"type": "ephemeral"},
         },
     ]
+
+
+def _sheet_looks_blank(sheet: dict) -> bool:
+    from .pedagogy_contract import is_blank_learner
+
+    return is_blank_learner(sheet)
 
 
 def _usage_dict(final) -> dict:
@@ -457,13 +495,27 @@ class ConversationalSession:
         return result
 
     def open_session(self) -> TurnResult:
-        """Opening tutor greeting."""
+        """Opening tutor turn — diagnostic if sheet blank, else known-learner open."""
+        from .pedagogy_contract import (
+            NOTE_DIAGNOSTIC_OPEN,
+            NOTE_KNOWN_LEARNER_OPEN,
+            open_phase,
+        )
+
+        # Reload sheet so wipe/reset is visible before we choose open phase
+        try:
+            self.sheet = load_sheet(self.sheet_path)
+            self.sheet = clear_session_scoped_affect(self.sheet)
+        except Exception:
+            pass
+        phase = open_phase(self.sheet)
+        harness = open_harness_for_sheet(self.sheet)
         try:
             final, raw, tool_delta, usage, _ = tutor_turn(
                 self.client,
                 self.caps,
                 self.system,
-                [{"role": "user", "content": OPEN_HARNESS}],
+                [{"role": "user", "content": harness}],
                 tools=self.tools,
             )
         except Exception as e:
@@ -476,8 +528,14 @@ class ConversationalSession:
             log_learner="(session open)",
             is_open=True,
         )
+        phase_note = (
+            NOTE_DIAGNOSTIC_OPEN if phase == "diagnostic" else NOTE_KNOWN_LEARNER_OPEN
+        )
+        result.notes = list(result.notes or []) + [phase_note, f"open_phase={phase}"]
+        if result.parts is not None:
+            result.parts = {**result.parts, "open_phase": phase}
         self.history = [
-            {"role": "user", "content": OPEN_HARNESS},
+            {"role": "user", "content": harness},
             {"role": "assistant", "content": result.reply},
         ]
         self.messages_for_ui = [

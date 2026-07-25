@@ -32,13 +32,15 @@ from dataclasses import dataclass, field
 from typing import Any
 
 # Bump when invariants change (experiments document the new version).
-CONTRACT_VERSION = "1.0"
+CONTRACT_VERSION = "1.1"  # + diagnostic open when sheet is blank
 
 # Machine ids for notes / checks
 VIOLATION_NO_TEACH_MOVE = "pedagogy:no_teach_move"
 VIOLATION_OPEN_NEEDS_MODEL_TRY = "pedagogy:open_needs_model_try"
 VIOLATION_RECAST_WITHOUT_TRY = "pedagogy:recast_without_try"
 OK_TEACH_MOVE = "pedagogy:ok"
+NOTE_DIAGNOSTIC_OPEN = "pedagogy:diagnostic_open"
+NOTE_KNOWN_LEARNER_OPEN = "pedagogy:known_learner_open"
 
 # Teaching channels the system owns. v1 only *enforces* text moves;
 # planned channels are listed so they expand via contract, not as UI toys.
@@ -107,6 +109,46 @@ class PedagogyCheck:
             "notes": list(self.notes),
             "version": self.version,
         }
+
+
+def is_blank_learner(sheet: dict | None) -> bool:
+    """True when we have essentially no ability evidence — feel-out required.
+
+    A wiped / default sheet is not an intermediate speaker. Opening pure
+    Spanish monologue at them is a contract failure of judgment.
+    """
+    if not isinstance(sheet, dict):
+        return True
+    ident = sheet.get("identity") or {}
+    name = (ident.get("preferred_name") or ident.get("name") or "").strip()
+    skills = sheet.get("skills") or {}
+    any_evidence = False
+    for _k, v in skills.items() if isinstance(skills, dict) else []:
+        if not isinstance(v, dict):
+            continue
+        conf = float(v.get("confidence") or 0)
+        status = (v.get("status") or "unknown").lower()
+        ev = v.get("evidence") or []
+        if conf > 0.05 or status not in ("unknown", "", "none") or ev:
+            any_evidence = True
+            break
+    eps = sheet.get("error_patterns") or {}
+    if isinstance(eps, dict):
+        for k, v in eps.items():
+            if k in ("active", "history", "resolved"):
+                continue
+            if isinstance(v, dict) and int(v.get("count") or 0) > 0:
+                any_evidence = True
+                break
+    # Named but no skills still ≈ blank for placement
+    if any_evidence:
+        return False
+    return True
+
+
+def open_phase(sheet: dict | None) -> str:
+    """Which open script to use: diagnostic | known."""
+    return "diagnostic" if is_blank_learner(sheet) else "known"
 
 
 def _truthy_part(parts: dict | Any, key: str) -> bool:
