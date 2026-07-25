@@ -1,12 +1,15 @@
-"""PlanCard, gate, rules planner, session memory, teach images (no live API)."""
+"""PlanCard gate, optional rules planner, session memory, teach images."""
 
 import unittest
 
 from tutor.character_sheet import default_sheet
+from tutor.executor import build_ai_tutor_user_message
+from tutor.observe import build_observations, probe_signals
 from tutor.plan_card import PlanCard, PlanTargets, fallback_diagnostic_card, gate_plan_card
-from tutor.rules_planner import plan_turn, probe_signals
+from tutor.rules_planner import plan_turn
 from tutor.session_memory import SessionMemory
 from tutor.teach_assets import (
+    assets_for_ai_turn,
     assets_for_plan,
     cache_lookup,
     decide_teach_image,
@@ -20,87 +23,62 @@ class TestPlanCard(unittest.TestCase):
         g = gate_plan_card(card)
         self.assertTrue(g.ok, g.errors)
 
-    def test_free_chat_empty_models_ok_via_planner(self):
+
+class TestObserve(unittest.TestCase):
+    def test_probe_signals_name(self):
+        s = probe_signals("Me llamo Patrick")
+        self.assertIn("name", s)
+
+    def test_observations_bundle(self):
         sheet = default_sheet()
-        mem = SessionMemory()
-        mem.shown = {"greet", "estoy", "name", "origin"}
-        mem.asked = {"ask_how", "ask_name", "ask_origin"}
-        card = plan_turn(
-            sheet,
-            learner="Me gusta el café",
+        obs = build_observations(sheet, learner="Yo está bien", is_open=False)
+        self.assertTrue(obs.get("error_hit_ids") or obs.get("signals"))
+
+
+class TestAiTutorContext(unittest.TestCase):
+    def test_context_is_facts_not_ladder(self):
+        msg = build_ai_tutor_user_message(
+            learner="Estoy bien",
             is_open=False,
-            memory=mem,
+            session_memory={"shown": ["estoy"], "asked": ["ask_how"], "turns": 1},
+            observations={
+                "signals": ["estoy", "spanish_ok"],
+                "error_hits": [],
+                "active_errors": [],
+                "next_best": {"can_do": "IP-03"},
+            },
+            blank_sheet=False,
         )
-        self.assertIn(card.phase, ("chat_stretch", "diagnostic", "teach_form"))
-        g = gate_plan_card(card)
-        self.assertTrue(g.ok, g.errors)
+        self.assertIn("session_facts", msg)
+        self.assertIn("hard_observations", msg)
+        self.assertIn("Decide the pedagogical move yourself", msg)
+        # Must not ship a scripted next-card ladder
+        self.assertNotIn("chat_ask_name", msg)
+        self.assertNotIn("origin_to_gusta", msg)
 
 
-class TestRulesPlanner(unittest.TestCase):
+class TestRulesPlannerOptional(unittest.TestCase):
+    """Rules mode kept for experiments — not the product default."""
+
     def test_open_comm(self):
         card = plan_turn(default_sheet(), is_open=True)
         self.assertTrue(card.try_prompt)
-        self.assertNotIn("if you can", card.try_prompt.lower())
-
-    def test_hola_estoy_asks_name_once(self):
-        mem = SessionMemory()
-        card = plan_turn(
-            default_sheet(),
-            learner="Hola, estoy bien.",
-            memory=mem,
-        )
-        mem.note_learner("Hola, estoy bien.")
-        mem.note_plan_try(card.reason, card.try_prompt)
-        self.assertIn("name", card.reason.lower() + card.try_prompt.lower())
-        # Second time with name already shown — not name again
-        mem.shown.add("name")
-        mem.asked.add("ask_name")
-        card2 = plan_turn(
-            default_sheet(),
-            learner="Me llamo Pat.",
-            memory=mem,
-        )
-        self.assertNotIn("ask_name", card2.reason)
-        self.assertTrue(
-            "origin" in card2.reason or "dónde" in card2.try_prompt.lower()
-            or "donde" in card2.try_prompt.lower().replace("ó", "o")
-            or "from" in card2.try_prompt.lower()
-        )
-
-    def test_origin_then_not_how_are_you(self):
-        mem = SessionMemory()
-        mem.shown = {"greet", "estoy", "name", "origin"}
-        mem.asked = {"ask_how", "ask_name", "ask_origin"}
-        card = plan_turn(
-            default_sheet(),
-            learner="Yo soy de Estados Unidos.",
-            memory=mem,
-        )
-        low = (card.try_prompt + card.reason).lower()
-        self.assertNotIn("cómo estás", low.replace("á", "a"))
-        self.assertNotIn("como estas", low)
-
-    def test_loop_complaint_recovers(self):
-        mem = SessionMemory()
-        mem.asked = {"ask_how", "ask_name"}
-        card = plan_turn(
-            default_sheet(),
-            learner="I think you already asked me this",
-            memory=mem,
-        )
-        self.assertEqual(card.reason, "loop_recovery")
 
     def test_yo_esta_recast(self):
         card = plan_turn(default_sheet(), learner="Yo está bien")
         self.assertEqual(card.move, "recast_retry")
 
-    def test_open_has_hola_asset(self):
-        card = plan_turn(default_sheet(), is_open=True)
-        self.assertEqual(card.image_concept, "hola")
-        imgs = assets_for_plan(card, images_shown=set(), session_turns=0)
-        self.assertTrue(imgs)
-        self.assertEqual(imgs[0]["concept"], "hola")
-        self.assertEqual(cache_lookup("hola")["cache"], "hit")
+    def test_free_chat_gate_ok(self):
+        mem = SessionMemory()
+        mem.shown = {"greet", "estoy", "name", "origin"}
+        mem.asked = {"ask_how", "ask_name", "ask_origin"}
+        card = plan_turn(
+            default_sheet(),
+            learner="Me gusta el café",
+            memory=mem,
+        )
+        g = gate_plan_card(card)
+        self.assertTrue(g.ok, g.errors)
 
 
 class TestSessionMemory(unittest.TestCase):
@@ -109,7 +87,7 @@ class TestSessionMemory(unittest.TestCase):
         m.note_learner("Hola, estoy bien")
         self.assertIn("greet", m.shown)
         self.assertIn("estoy", m.shown)
-        m.note_plan_try("chat_ask_name", "¿Cómo te llamas?")
+        m.note_plan_try("ai_tutor", "¿Cómo te llamas?")
         self.assertIn("ask_name", m.asked)
 
     def test_image_memory(self):
@@ -123,26 +101,81 @@ class TestSessionMemory(unittest.TestCase):
 
 class TestImageDecision(unittest.TestCase):
     def test_open_wants_hola(self):
-        card = plan_turn(default_sheet(), is_open=True)
+        card = PlanCard(
+            phase="diagnostic",
+            move="model_try",
+            models=["¡Hola!"],
+            try_prompt="¿Cómo estás?",
+            image_concept="hola",
+            targets=PlanTargets(concepts=["hola"]),
+            reason="comm_open",
+        )
         d = decide_teach_image(card, images_shown=set(), session_turns=0)
         self.assertTrue(d.want)
         self.assertEqual(d.concept, "hola")
+        imgs = assets_for_plan(card, images_shown=set(), session_turns=0)
+        self.assertTrue(imgs)
+        self.assertEqual(cache_lookup("hola")["cache"], "hit")
+
+    def test_ai_turn_open_image(self):
+        imgs, d = assets_for_ai_turn(
+            is_open=True,
+            blank_sheet=True,
+            images_shown=set(),
+            session_turns=0,
+        )
+        self.assertTrue(d.want)
+        self.assertTrue(imgs)
+        self.assertEqual(imgs[0]["concept"], "hola")
+
+    def test_ai_turn_no_wallpaper_on_empty_chat(self):
+        imgs, d = assets_for_ai_turn(
+            is_open=False,
+            tutor_models=["¡Claro!", "¿Y tú?"],
+            tutor_try="¿Qué te gusta?",
+            images_shown=set(),
+            session_turns=5,
+            turns_since_image=5,
+        )
+        # no concrete concept → no image
+        self.assertFalse(d.want or imgs)
+
+    def test_ai_turn_cafe_from_tutor_model(self):
+        imgs, d = assets_for_ai_turn(
+            is_open=False,
+            tutor_models=["A mí me gusta el café."],
+            tutor_try="¿Qué te gusta?",
+            images_shown=set(),
+            session_turns=3,
+            turns_since_image=3,
+        )
+        self.assertIn("cafe", d.candidates or ([d.concept] if d.concept else []))
+        # may want cafe if decision triggers
+        if d.want:
+            self.assertEqual(d.concept, "cafe")
 
     def test_no_image_when_already_shown(self):
-        card = plan_turn(default_sheet(), is_open=True)
+        card = PlanCard(
+            phase="diagnostic",
+            move="model_try",
+            models=["¡Hola!"],
+            try_prompt="hi",
+            image_concept="hola",
+            reason="comm_open",
+        )
         d = decide_teach_image(card, images_shown={"hola"}, session_turns=3)
         self.assertFalse(d.want)
         self.assertEqual(d.reason, "concepts_already_shown")
 
     def test_loop_recovery_no_image(self):
-        mem = SessionMemory()
-        mem.asked = {"ask_how", "ask_name"}
-        card = plan_turn(
-            default_sheet(),
-            learner="I think you already asked me this",
-            memory=mem,
+        imgs, d = assets_for_ai_turn(
+            is_open=False,
+            signals=["loop_complaint"],
+            tutor_models=["Perdón"],
+            tutor_try="¿Te gusta el café?",
+            images_shown=set(),
+            session_turns=4,
         )
-        d = decide_teach_image(card, images_shown=set(), session_turns=4)
         self.assertFalse(d.want)
         self.assertIn("loop", d.reason)
 
@@ -186,11 +219,10 @@ class TestImageDecision(unittest.TestCase):
         )
         d = decide_teach_image(
             card,
-            images_shown=set(),  # new concept
+            images_shown=set(),
             session_turns=2,
-            turns_since_image=0,  # just showed something last turn
+            turns_since_image=0,
         )
-        # estoy_bien visual 0.85 < 0.9 highly visual → rate limited
         self.assertFalse(d.want)
         self.assertEqual(d.reason, "skip_rate_limit")
 
@@ -198,7 +230,6 @@ class TestImageDecision(unittest.TestCase):
         card = plan_turn(default_sheet(), learner="Yo está bien")
         self.assertEqual(card.move, "recast_retry")
         d = decide_teach_image(card, images_shown=set(), session_turns=2, turns_since_image=5)
-        # recast of person agreement is not highly visual enough alone
         self.assertFalse(d.want)
 
 

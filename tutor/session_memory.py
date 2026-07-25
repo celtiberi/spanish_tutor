@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .rules_planner import probe_signals
+from .observe import probe_signals
 
 
 @dataclass

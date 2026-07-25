@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from .plan_card import PlanCard
+from .plan_card import PlanCard, PlanTargets
 
 # Bundled + runtime cache live under static so FastAPI can serve them.
 ASSETS_DIR = Path(__file__).resolve().parent / "web_static" / "teach_assets"
@@ -758,29 +758,130 @@ def assets_for_plan(
 
     Returns [] when the decision is "no image this turn".
     """
+    decision = _decision_for_card(
+        card,
+        images_shown=images_shown,
+        turns_since_image=turns_since_image,
+        session_turns=session_turns,
+        force=force,
+    )
+    try:
+        setattr(card, "_image_decision", decision)
+    except Exception:
+        pass
+    return _resolve_decision_assets(decision, images_shown=images_shown)
+
+
+def assets_for_ai_turn(
+    *,
+    is_open: bool = False,
+    blank_sheet: bool = False,
+    learner: str = "",
+    tutor_models: list[str] | None = None,
+    tutor_try: str = "",
+    tutor_ack: str = "",
+    signals: list[str] | set[str] | None = None,
+    images_shown: set[str] | list[str] | None = None,
+    turns_since_image: int | None = None,
+    session_turns: int = 0,
+) -> tuple[list[dict[str, Any]], ImageDecision]:
+    """Post-hoc image decision for AI-first path (no rules PlanCard agenda).
+
+    Uses what the tutor *actually said* + open/blank/session facts — not a
+    flashcard ladder. Returns (assets, decision).
+    """
+    models = [m for m in (tutor_models or []) if m]
+    sig = set(signals or [])
+    concepts: list[str] = []
+    image_concept = None
+    phase = "chat_stretch"
+    move = "model_try"
+    reason = "ai_turn"
+
+    if is_open or (blank_sheet and not (learner or "").strip()):
+        phase, move, reason = "diagnostic", "model_try", "comm_open"
+        image_concept = "hola"
+        concepts = ["hola", "estoy_bien"]
+    elif "loop_complaint" in sig:
+        phase, move, reason = "chat_stretch", "model_try", "loop_recovery"
+    else:
+        # Infer from tutor output + light signals (association only)
+        blob = " ".join(models + [tutor_try or "", tutor_ack or "", learner or ""])
+        soft = PlanCard(
+            phase="chat_stretch",
+            move="model_try",
+            models=models or [blob[:80]],
+            try_prompt=tutor_try or "",
+            targets=PlanTargets(concepts=[]),
+            reason="ai_turn_infer",
+        )
+        concepts = extract_concept_candidates(soft)
+        # First-time social forms in tutor text
+        low = blob.lower()
+        if "me llamo" in low or "cómo te llamas" in low or "como te llamas" in low:
+            concepts = ["me_llamo"] + [c for c in concepts if c != "me_llamo"]
+            image_concept = "me_llamo"
+            move, reason = "associate", "ai_name_form"
+        elif concepts:
+            # Prefer highest-visual concrete noun the tutor actually used
+            concepts = sorted(concepts, key=lambda c: visual_score(c), reverse=True)
+            image_concept = concepts[0]
+            if visual_score(image_concept) >= 0.8:
+                move, reason = "model_try", "ai_concrete_model"
+            else:
+                move, reason = "model_try", "ai_weak_visual"
+        elif "estoy" in low and "hola" not in (images_shown or set()):
+            pass  # wellbeing chat — no forced image
+
+    card = PlanCard(
+        phase=phase,
+        move=move,
+        models=models or ["…"],
+        try_prompt=tutor_try or "continue",
+        targets=PlanTargets(concepts=concepts),
+        image_concept=image_concept,
+        reason=reason,
+        allow_new_topic=True,
+    )
+    decision = decide_teach_image(
+        card,
+        images_shown=images_shown,
+        turns_since_image=turns_since_image,
+        session_turns=session_turns,
+    )
+    assets = _resolve_decision_assets(decision, images_shown=images_shown)
+    return assets, decision
+
+
+def _decision_for_card(
+    card: PlanCard,
+    *,
+    images_shown: set[str] | list[str] | None = None,
+    turns_since_image: int | None = None,
+    session_turns: int = 0,
+    force: bool = False,
+) -> ImageDecision:
     if force and card.image_concept:
-        decision = ImageDecision(
+        return ImageDecision(
             True,
             concept=_norm_key(card.image_concept),
             reason="forced",
             candidates=[_norm_key(card.image_concept)],
         )
-    else:
-        decision = decide_teach_image(
-            card,
-            images_shown=images_shown,
-            turns_since_image=turns_since_image,
-            session_turns=session_turns,
-        )
+    return decide_teach_image(
+        card,
+        images_shown=images_shown,
+        turns_since_image=turns_since_image,
+        session_turns=session_turns,
+    )
 
-    # Stash on card for logging (caller may read)
-    try:
-        setattr(card, "_image_decision", decision)
-    except Exception:
-        pass
 
+def _resolve_decision_assets(
+    decision: ImageDecision,
+    *,
+    images_shown: set[str] | list[str] | None = None,
+) -> list[dict[str, Any]]:
     if not decision.want or not decision.concept:
-        # Still warm high-value missing concepts in background for later turns
         for c in decision.candidates[:2]:
             if c not in (images_shown or set()) and not cache_lookup(c):
                 meta = CONCEPT_LEXICON.get(c) or {}
@@ -794,14 +895,12 @@ def assets_for_plan(
 
     hit = cache_lookup(decision.concept)
     if hit:
-        hit = {
+        return [{
             **hit,
             "decision_reason": decision.reason,
             "visual_score": decision.visual_score,
-        }
-        return [hit]
+        }]
 
-    # Miss: warm for next time; no block this turn
     meta = CONCEPT_LEXICON.get(decision.concept) or {}
     warm_concept_background(
         decision.concept,

@@ -1,10 +1,11 @@
 # Plan: New teacher (structured pedagogical control)
 
-**Status:** PR1–PR2 implemented (rules planner + executor path)  
+**Status:** AI-first tutor is default (`TEACHER_MODE=planned`). Rules PlanCard ladder is optional (`TEACHER_MODE=rules`) — not product default; it felt flashcard-driven.  
 **Date:** 2026-07-25  
-**Flag:** `TEACHER_MODE=planned` (default) or `legacy`  
-**Code:** `tutor/plan_card.py`, `rules_planner.py`, `executor.py`, wired in `conv_session.py`  
-**Builds on:** character sheet, pedagogy contract v1.1, diagnostic open, conversational session, research on ITS / multi-agent tutors / Duolingo-style splits
+**Flag:** `TEACHER_MODE=planned|ai` (default) · `rules` (ladder experiment) · `legacy`  
+**Code:** `executor.py` (AI context), `observe.py` (facts), `conv_session.py`; `rules_planner.py` / `plan_card.py` optional  
+**Builds on:** character sheet, pedagogy contract v1.1, session memory, intelligent images, conversational session  
+
 
 ---
 

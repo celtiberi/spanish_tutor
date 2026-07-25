@@ -500,7 +500,12 @@ class ConversationalSession:
         return result
 
     def _planned_enabled(self) -> bool:
-        return self.teacher_mode in ("planned", "plan", "new")
+        # planned / plan / new / ai = AI-first tutor (default)
+        # rules = optional PlanCard ladder (not recommended for product)
+        return self.teacher_mode in ("planned", "plan", "new", "ai", "rules")
+
+    def _rules_mode(self) -> bool:
+        return self.teacher_mode == "rules"
 
     def _execute_planned(
         self,
@@ -510,15 +515,199 @@ class ConversationalSession:
         input_mode: str = "text",
         log_learner: str | None = None,
     ) -> TurnResult:
-        """Rules PlanCard → gate → executor LLM → finish."""
+        """Default: AI tutor with sheet + memory + pedagogy direction.
+
+        TEACHER_MODE=rules → old PlanCard ladder (optional / experiments).
+        """
+        if self._rules_mode():
+            return self._execute_rules_planned(
+                learner,
+                is_open=is_open,
+                input_mode=input_mode,
+                log_learner=log_learner,
+            )
+        return self._execute_ai_tutor(
+            learner,
+            is_open=is_open,
+            input_mode=input_mode,
+            log_learner=log_learner,
+        )
+
+    def _execute_ai_tutor(
+        self,
+        learner: str,
+        *,
+        is_open: bool,
+        input_mode: str = "text",
+        log_learner: str | None = None,
+    ) -> TurnResult:
+        """AI decides the pedagogical move; code supplies facts + direction."""
+        from .executor import build_ai_tutor_system, build_ai_tutor_user_message
+        from .observe import build_observations
+        from .pedagogy_contract import (
+            NOTE_DIAGNOSTIC_OPEN,
+            NOTE_KNOWN_LEARNER_OPEN,
+            is_blank_learner,
+            open_phase,
+        )
+        from .teach_assets import assets_for_ai_turn
+
+        if not is_open and learner:
+            self.pedagogy_memory.note_learner(learner)
+            # Track what we asked later from tutor try text
+
+        obs = build_observations(self.sheet, learner=learner, is_open=is_open)
+        blank = bool(obs.get("blank_sheet") or is_blank_learner(self.sheet))
+
+        # Optional pre-turn image only for blank open (wave) — never a full ladder
+        pre_images: list = []
+        pre_decision = None
+        if is_open and blank and "hola" not in self.pedagogy_memory.images_shown:
+            pre_images, pre_decision = assets_for_ai_turn(
+                is_open=True,
+                blank_sheet=True,
+                images_shown=self.pedagogy_memory.images_shown,
+                turns_since_image=self.pedagogy_memory.turns_since_image,
+                session_turns=self.pedagogy_memory.turns,
+            )
+            if pre_images:
+                self.pedagogy_memory.note_image(pre_images[0].get("concept"))
+
+        system = build_ai_tutor_system(
+            sheet_summary=format_sheet_for_prompt(self.sheet),
+            pack_palette=load_pack(self.pack_dir)[:8000],
+        )
+        task = build_ai_tutor_user_message(
+            learner=learner,
+            is_open=is_open,
+            session_memory=self.pedagogy_memory.snapshot(),
+            observations=obs,
+            teach_images=pre_images,
+            blank_sheet=blank,
+        )
+        if is_open:
+            messages = [{"role": "user", "content": task}]
+        else:
+            messages = self.history + [{"role": "user", "content": task}]
+
+        try:
+            final, raw, tool_delta, usage, _ = tutor_turn(
+                self.client,
+                self.caps,
+                system,
+                messages,
+                tools=self.tools,
+            )
+        except Exception as e:
+            return TurnResult(
+                reply="",
+                error=f"{type(e).__name__}: {e}",
+                input_mode=input_mode,
+            )
+
+        result = self._finish(
+            learner if not is_open else "",
+            raw or "",
+            tool_delta,
+            final,
+            usage,
+            input_mode=input_mode,
+            log_learner=log_learner if log_learner is not None else (
+                "(session open)" if is_open else None
+            ),
+            is_open=is_open,
+        )
+
+        # Session memory: what the tutor elicited (from try text)
+        try_text = ""
+        models: list[str] = []
+        ack = ""
+        if result.parts:
+            try_text = (result.parts.get("try") or result.parts.get("continue") or "")
+            models = []
+            m = result.parts.get("model") or ""
+            if m:
+                models = [m]
+            ack = result.parts.get("acknowledge") or ""
+            self.pedagogy_memory.note_plan_try("ai_tutor", try_text)
+
+        # Post-hoc image from what the AI actually taught (not a rules ladder)
+        teach_images = list(pre_images)
+        image_decision = pre_decision
+        if not teach_images:
+            teach_images, image_decision = assets_for_ai_turn(
+                is_open=is_open,
+                blank_sheet=blank,
+                learner=learner if not is_open else "",
+                tutor_models=models,
+                tutor_try=try_text,
+                tutor_ack=ack,
+                signals=obs.get("signals") or [],
+                images_shown=self.pedagogy_memory.images_shown,
+                turns_since_image=self.pedagogy_memory.turns_since_image,
+                session_turns=self.pedagogy_memory.turns,
+            )
+            if teach_images:
+                self.pedagogy_memory.note_image(teach_images[0].get("concept"))
+
+        phase = open_phase(self.sheet) if is_open else "ai"
+        phase_note = (
+            NOTE_DIAGNOSTIC_OPEN if (is_open and blank) else NOTE_KNOWN_LEARNER_OPEN
+        )
+        soft_plan = {
+            "source": "ai_tutor",
+            "phase": "diagnostic" if (is_open and blank) else "chat",
+            "observations": {
+                "signals": obs.get("signals"),
+                "error_hit_ids": obs.get("error_hit_ids"),
+                "next_best": obs.get("next_best"),
+            },
+            "image": (teach_images[0].get("concept") if teach_images else None),
+        }
+        self.last_plan = soft_plan
+        result.notes = list(result.notes or []) + [
+            phase_note,
+            f"open_phase={phase}" if is_open else "phase=ai_tutor",
+            "plan_source=ai_tutor",
+            f"teacher_mode={self.teacher_mode}",
+            f"mem_shown={','.join(sorted(self.pedagogy_memory.shown)) or '—'}",
+            f"mem_asked={','.join(sorted(self.pedagogy_memory.asked)) or '—'}",
+        ]
+        if result.parts is not None:
+            result.parts = {
+                **result.parts,
+                "plan": soft_plan,
+                "open_phase": phase if is_open else result.parts.get("open_phase"),
+                "teach_images": teach_images,
+            }
+            if image_decision is not None:
+                result.parts["image_decision"] = image_decision.as_dict()
+                result.notes = list(result.notes or []) + [
+                    f"image_decision:{image_decision.reason}"
+                ]
+            if teach_images:
+                result.notes = list(result.notes or []) + [
+                    f"teach_image:{teach_images[0].get('concept')}"
+                ]
+        return result
+
+    def _execute_rules_planned(
+        self,
+        learner: str,
+        *,
+        is_open: bool,
+        input_mode: str = "text",
+        log_learner: str | None = None,
+    ) -> TurnResult:
+        """Optional TEACHER_MODE=rules: PlanCard ladder + executor (not default)."""
         from .executor import build_executor_system, build_executor_user_message
         from .pedagogy_contract import (
             NOTE_DIAGNOSTIC_OPEN,
             NOTE_KNOWN_LEARNER_OPEN,
-            open_phase,
         )
         from .plan_card import fallback_diagnostic_card, gate_plan_card
         from .rules_planner import plan_turn
+        from .teach_assets import assets_for_plan
 
         if not is_open and learner:
             self.pedagogy_memory.note_learner(learner)
@@ -539,9 +728,7 @@ class ConversationalSession:
 
         self.pedagogy_memory.note_plan_try(card.reason, card.try_prompt)
         self.last_plan = card.as_dict()
-        from .teach_assets import assets_for_plan
 
-        # Intelligent image decision: not every turn; concrete form↔meaning only
         teach_images = assets_for_plan(
             card,
             images_shown=self.pedagogy_memory.images_shown,
@@ -554,12 +741,9 @@ class ConversationalSession:
             card.image_concept = concept
             self.pedagogy_memory.note_image(concept)
             self.last_plan = card.as_dict()
-        else:
-            # Clear suggested concept if decision rejected it (avoid executor
-            # thinking an image is present when it is not)
-            if image_decision is not None and not getattr(image_decision, "want", False):
-                card.image_concept = None
-                self.last_plan = card.as_dict()
+        elif image_decision is not None and not getattr(image_decision, "want", False):
+            card.image_concept = None
+            self.last_plan = card.as_dict()
 
         system = build_executor_system(
             sheet_summary=format_sheet_for_prompt(self.sheet),
@@ -614,6 +798,7 @@ class ConversationalSession:
             f"plan:{card.phase}/{card.move}",
             f"plan_reason={card.reason}",
             f"teacher_mode={self.teacher_mode}",
+            "plan_source=rules",
             f"mem_shown={','.join(sorted(self.pedagogy_memory.shown)) or '—'}",
             f"mem_asked={','.join(sorted(self.pedagogy_memory.asked)) or '—'}",
         ]

@@ -1,12 +1,19 @@
-"""Rules-only pedagogical planner → PlanCard (soft constraints).
+"""OPTIONAL rules planner → PlanCard (TEACHER_MODE=rules only).
 
-Picks *what to elicit next* and what to avoid. Does **not** script the dialogue —
-the executor LLM writes natural conversation under these constraints.
+**Default conversational path does NOT use this module for agenda.**
+The AI tutor gets sheet + session facts + pedagogical direction and decides
+the move (see executor.py). This file remains for:
+
+  - TEACHER_MODE=rules (offline / experiment)
+  - unit tests of PlanCard gate behavior
+  - emergency fallback if we re-enable a hard ladder
+
+A fixed Hola→Estoy→Me llamo probe ladder made the product feel like flashcards.
+Do not expand this ladder for the default path.
 """
 
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING, Any
 
 from .character_sheet import (
@@ -14,6 +21,7 @@ from .character_sheet import (
     active_error_patterns,
     detect_error_pattern_hits,
 )
+from .observe import probe_signals
 from .pedagogy_contract import is_blank_learner
 from .plan_card import (
     PlanCard,
@@ -25,54 +33,15 @@ from .plan_card import (
 if TYPE_CHECKING:
     from .session_memory import SessionMemory
 
+# Re-export for older imports
+__all__ = ["plan_turn", "probe_signals"]
+
 
 def _scaffold_for_sheet(sheet: dict) -> str:
     rec = sheet.get("receptive") or {}
     if not rec.get("needs_english_scaffold", True):
         return "mostly_es"
     return "es_forward"
-
-
-def probe_signals(learner: str) -> set[str]:
-    """What the *current utterance* already shows."""
-    low = (learner or "").lower()
-    s: set[str] = set()
-    if not low.strip():
-        return s
-    if re.search(r"\b(hola|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches)\b", low):
-        s.add("greet")
-    if re.search(r"\bestoy\b", low):
-        s.add("estoy")
-    if re.search(r"\bme\s+llamo\b", low):
-        s.add("name")
-    if re.search(r"\bc[oó]mo\s+te\s+llamas\b", low):
-        s.add("ask_name")
-    if re.search(r"\bc[oó]mo\s+est[aá]s\b", low):
-        s.add("ask_how")
-    if re.search(r"\bme\s+gusta\b", low):
-        s.add("gusta")
-    if re.search(r"\bsoy\s+de\b", low):
-        s.add("origin")
-    if re.search(r"\b(gracias|por\s+favor|adi[oó]s|hasta\s+luego)\b", low):
-        s.add("polite")
-    if re.search(r"\b(caf[eé]|bote|barco|r[ií]o|comida|m[uú]sica)\b", low):
-        s.add("topic_vocab")
-    es_hits = len(re.findall(
-        r"\b(hola|estoy|llamo|llamas|gracias|gusta|soy|tengo|bien|sí|si|no|"
-        r"buenos|buenas|adiós|adios|dónde|donde|cómo|como)\b",
-        low,
-    ))
-    en_words = len(re.findall(r"\b[a-z]{3,}\b", low))
-    if en_words >= 3 and es_hits == 0:
-        s.add("english_only")
-    if es_hits >= 2 or (es_hits >= 1 and len(low.split()) <= 6):
-        s.add("spanish_ok")
-    if len(s & {"greet", "estoy", "name", "ask_name", "gusta", "origin"}) >= 2:
-        s.add("multi_skill")
-    # Meta: they noticed a loop
-    if re.search(r"\balready\s+asked\b|\bya\s+(me\s+)?pregunt", low):
-        s.add("loop_complaint")
-    return s
 
 
 def plan_turn(

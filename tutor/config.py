@@ -33,7 +33,10 @@ MODEL = os.environ.get("TUTOR_MODEL", "gemini-3.6-flash")
 # Override with CONTROLLER_PLANNER / CONTROLLER_EXECUTOR or CLI flags.
 CONTROLLER_PLANNER = os.environ.get("CONTROLLER_PLANNER", "grok-4.5")
 CONTROLLER_EXECUTOR = os.environ.get("CONTROLLER_EXECUTOR", MODEL)
-# New teacher: "planned" = rules PlanCard + executor; "legacy" = single harness LLM.
+# Teacher path:
+#   planned|ai (default) — AI tutor with sheet + memory + pedagogy direction
+#   rules — optional PlanCard ladder (flashcard-prone; experiments only)
+#   legacy — single harness LLM without structured plan notes
 TEACHER_MODE = (os.environ.get("TEACHER_MODE", "planned") or "planned").strip().lower()
 # Teach images: cache-first always. Generate on miss only if true + generator registered.
 TEACH_IMAGE_GENERATE = (
