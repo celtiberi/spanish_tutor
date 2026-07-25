@@ -613,7 +613,17 @@ class ConversationalSession:
         return result
 
     def reset_sheet(self) -> dict:
+        """Hard wipe: new blank learner on disk + empty chat memory.
+
+        Deletes the sheet file first so nothing can merge residual state back in.
+        """
+        try:
+            if self.sheet_path.exists():
+                self.sheet_path.unlink()
+        except OSError:
+            pass
         self.sheet = default_sheet()
+        self.sheet_path.parent.mkdir(parents=True, exist_ok=True)
         save_sheet(self.sheet_path, self.sheet)
         self.history = []
         self.messages_for_ui = []
@@ -666,8 +676,10 @@ class ConversationalSession:
             "focus_model": self.focus_model,
         }
 
-    def close(self) -> str | None:
-        save_sheet(self.sheet_path, self.sheet)
+    def close(self, *, persist_sheet: bool = True) -> str | None:
+        """End session. If persist_sheet is False (hard reset), do not write sheet."""
+        if persist_sheet:
+            save_sheet(self.sheet_path, self.sheet)
         if self.logger:
             return str(self.logger.close(mode="conversational"))
         return None

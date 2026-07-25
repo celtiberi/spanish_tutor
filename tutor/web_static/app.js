@@ -21,6 +21,7 @@ const els = {
   speechHint: $("speechHint"),
   newChat: $("newChat"),
   resetSheet: $("resetSheet"),
+  resetLearner: $("resetLearner"),
   focusPill: $("focusPill"),
   focusTitle: $("focusTitle"),
   focusMeta: $("focusMeta"),
@@ -1196,7 +1197,7 @@ document.addEventListener("keydown", (e) => {
 });
 
 els.newChat.addEventListener("click", async () => {
-  if (busy) return;
+  if (busy || turnInFlight) return;
   setBusy(true);
   try {
     const data = await api("/api/session/reset", {
@@ -1206,6 +1207,7 @@ els.newChat.addEventListener("click", async () => {
     showMessages(data.messages);
     setNotes(data.notes);
     renderSheet(data.sheet);
+    setMicStatus("idle", "New chat — same learner sheet");
     speak(data.reply);
   } catch (e) {
     addBubble("system", e.message);
@@ -1214,24 +1216,60 @@ els.newChat.addEventListener("click", async () => {
   }
 });
 
-els.resetSheet.addEventListener("click", async () => {
-  if (!confirm("Clear the learner character sheet and start fresh?")) return;
+async function hardResetLearner() {
+  if (busy || turnInFlight) {
+    addBubble("system", "Wait for the current turn to finish, then Reset learner again.");
+    return;
+  }
+  if (
+    !confirm(
+      "Hard reset: wipe the character sheet (skills, errors, name) and start a blank learner?\n\nThis cannot be undone."
+    )
+  ) {
+    return;
+  }
   setBusy(true);
+  setSheetOpen(false);
+  try {
+    forceStopMicOnly();
+  } catch (_) {}
   try {
     const data = await api("/api/session/reset", {
       method: "POST",
       body: JSON.stringify({ reset_sheet: true }),
     });
+    // Full UI wipe before painting the new open
+    els.messages.innerHTML = "";
     showMessages(data.messages);
-    setNotes(data.notes);
+    setNotes(
+      (data.notes || []).concat(
+        data.fresh_learner || data.sheet_reset
+          ? ["fresh_learner"]
+          : ["reset_may_have_failed"]
+      )
+    );
     renderSheet(data.sheet);
+    els.statusLine.textContent = data.fresh_learner
+      ? `Fresh learner · model ${data.model || "tutor"}`
+      : `Model ${data.model || "tutor"} · character sheet live`;
+    setMicStatus("idle", "Fresh learner — sheet wiped");
+    addBubble(
+      "system",
+      data.fresh_learner
+        ? "Hard reset complete: blank character sheet + new session."
+        : "Reset ran but server did not confirm fresh_learner — check sheet."
+    );
     speak(data.reply);
   } catch (e) {
-    addBubble("system", e.message);
+    addBubble("system", `Reset failed: ${e.message}`);
   } finally {
     setBusy(false);
+    els.input.focus();
   }
-});
+}
+
+els.resetSheet?.addEventListener("click", () => hardResetLearner());
+els.resetLearner?.addEventListener("click", () => hardResetLearner());
 
 if (window.speechSynthesis) {
   speechSynthesis.getVoices();

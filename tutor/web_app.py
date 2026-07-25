@@ -342,16 +342,35 @@ def create_app() -> FastAPI:
         sid = request.cookies.get(COOKIE)
         # New session id; optionally wipe character sheet
         old_sid = sid
+        old_sheet_path = None
         if old_sid and old_sid in _sessions:
             with _lock:
                 old = _sessions.pop(old_sid, None)
             if old and old.get("session"):
                 try:
+                    old_sheet_path = getattr(old["session"], "sheet_path", None)
                     if body.reset_sheet:
+                        # Wipe disk first; do not let close() re-save stale memory
                         old["session"].reset_sheet()
-                    old["session"].close()
+                        old["session"].close(persist_sheet=False)
+                    else:
+                        old["session"].close(persist_sheet=True)
                 except Exception:
                     pass
+        # Nuclear wipe even if no live session (stale cookie / cold start)
+        if body.reset_sheet:
+            from .conv_session import DEFAULT_SHEET_PATH
+            from .character_sheet import default_sheet, save_sheet
+
+            path = Path(old_sheet_path or DEFAULT_SHEET_PATH)
+            try:
+                if path.exists():
+                    path.unlink()
+            except OSError:
+                pass
+            path.parent.mkdir(parents=True, exist_ok=True)
+            save_sheet(path, default_sheet())
+
         sid, session = _get_or_create(None)
         if body.reset_sheet:
             session.reset_sheet()
@@ -363,12 +382,14 @@ def create_app() -> FastAPI:
         response.set_cookie(
             COOKIE, sid, httponly=True, samesite="lax", max_age=SESSION_TTL_SEC,
         )
+        sheet_pub = session.sheet_public()
         return {
             **turn.to_dict(),
             "messages": session.messages_for_ui,
-            "sheet": session.sheet_public(),
+            "sheet": sheet_pub,
             "session_id": sid,
             "sheet_reset": body.reset_sheet,
+            "fresh_learner": bool(body.reset_sheet),
         }
 
     return app
