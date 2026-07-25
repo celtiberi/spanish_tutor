@@ -124,7 +124,14 @@ def create_app() -> FastAPI:
                 "<h1>ml_teacher</h1><p>Missing web_static/index.html</p>",
                 status_code=500,
             )
-        return FileResponse(index_path)
+        # Avoid sticky HTML so script/css ?v= busts always take effect
+        return FileResponse(
+            index_path,
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "Pragma": "no-cache",
+            },
+        )
 
     @app.get("/api/health")
     def health():
