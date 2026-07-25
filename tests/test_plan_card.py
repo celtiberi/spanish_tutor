@@ -68,6 +68,21 @@ class TestRulesPlanner(unittest.TestCase):
         card = plan_turn(sheet, learner="Hola", is_open=False)
         self.assertEqual(card.phase, "diagnostic")
         self.assertTrue(any("Estoy" in m for m in card.models))
+        self.assertIn("I am fine", card.english_frame)
+        self.assertEqual(card.image_concept, "estoy_bien")
+
+    def test_after_estoy_associates_me_llamo(self):
+        sheet = default_sheet()
+        card = plan_turn(sheet, learner="Estoy bien", is_open=False)
+        self.assertEqual(card.move, "associate")
+        self.assertEqual(card.image_concept, "me_llamo")
+        self.assertIn("My name is", card.english_frame)
+        self.assertTrue(any("Me llamo" in m for m in card.models))
+        # Do not dump a second unmodeled question form first
+        self.assertFalse(any("Cómo te llamas" in m for m in card.models))
+        assets = assets_for_plan(card)
+        self.assertTrue(assets)
+        self.assertEqual(assets[0]["concept"], "me_llamo")
 
     def test_diagnostic_has_hola_image(self):
         sheet = default_sheet()

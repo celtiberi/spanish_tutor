@@ -192,10 +192,14 @@ def _diagnostic_followup(
     if re.search(r"\bhola\b", low) and not re.search(r"\bestoy\b", low):
         return PlanCard(
             phase="diagnostic",
-            move="model_try",
+            move="associate",
             models=["Estoy bien.", "Estoy más o menos."],
-            try_prompt="Now try: **Estoy bien** (I am fine).",
-            english_frame="Good — *hola* works. Next tiny step:",
+            try_prompt="Your turn: **Estoy bien**.",
+            english_frame=(
+                "¡Muy bien! — *hola* is a greeting (hello). "
+                "Next: **Estoy bien** means “I am fine.” "
+                "Picture = feeling OK. Then say *Estoy bien*."
+            ),
             targets=PlanTargets(
                 form_id="present_estar_person",
                 can_do="IP-04",
@@ -203,21 +207,31 @@ def _diagnostic_followup(
             ),
             image_concept="estoy_bien",
             scaffold="en_rescue",
+            allow_new_topic=False,
+            max_sentences=6,
             reason="diagnostic_after_hola",
             sheet_update_hints=["observe_estoy"],
         )
     if "estoy" in resolves or re.search(r"\bestoy\b", low):
         return PlanCard(
             phase="diagnostic",
-            move="model_try",
-            models=["Me llamo…", "¿Cómo te llamas?"],
-            try_prompt="Try: **Me llamo** + your name.",
-            english_frame="Nice *estoy*. One more small piece:",
+            move="associate",
+            # One new form only — association, not a double question dump
+            models=["Me llamo Alex.", "Me llamo…"],
+            try_prompt="Your turn: **Me llamo** + your name.",
+            english_frame=(
+                "¡Muy bien! — you used *estoy*. "
+                "Next phrase: **Me llamo…** means “My name is…”. "
+                "Picture: pointing to myself. Then you say *Me llamo* + your name."
+            ),
             targets=PlanTargets(
                 can_do="IP-03",
                 concepts=["me_llamo"],
             ),
+            image_concept="me_llamo",
             scaffold="en_rescue",
+            allow_new_topic=False,
+            max_sentences=6,
             reason="diagnostic_after_estoy",
             sheet_update_hints=["observe_name"],
         )

@@ -1,1 +1,17 @@
-{"hola":{"file":"hola.jpg","form":"Hola","caption":"greeting — hello"},"estoy_bien":{"file":"estoy_bien.jpg","form":"Estoy bien","caption":"I am fine / I am well"}}
+{
+  "hola": {
+    "file": "hola.jpg",
+    "form": "Hola",
+    "caption": "greeting \u2014 hello"
+  },
+  "estoy_bien": {
+    "file": "estoy_bien.jpg",
+    "form": "Estoy bien",
+    "caption": "I am fine / I am well"
+  },
+  "me_llamo": {
+    "file": "me_llamo.jpg",
+    "form": "Me llamo\u2026",
+    "caption": "my name is\u2026 (pointing to myself)"
+  }
+}

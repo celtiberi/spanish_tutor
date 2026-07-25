@@ -29,6 +29,11 @@ DEFAULT_CATALOG: dict[str, dict[str, str]] = {
         "form": "Estoy bien",
         "caption": "I am fine / I am well",
     },
+    "me_llamo": {
+        "file": "me_llamo.jpg",
+        "form": "Me llamo…",
+        "caption": "my name is… (pointing to myself)",
+    },
 }
 
 

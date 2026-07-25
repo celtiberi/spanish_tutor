@@ -81,11 +81,20 @@ function renderTutorParts(parts, fallbackContent) {
 
   if (parts.acknowledge) {
     const plan = parts.plan || {};
-    const isOpenFrame =
+    const isDiag =
       plan.phase === "diagnostic" ||
       plan.move === "english_frame" ||
-      (parts.open_phase === "diagnostic");
-    const ackLabel = isOpenFrame ? "Welcome" : "Got it";
+      plan.move === "associate" ||
+      parts.open_phase === "diagnostic";
+    // Avoid empty "Got it" when we're framing meaning / associating a form
+    let ackLabel = "Got it";
+    if (plan.move === "associate" || (isDiag && plan.english_frame)) {
+      ackLabel = "Meaning";
+    } else if (isDiag || plan.move === "english_frame") {
+      ackLabel = "Welcome";
+    } else if (plan.move === "recast_retry") {
+      ackLabel = "Almost";
+    }
     blocks.push(
       `<div class="part part-ack"><span class="part-label">${ackLabel}</span>${esc(
         parts.acknowledge
