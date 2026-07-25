@@ -1237,12 +1237,23 @@ def _verification_checks(
     sheet: dict, true: TrueAbility, log: list[SimTurn]
 ) -> list[dict]:
     """Lightweight expectations for harness health (not a full eval suite)."""
+    from .pedagogy_contract import has_teach_move
+
     checks: list[dict] = []
     checks.append({
         "id": "teacher_replied",
         "ok": all(bool(t.student) and bool(t.tutor_reply) for t in log),
         "detail": f"{len(log)} complete exchanges",
     })
+    # Pedagogy system: fraction of tutor turns with a teach move (model/try/recast)
+    if log:
+        n_teach = sum(1 for t in log if has_teach_move(t.parts or {}))
+        rate = n_teach / max(1, len(log))
+        checks.append({
+            "id": "pedagogy_teach_move_rate",
+            "ok": rate >= 0.5,  # soft floor; contract v1 aims higher
+            "detail": f"{n_teach}/{len(log)} turns ({rate:.0%}) with model/try/recast",
+        })
     student_blob = " ".join(t.student.lower() for t in log)
     used_yo_esta = bool(
         re.search(r"\byo\s+est[aá]\b", student_blob)

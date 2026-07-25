@@ -27,6 +27,7 @@ from .character_sheet import (
 from .corpus import load_pack
 from .focus_enrich import enrich_focus_panel, focus_cache_key, focus_model_enabled
 from .session_log import SessionLogger
+from .pedagogy_contract import evaluate_turn
 from .tutor_response import compose_visible, process_tutor_raw
 
 
@@ -369,6 +370,7 @@ class ConversationalSession:
         input_mode: str = "text",
         log_learner: str | None = None,
         refresh_focus: bool = True,
+        is_open: bool = False,
     ) -> TurnResult:
         # Strip legacy sheet_delta, then parse multi-part tutor structure
         stripped, _ = extract_sheet_delta(raw if raw else "")
@@ -406,6 +408,17 @@ class ConversationalSession:
             notes = list(notes) + ["recast"]
         if parts_dict.get("structured"):
             notes = list(notes) + ["structured_reply"]
+
+        # Durable pedagogy contract (code-enforced, not prompt-only)
+        ped = evaluate_turn(
+            parts_dict,
+            is_open=is_open,
+            structured=bool(parts_dict.get("structured")),
+            visible=visible,
+        )
+        notes = list(notes) + list(ped.notes)
+        parts_dict = {**parts_dict, "pedagogy": ped.as_dict()}
+
         result = TurnResult(
             reply=visible,
             notes=notes,
@@ -429,6 +442,7 @@ class ConversationalSession:
                     "input_mode": input_mode,
                     "focus_source": (self._focus_meta or {}).get("source"),
                     "parts": parts_dict,
+                    "pedagogy": ped.as_dict(),
                 },
                 stop_reason=result.stop_reason,
                 usage=usage,
@@ -437,6 +451,7 @@ class ConversationalSession:
                     "tool_delta": tool_delta,
                     "focus_meta": self._focus_meta,
                     "parts": parts_dict,
+                    "pedagogy": ped.as_dict(),
                 },
             )
         return result
@@ -459,6 +474,7 @@ class ConversationalSession:
         result = self._finish(
             "", raw or "", tool_delta, final, usage,
             log_learner="(session open)",
+            is_open=True,
         )
         self.history = [
             {"role": "user", "content": OPEN_HARNESS},
