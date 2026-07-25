@@ -58,9 +58,14 @@ A **soft pedagogical constraint**, not a script.
 ## Anti-patterns (forbidden)
 - "Say: **Me llamo** + your name" when they already introduced themselves
 - Re-asking ¿Cómo estás? after they answered
-- English dual-subtitle walls on every phrase
+- English dual-subtitle walls ("X = Y" on every phrase) — use context/image instead
 - Bare ¡Muy bien! with no content
 - Same try two turns in a row
+- Worksheet "Di…" lines when a real Spanish question works
+
+## PlanCard payload
+The user message includes `pedagogy_constraints` JSON. Treat it as soft goals.
+If `already_asked_by_tutor` / `already_shown_by_learner` list a skill, do not re-drill it.
 """
 
 

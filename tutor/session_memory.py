@@ -50,15 +50,22 @@ class SessionMemory:
         key = _try_key(reason, try_prompt)
         if key:
             self.asked.add(key)
-        # Also mark by content
-        low = (try_prompt or "").lower()
-        if "cómo estás" in low or "como estas" in low.replace("á", "a"):
+        # Also mark by content (try text + reason)
+        blob = f"{reason or ''} {try_prompt or ''}".lower()
+        flat = (
+            blob.replace("á", "a")
+            .replace("é", "e")
+            .replace("í", "i")
+            .replace("ó", "o")
+            .replace("ú", "u")
+        )
+        if "como estas" in flat or "how they are" in flat or "how are you" in flat:
             self.asked.add("ask_how")
-        if "cómo te llamas" in low or "como te llamas" in low.replace("ó", "o"):
+        if "como te llamas" in flat or "their name" in flat or "ask_name" in flat:
             self.asked.add("ask_name")
-        if "dónde eres" in low or "donde eres" in low.replace("ó", "o"):
+        if "donde eres" in flat or "where they" in flat or "origin" in flat:
             self.asked.add("ask_origin")
-        if "gusta" in low:
+        if "gusta" in flat or "like" in flat or "preference" in flat:
             self.asked.add("ask_gusta")
 
     def already_asked(self, *keys: str) -> bool:
