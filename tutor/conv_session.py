@@ -42,8 +42,11 @@ OPEN_HARNESS = (
     "Greet them, invite easy chat, notice abilities — do not start a "
     "greeting worksheet. Use the character sheet as your model of the "
     "learner (next_best / scaffold). "
-    "IMPORTANT: start bilingual (English frame + light Spanish). "
-    "Do not go full Spanish until the sheet says scaffold can ease up. "
+    "LANGUAGE: Spanish-forward CI. Open with Spanish (¡Hola! ¿Cómo estás?) "
+    "and keep most social language in Spanish. English is a light rescue "
+    "only — do not open as an English welcome speech with a Spanish tag. "
+    "Praise in Spanish (¡Muy bien!). Let them infer meaning from context; "
+    "do not dual-subtitle every phrase. Keep Spanish short and clear. "
     "TIME: Do NOT assume they are short on time unless they say so "
     "in THIS session. Past 'few minutes' notes were cleared. "
     "Use structured <tutor> parts; for open, mostly <continue> "
@@ -485,11 +488,14 @@ class ConversationalSession:
         scaffold = (self.sheet.get("receptive") or {}).get(
             "needs_english_scaffold", True)
         scaffold_line = (
-            "SCAFFOLD: needs_english_scaffold=TRUE. Keep EN+ES mix "
-            "(English frames, Spanish models/short tries). Not full Spanish yet."
+            "SCAFFOLD: needs_english_scaffold=TRUE. Still Spanish-forward: "
+            "praise/react in Spanish (¡Muy bien!); model in Spanish; short "
+            "Spanish questions. English only for brief rescue / form contrast "
+            "if they freeze — never English cheerleading or dual-subtitle "
+            "every option (*word* *(translation)* lists)."
             if scaffold else
-            "SCAFFOLD: needs_english_scaffold=FALSE. More Spanish OK; ease back "
-            "to English if they struggle."
+            "SCAFFOLD: needs_english_scaffold=FALSE. Mostly Spanish; English "
+            "rare. Still praise in Spanish."
         )
         mode_line = (
             f"INPUT_MODE: {input_mode}. "
@@ -524,6 +530,10 @@ class ConversationalSession:
             f"If their Spanish has a clear form/register/construction error, "
             f"<recast> is REQUIRED before <continue>. "
             f"Do not praise incorrect Spanish as correct. "
+            f"LANGUAGE MIX: Spanish-first praise/reactions; Spanish models; "
+            f"minimal English; no 'Good job/You nailed it' as main feedback; "
+            f"avoid parenthetical English gloss on every Spanish phrase — "
+            f"let them infer from context. "
             f"Do not skip recast only to chase next_best "
             f"(especially active ERROR_FOCUS patterns).\n"
             f"If this turn gives new evidence, ALSO call "

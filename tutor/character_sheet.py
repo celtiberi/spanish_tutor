@@ -1440,8 +1440,9 @@ def summarize_sheet_changes(before: dict, after: dict) -> list[str]:
         notes.append(f"next={nb.get('can_do') or '—'} / {nb.get('activity')}")
     rec = after.get("receptive") or {}
     notes.append(
-        "scaffold=EN+ES" if rec.get("needs_english_scaffold", True)
-        else "scaffold=more_ES"
+        "scaffold=ES-forward+EN-rescue"
+        if rec.get("needs_english_scaffold", True)
+        else "scaffold=mostly_ES"
     )
     return notes
 

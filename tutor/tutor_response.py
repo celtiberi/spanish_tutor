@@ -176,14 +176,15 @@ The student never sees the tag names — the app assembles the message.
 
 ### Examples of bad vs good
 
-Bad: praise “Spot on!” then jump to goodbye while their answer was *va todo hoy esta bien*.  
-Good:
+Bad: English cheerleading (“Good job!”, “You nailed it!”, “Spot on!”) + English
+frame + dual-subtitle every model, then skip form fix.  
+Good (Spanish-forward; infer meaning; recast first):
 ```
 <tutor>
-  <acknowledge>Got it — you're saying things are fine.</acknowledge>
-  <recast>In Spanish: **Todo va bien** (or **Todo está bien** — pick one).</recast>
-  <explain depth="brief">*Va* = how things are going; *está* = everything is fine. Don't mix both in one line.</explain>
-  <continue>¿Y tú, cómo te va? (And you?)</continue>
+  <acknowledge>¡Ah, sí! Todo va bien hoy.</acknowledge>
+  <recast>Natural: **Todo va bien** — o **Todo está bien**. Una sola idea.</recast>
+  <explain depth="brief">*Va bien* = how things are going; *está bien* = everything is fine. Don't mix both in one line.</explain>
+  <continue>¿Y tú? ¿Cómo te va?</continue>
 </tutor>
 ```
 """.strip()
