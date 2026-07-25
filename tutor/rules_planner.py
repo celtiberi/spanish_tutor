@@ -121,6 +121,7 @@ def plan_turn(
         return not any(k in shown for k in keys)
 
     # --- Open ---
+    # Suggest hola image; teach_assets.decide_teach_image may still reject later.
     if is_open or (blank and not learner):
         return _gated(PlanCard(
             phase="diagnostic",
@@ -133,7 +134,7 @@ def plan_turn(
                 can_do="IP-04",
                 concepts=["hola", "estoy_bien"],
             ),
-            image_concept="hola",
+            image_concept="hola",  # suggestion: wave binds meaning on first open
             scaffold="es_forward",
             allow_new_topic=True,
             max_sentences=8,
@@ -210,6 +211,7 @@ def plan_turn(
                 form_id="present_ser",
                 concepts=["soy_de"],
             ),
+            image_concept="soy_de",  # map/place association when first introducing origin
             scaffold=scaffold,
             allow_new_topic=True,
             max_sentences=8,
@@ -217,7 +219,7 @@ def plan_turn(
             sheet_update_hints=["observe_origin"],
         ))
 
-    # 3) Origin given → free preference / life chat
+    # 3) Origin given → free preference / life chat (café image only if decision allows)
     if shown & {"origin"} and not_asked("ask_gusta"):
         return _gated(PlanCard(
             phase="chat_stretch",
@@ -225,7 +227,8 @@ def plan_turn(
             models=["¡Qué interesante!", "A mí me gusta el café.", "¿Qué te gusta?"],
             try_prompt="React to where they're from; ask about likes (food, coffee, music, boat).",
             english_frame="",
-            targets=PlanTargets(can_do="IP-06", concepts=["me_gusta"]),
+            targets=PlanTargets(can_do="IP-06", concepts=["me_gusta", "cafe"]),
+            image_concept="cafe",  # suggestion; decision may skip if rate-limited / already shown
             scaffold=scaffold,
             allow_new_topic=True,
             max_sentences=8,
@@ -246,7 +249,7 @@ def plan_turn(
             try_prompt="Continue the chat; naturally ask their name in Spanish.",
             english_frame="",
             targets=PlanTargets(can_do="IP-03", concepts=["me_llamo"]),
-            image_concept="me_llamo",
+            image_concept="me_llamo",  # first name form — associate gesture
             scaffold=scaffold,
             allow_new_topic=True,
             max_sentences=8,
@@ -254,11 +257,11 @@ def plan_turn(
             sheet_update_hints=["observe_name"],
         ))
 
-    # 5) Only greet, no estoy yet
+    # 5) Only greet, no estoy yet — social chat; image optional via decision
     if shown & {"greet"} and not_shown("estoy") and not_asked("ask_how"):
         return _gated(PlanCard(
             phase="diagnostic",
-            move="associate",
+            move="model_try",
             models=["Yo estoy bien.", "¿Y tú?"],
             try_prompt="Greet back; ask how they are in natural Spanish.",
             english_frame="",
@@ -275,7 +278,7 @@ def plan_turn(
             sheet_update_hints=["observe_estoy"],
         ))
 
-    # 6) English only / stuck
+    # 6) English only / stuck — visual helps when English frame is the scaffold
     if "english_only" in sig:
         return _gated(PlanCard(
             phase="diagnostic",
@@ -380,7 +383,8 @@ def _gated(card: PlanCard) -> PlanCard:
 
 def _good_models_for_pattern(pid: str, cat: dict) -> list[str]:
     if pid == "estar_yo_estoy_vs_esta":
-        return ["Estoy bien.", "Estoy en el bote."]
+        # Keep models on the form — avoid dragging in unrelated nouns
+        return ["Estoy bien.", "Estoy bien hoy."]
     if pid == "me_llamo_es":
         return ["Me llamo…"]
     if pid == "tengo_not_tango":
@@ -391,12 +395,13 @@ def _good_models_for_pattern(pid: str, cat: dict) -> list[str]:
         return ["Estoy bien.", "Soy de…"]
     return ["Estoy bien."]
 
-
 def _concepts_for_pattern(pid: str) -> list[str]:
+    # Prefer image-worthy ids only when a picture actually helps the form.
+    # Abstract person-agreement (estoy) is *not* image-forced on recast.
     return {
-        "estar_yo_estoy_vs_esta": ["estoy"],
+        "estar_yo_estoy_vs_esta": [],  # form fix in speech, not a picture
         "me_llamo_es": ["me_llamo"],
-        "tengo_not_tango": ["tengo"],
+        "tengo_not_tango": [],
         "soy_de_origin": ["soy_de"],
-        "ser_estar_confuse": ["estar", "ser"],
+        "ser_estar_confuse": [],
     }.get(pid, [])

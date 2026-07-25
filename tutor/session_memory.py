@@ -16,8 +16,16 @@ class SessionMemory:
 
     shown: set[str] = field(default_factory=set)  # skills learner demonstrated
     asked: set[str] = field(default_factory=set)  # probe keys we already tried
+    images_shown: set[str] = field(default_factory=set)  # teach-image concepts shown
+    last_image_turn: int = -999  # session turn index when last image shown
     turns: int = 0
     last_learner: str = ""
+
+    @property
+    def turns_since_image(self) -> int:
+        if self.last_image_turn < 0:
+            return 999
+        return max(0, self.turns - self.last_image_turn)
 
     def note_learner(self, text: str) -> set[str]:
         sig = probe_signals(text)
@@ -44,6 +52,14 @@ class SessionMemory:
         self.last_learner = text or ""
         self.turns += 1
         return sig
+
+    def note_image(self, concept: str | None) -> None:
+        """Record that we displayed a teach image this turn."""
+        c = (concept or "").strip().lower()
+        if not c:
+            return
+        self.images_shown.add(c)
+        self.last_image_turn = self.turns
 
     def note_plan_try(self, reason: str, try_prompt: str) -> None:
         """Record what we asked so we don't loop."""
@@ -78,6 +94,9 @@ class SessionMemory:
         return {
             "shown": sorted(self.shown),
             "asked": sorted(self.asked),
+            "images_shown": sorted(self.images_shown),
+            "turns_since_image": self.turns_since_image,
+            "last_image_turn": self.last_image_turn,
             "turns": self.turns,
         }
 

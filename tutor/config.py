@@ -35,6 +35,11 @@ CONTROLLER_PLANNER = os.environ.get("CONTROLLER_PLANNER", "grok-4.5")
 CONTROLLER_EXECUTOR = os.environ.get("CONTROLLER_EXECUTOR", MODEL)
 # New teacher: "planned" = rules PlanCard + executor; "legacy" = single harness LLM.
 TEACHER_MODE = (os.environ.get("TEACHER_MODE", "planned") or "planned").strip().lower()
+# Teach images: cache-first always. Generate on miss only if true + generator registered.
+TEACH_IMAGE_GENERATE = (
+    os.environ.get("TEACH_IMAGE_GENERATE", "false").strip().lower()
+    in ("1", "true", "yes", "on")
+)
 # Side-rail focus/morphology enricher (cheap). "off" / "static" / "none" = templates only.
 FOCUS_MODEL = os.environ.get("FOCUS_MODEL", "grok-3-mini")
 FOCUS_MAX_TOKENS = int(os.environ.get("FOCUS_MAX_TOKENS", "512"))

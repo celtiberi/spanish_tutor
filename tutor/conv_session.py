@@ -541,10 +541,25 @@ class ConversationalSession:
         self.last_plan = card.as_dict()
         from .teach_assets import assets_for_plan
 
-        teach_images = assets_for_plan(card)
-        if teach_images and not card.image_concept:
-            card.image_concept = teach_images[0].get("concept")
+        # Intelligent image decision: not every turn; concrete form↔meaning only
+        teach_images = assets_for_plan(
+            card,
+            images_shown=self.pedagogy_memory.images_shown,
+            turns_since_image=self.pedagogy_memory.turns_since_image,
+            session_turns=self.pedagogy_memory.turns,
+        )
+        image_decision = getattr(card, "_image_decision", None)
+        if teach_images:
+            concept = teach_images[0].get("concept")
+            card.image_concept = concept
+            self.pedagogy_memory.note_image(concept)
             self.last_plan = card.as_dict()
+        else:
+            # Clear suggested concept if decision rejected it (avoid executor
+            # thinking an image is present when it is not)
+            if image_decision is not None and not getattr(image_decision, "want", False):
+                card.image_concept = None
+                self.last_plan = card.as_dict()
 
         system = build_executor_system(
             sheet_summary=format_sheet_for_prompt(self.sheet),
@@ -609,6 +624,11 @@ class ConversationalSession:
                 "open_phase": phase if is_open else result.parts.get("open_phase"),
                 "teach_images": teach_images,
             }
+            if image_decision is not None:
+                result.parts["image_decision"] = image_decision.as_dict()
+                result.notes = list(result.notes or []) + [
+                    f"image_decision:{image_decision.reason}"
+                ]
             if teach_images:
                 result.notes = list(result.notes or []) + [
                     f"teach_image:{teach_images[0].get('concept')}"
