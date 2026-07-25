@@ -41,9 +41,46 @@ class TestErrorPatterns(unittest.TestCase):
         s = apply_error_pattern_updates(s, "Yo está en mi bote.")
         self.assertEqual(s["error_patterns"]["estar_yo_estoy_vs_esta"]["count"], 2)
         s = apply_error_pattern_updates(s, "Estoy en mi bote.")
-        s = apply_error_pattern_updates(s, "Yo estoy en Río Dulce.")
-        # two resolves → count drops by 1
+        # each clean use drops count (progressive)
         self.assertEqual(s["error_patterns"]["estar_yo_estoy_vs_esta"]["count"], 1)
+        self.assertEqual(s["error_patterns"]["estar_yo_estoy_vs_esta"]["resolved_streak"], 1)
+        s = apply_error_pattern_updates(s, "Yo estoy en Río Dulce.")
+        self.assertEqual(s["error_patterns"]["estar_yo_estoy_vs_esta"]["count"], 0)
+        self.assertEqual(s["error_patterns"]["estar_yo_estoy_vs_esta"]["resolved_streak"], 2)
+        self.assertEqual(s["error_patterns"]["estar_yo_estoy_vs_esta"]["correct_uses"], 2)
+
+    def test_same_turn_error_beats_resolve(self):
+        s = default_sheet()
+        s = apply_error_pattern_updates(s, "Yo está en mi bote.")
+        # mixed line: still counts as error, not resolve
+        s = apply_error_pattern_updates(s, "Yo está… um estoy?")
+        ep = s["error_patterns"]["estar_yo_estoy_vs_esta"]
+        self.assertEqual(ep["resolved_streak"], 0)
+        self.assertGreaterEqual(ep["count"], 2)
+
+    def test_form_focus_until_healthy_streak(self):
+        s = default_sheet()
+        for _ in range(3):
+            s = apply_error_pattern_updates(s, "Yo está en Río Dulce.")
+        # three clean uses → count 0 but streak < 3 until third... 
+        s = apply_error_pattern_updates(s, "Estoy en mi bote.")
+        s = apply_error_pattern_updates(s, "Yo estoy bien.")
+        # count may be 1 or 0; still needs form focus until streak 3
+        active = active_error_patterns(s)
+        self.assertTrue(active)
+        self.assertEqual(active[0]["id"], "estar_yo_estoy_vs_esta")
+        s = recompute_next_best(s)
+        self.assertEqual(s["next_best"].get("error_pattern"), "estar_yo_estoy_vs_esta")
+        self.assertEqual(s["next_best"].get("form_focus"), "present_estar_person")
+        # one more clean → streak 3, count 0 → drop form focus
+        s = apply_error_pattern_updates(s, "Estoy en el río.")
+        ep = s["error_patterns"]["estar_yo_estoy_vs_esta"]
+        self.assertGreaterEqual(ep["resolved_streak"], 3)
+        self.assertEqual(ep["count"], 0)
+        active = active_error_patterns(s)
+        self.assertFalse(active)
+        s = recompute_next_best(s)
+        self.assertIsNone(s["next_best"].get("error_pattern"))
 
     def test_process_turn_notes_error(self):
         s = default_sheet()

@@ -155,6 +155,8 @@ ERROR_PATTERN_CATALOG: dict[str, dict] = {
 }
 
 ERROR_PATTERN_PRIORITY_THRESHOLD = 2  # count at/above → force teaching focus
+# Consecutive correct uses before we drop form focus from next_best
+ERROR_PATTERN_HEALTHY_STREAK = 3
 
 # Tool / free-form ids that should collapse into the catalog
 ERROR_PATTERN_ALIASES: dict[str, str] = {
@@ -659,23 +661,40 @@ def note_error_pattern(
         "teach_hint": cat.get("teach_hint") or "",
         "last_seen": None,
         "resolved_streak": 0,
+        "correct_uses": 0,
     })
     # stamp catalog fields
     ent["label"] = cat.get("label") or ent.get("label") or pattern_id
     ent["form_id"] = cat.get("form_id")
     ent["can_dos"] = list(cat.get("can_dos") or ent.get("can_dos") or [])
     ent["teach_hint"] = cat.get("teach_hint") or ent.get("teach_hint") or ""
+    ent.setdefault("correct_uses", 0)
+    ent.setdefault("resolved_streak", 0)
 
     if resolved:
-        ent["resolved_streak"] = int(ent.get("resolved_streak") or 0) + 1
-        # After two clean uses, ease priority/count slightly
-        if ent["resolved_streak"] >= 2 and int(ent.get("count") or 0) > 0:
-            ent["count"] = max(0, int(ent["count"]) - 1)
-            ent["resolved_streak"] = 0
+        streak = int(ent.get("resolved_streak") or 0) + 1
+        ent["resolved_streak"] = streak
+        ent["correct_uses"] = int(ent.get("correct_uses") or 0) + 1
+        c0 = int(ent.get("count") or 0)
+        # Progressive ease: each clean use chips the error count (faster when
+        # the learner is on a roll of correct forms).
+        if c0 > 0:
+            if streak >= 5:
+                drop = c0  # long clean streak → clear residual
+            elif streak >= 3:
+                drop = min(c0, 2)
+            else:
+                drop = 1
+            ent["count"] = max(0, c0 - drop)
         ent["last_seen"] = now_iso()
+        # Keep a short trail of correct evidence
+        ex = list(ent.get("last_examples") or [])
+        if example and example not in ex and example != "correct use":
+            ex.append(f"✓{example[:90]}")
+            ent["last_examples"] = ex[-5:]
     else:
         ent["count"] = int(ent.get("count") or 0) + 1
-        ent["resolved_streak"] = 0
+        ent["resolved_streak"] = 0  # break the clean streak
         ent["last_seen"] = now_iso()
         ex = list(ent.get("last_examples") or [])
         if example and example not in ex:
@@ -683,7 +702,10 @@ def note_error_pattern(
         ent["last_examples"] = ex[-5:]
 
     c = int(ent.get("count") or 0)
-    if c >= 4:
+    streak = int(ent.get("resolved_streak") or 0)
+    if c == 0 and streak >= ERROR_PATTERN_HEALTHY_STREAK:
+        ent["priority"] = "low"  # recovered
+    elif c >= 4:
         ent["priority"] = "high"
     elif c >= ERROR_PATTERN_PRIORITY_THRESHOLD:
         ent["priority"] = "high"
@@ -716,13 +738,48 @@ def apply_error_pattern_updates(sheet: dict, learner: str) -> dict:
     """Detect recurring constructions from this learner turn."""
     s = copy.deepcopy(sheet)
     s.setdefault("error_patterns", {})
-    for pid, snippet in detect_error_pattern_hits(learner):
+    hits = detect_error_pattern_hits(learner)
+    hit_ids = {pid for pid, _ in hits}
+    for pid, snippet in hits:
         note_error_pattern(s, pid, snippet, resolved=False)
     for pid in detect_error_pattern_resolves(learner):
+        # Same-turn error beats resolve (e.g. "yo está… estoy?" still an error turn)
+        if pid in hit_ids:
+            continue
         # Only count resolve if pattern already known / was an issue
         if pid in (s.get("error_patterns") or {}):
             note_error_pattern(s, pid, "correct use", resolved=True)
     return s
+
+
+def pattern_needs_form_focus(ent: dict) -> bool:
+    """True while the form still needs weaving — not only when count is hot.
+
+    Keep focus until residual count is gone *and* resolved_streak is healthy,
+    so one lucky *estoy* doesn't abandon the form.
+    """
+    if not isinstance(ent, dict):
+        return False
+    c = int(ent.get("count") or 0)
+    streak = int(ent.get("resolved_streak") or 0)
+    correct = int(ent.get("correct_uses") or 0)
+    examples = ent.get("last_examples") or []
+    ever = c >= 1 or correct >= 1 or bool(examples)
+    if not ever:
+        return False
+    # Fully recovered
+    if c == 0 and streak >= ERROR_PATTERN_HEALTHY_STREAK:
+        return False
+    # Hot errors
+    if c >= ERROR_PATTERN_PRIORITY_THRESHOLD:
+        return True
+    # Residual errors or still weaning (need consecutive correct uses)
+    if c >= 1:
+        return True
+    # count cleared but streak not healthy yet
+    if c == 0 and streak < ERROR_PATTERN_HEALTHY_STREAK and correct >= 1:
+        return True
+    return False
 
 
 def active_error_patterns(
@@ -730,18 +787,22 @@ def active_error_patterns(
     *,
     min_count: int = ERROR_PATTERN_PRIORITY_THRESHOLD,
 ) -> list[dict]:
-    """Patterns that should drive teaching (count ≥ min_count, not fully cleared)."""
+    """Patterns that should drive teaching (hot count or still weaning)."""
     out: list[dict] = []
     for pid, ent in (sheet.get("error_patterns") or {}).items():
         if not isinstance(ent, dict):
             continue
         c = int(ent.get("count") or 0)
-        if c < min_count:
+        # Hot (count ≥ threshold) or still needs form focus (residual / recovering)
+        if c < min_count and not pattern_needs_form_focus(ent):
             continue
         cat = ERROR_PATTERN_CATALOG.get(pid) or {}
+        streak = int(ent.get("resolved_streak") or 0)
         out.append({
             "id": pid,
             "count": c,
+            "resolved_streak": streak,
+            "correct_uses": int(ent.get("correct_uses") or 0),
             "priority": ent.get("priority") or "high",
             "label": ent.get("label") or cat.get("label") or pid,
             "form_id": ent.get("form_id") or cat.get("form_id"),
@@ -750,7 +811,8 @@ def active_error_patterns(
             "last_examples": list(ent.get("last_examples") or [])[-3:],
             "last_seen": ent.get("last_seen"),
         })
-    out.sort(key=lambda x: (-x["count"], x["id"]))
+    # Hottest errors first; among equals, lower streak (needs more practice) first
+    out.sort(key=lambda x: (-x["count"], x.get("resolved_streak", 0), x["id"]))
     return out
 
 
@@ -1293,7 +1355,8 @@ def recompute_next_best(sheet: dict) -> dict:
         if "limited time" not in reason.lower():
             reason = f"limited time — keep it short | {reason}"
 
-    # Recurring construction errors outrank pure can-do stretch when hot
+    # Recurring construction errors outrank pure can-do stretch while hot *or*
+    # still weaning (need healthy resolved_streak before dropping form focus).
     form_focus = None
     error_pattern = None
     active = active_error_patterns(s)
@@ -1301,6 +1364,7 @@ def recompute_next_best(sheet: dict) -> dict:
         top = active[0]
         error_pattern = top["id"]
         form_focus = top.get("form_id")
+        streak = int(top.get("resolved_streak") or 0)
         # Prefer a can-do that the pattern supports, if open
         for cid in top.get("can_dos") or []:
             if cid in CAN_DOS and not is_known(cid):
@@ -1308,11 +1372,30 @@ def recompute_next_best(sheet: dict) -> dict:
                 stretch_key = cid
                 act = STRETCH_ACTIVITIES.get(cid) or act
                 break
-        reason = (
-            f"recurring error ×{top['count']}: {top['label']} "
-            f"(e.g. {', '.join(top.get('last_examples') or [])}) — "
-            f"recast/weave before new stretch | {reason}"
+        # Even if can-do is already "known", keep weaving the form in talk
+        if form_focus and can_do is None:
+            for cid in top.get("can_dos") or []:
+                if cid in CAN_DOS:
+                    can_do = cid
+                    stretch_key = cid
+                    act = STRETCH_ACTIVITIES.get(cid) or act
+                    break
+        weaning = (
+            int(top.get("count") or 0) < ERROR_PATTERN_PRIORITY_THRESHOLD
+            and streak < ERROR_PATTERN_HEALTHY_STREAK
         )
+        if weaning:
+            reason = (
+                f"form focus (weaning ×{top['count']}, clean streak {streak}/"
+                f"{ERROR_PATTERN_HEALTHY_STREAK}): {top['label']} — "
+                f"keep weaving correct form | {reason}"
+            )
+        else:
+            reason = (
+                f"recurring error ×{top['count']}: {top['label']} "
+                f"(e.g. {', '.join(top.get('last_examples') or [])}) — "
+                f"recast/weave before new stretch | {reason}"
+            )
         avoid = "ignore_repeated_form_error_and_only_chat"
 
     s["next_best"] = {
