@@ -518,24 +518,56 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
   font-weight: 500;
 }
 
-.sheet-card {
-  max-height: 40vh;
+/* Full sheet modal */
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(8, 12, 18, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  backdrop-filter: blur(3px);
+}
+.sheet-overlay[hidden] {
+  display: none !important;
+}
+.sheet-modal {
+  width: min(720px, 100%);
+  max-height: min(88vh, 900px);
   overflow: auto;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem 1.15rem;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
 }
 .sheet-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-bottom: 0.6rem;
+  margin-bottom: 0.75rem;
+  position: sticky;
+  top: 0;
+  background: var(--bg-elev);
+  padding-bottom: 0.35rem;
+  z-index: 1;
 }
 .sheet-head h2 {
   margin: 0;
-  font-size: 0.78rem;
+  font-size: 0.95rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--text);
+}
+.sheet-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
 }
 .next-best {
   background: #1a2836;
@@ -551,9 +583,9 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
   margin: 0;
   white-space: pre-wrap;
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   color: var(--muted);
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
 .typing {

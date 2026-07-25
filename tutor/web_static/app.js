@@ -13,7 +13,8 @@ const els = {
   micBtn: $("micBtn"),
   speakToggle: $("speakToggle"),
   sheetToggle: $("sheetToggle"),
-  sheetPanel: $("sheetPanel"),
+  sheetOverlay: $("sheetOverlay"),
+  sheetClose: $("sheetClose"),
   sheetBody: $("sheetBody"),
   nextBest: $("nextBest"),
   statusLine: $("statusLine"),
@@ -59,7 +60,7 @@ function renderTutorParts(parts, fallbackContent) {
   }
   if (parts.recast) {
     blocks.push(
-      `<div class="part part-recast"><span class="part-label">Try this</span>${esc(
+      `<div class="part part-recast"><span class="part-label">Natural Spanish</span>${esc(
         parts.recast
       )}</div>`
     );
@@ -69,6 +70,20 @@ function renderTutorParts(parts, fallbackContent) {
     blocks.push(
       `<div class="part part-explain"><span class="part-label">${depth}</span>${esc(
         parts.explain
+      )}</div>`
+    );
+  }
+  if (parts.model) {
+    blocks.push(
+      `<div class="part part-model"><span class="part-label">Model</span>${esc(
+        parts.model
+      )}</div>`
+    );
+  }
+  if (parts.try) {
+    blocks.push(
+      `<div class="part part-try"><span class="part-label">Your turn</span>${esc(
+        parts.try
       )}</div>`
     );
   }
@@ -1152,10 +1167,32 @@ els.input.addEventListener("keydown", (e) => {
   }
 });
 
-els.sheetToggle.addEventListener("click", () => {
-  const open = els.sheetPanel.hidden;
-  els.sheetPanel.hidden = !open;
-  els.sheetToggle.textContent = open ? "Hide sheet" : "Full sheet";
+function setSheetOpen(open) {
+  if (!els.sheetOverlay) return;
+  els.sheetOverlay.hidden = !open;
+  if (els.sheetToggle) {
+    els.sheetToggle.textContent = open ? "Hide sheet" : "Full sheet";
+    els.sheetToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  document.body.style.overflow = open ? "hidden" : "";
+}
+
+els.sheetToggle?.addEventListener("click", () => {
+  // Toggle: when overlay has [hidden], open it
+  setSheetOpen(!!els.sheetOverlay?.hidden);
+});
+
+els.sheetClose?.addEventListener("click", () => setSheetOpen(false));
+
+els.sheetOverlay?.addEventListener("click", (e) => {
+  // Click backdrop (not the modal card) to close
+  if (e.target === els.sheetOverlay) setSheetOpen(false);
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && els.sheetOverlay && !els.sheetOverlay.hidden) {
+    setSheetOpen(false);
+  }
 });
 
 els.newChat.addEventListener("click", async () => {

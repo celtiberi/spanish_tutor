@@ -2,6 +2,7 @@
 
 The teaching model should answer in labeled parts so we can:
   - force a recast before stretching the lesson
+  - surface model + try (teaching, not chat-buddy)
   - optionally show deeper explanation
   - keep conversation moving
   - log/analyze which moves happened
@@ -20,14 +21,15 @@ PART_ORDER = (
     "acknowledge",  # meaning received / rapport
     "recast",       # clean model of what they meant (focus-on-form)
     "explain",      # optional brief/deep form note
-    "continue",     # main next conversational beat / stretch
+    "model",        # input: target phrases to hear/use
+    "try",          # one clear production task
+    "continue",     # optional extra beat after try
 )
 
 PART_TYPES = set(PART_ORDER)
 
-# <recast>...</recast> or <recast brief="true">...</recast>
 _PART_RE = re.compile(
-    r"<(acknowledge|recast|explain|continue)"
+    r"<(acknowledge|recast|explain|model|try|continue)"
     r"(\s[^>]*)?>"
     r"(.*?)"
     r"</\1>",
@@ -43,7 +45,9 @@ class TutorParts:
     recast: str = ""
     explain: str = ""
     explain_depth: str = "brief"  # brief | deep
-    continue_: str = ""  # "continue" is reserved-ish; use continue_
+    model: str = ""
+    try_: str = ""  # try is reserved in some contexts
+    continue_: str = ""
     raw_had_structure: bool = False
     extras: dict[str, str] = field(default_factory=dict)
 
@@ -56,6 +60,10 @@ class TutorParts:
         if self.explain.strip():
             d["explain"] = self.explain.strip()
             d["explain_depth"] = self.explain_depth
+        if self.model.strip():
+            d["model"] = self.model.strip()
+        if self.try_.strip():
+            d["try"] = self.try_.strip()
         if self.continue_.strip():
             d["continue"] = self.continue_.strip()
         d["structured"] = self.raw_had_structure
@@ -63,6 +71,12 @@ class TutorParts:
 
     def has_recast(self) -> bool:
         return bool(self.recast.strip())
+
+    def has_teach_move(self) -> bool:
+        """At least one of model / try / recast (actual teaching)."""
+        return bool(
+            self.model.strip() or self.try_.strip() or self.recast.strip()
+        )
 
 
 def _clean_part_text(s: str) -> str:
@@ -96,6 +110,10 @@ def parse_tutor_response(raw: str) -> TutorParts:
             dm = _DEPTH_RE.search(attrs)
             if dm:
                 parts.explain_depth = dm.group(1).lower()
+        elif kind == "model":
+            parts.model = body
+        elif kind == "try":
+            parts.try_ = body
         elif kind == "continue":
             parts.continue_ = body
 
@@ -115,10 +133,7 @@ def parse_tutor_response(raw: str) -> TutorParts:
 
 
 def compose_visible(parts: TutorParts, *, for_ui: bool = False) -> str:
-    """Plain learner-facing string (CLI / fallback).
-
-    for_ui=False: natural paragraphs, no labels.
-    """
+    """Plain learner-facing string (CLI / fallback / TTS)."""
     chunks: list[str] = []
     if parts.acknowledge.strip():
         chunks.append(parts.acknowledge.strip())
@@ -126,6 +141,10 @@ def compose_visible(parts: TutorParts, *, for_ui: bool = False) -> str:
         chunks.append(parts.recast.strip())
     if parts.explain.strip():
         chunks.append(parts.explain.strip())
+    if parts.model.strip():
+        chunks.append(parts.model.strip())
+    if parts.try_.strip():
+        chunks.append(parts.try_.strip())
     if parts.continue_.strip():
         chunks.append(parts.continue_.strip())
     if not chunks and not for_ui:
@@ -147,7 +166,7 @@ def process_tutor_raw(raw: str) -> tuple[str, TutorParts]:
 STRUCTURED_REPLY_SPEC = """
 ## Structured reply (required shape)
 
-Wrap learner-facing content in these tags (omit a tag if empty).  
+Wrap learner-facing content in these tags (omit a tag if empty).
 The student never sees the tag names — the app assembles the message.
 
 ```
@@ -155,36 +174,40 @@ The student never sees the tag names — the app assembles the message.
   <acknowledge>...</acknowledge>
   <recast>...</recast>
   <explain depth="brief">...</explain>
+  <model>...</model>
+  <try>...</try>
   <continue>...</continue>
 </tutor>
 ```
 
-| Part | When to use |
-|------|-------------|
-| **acknowledge** | Optional. Show you got their meaning / rapport. Do **not** call wrong Spanish “perfect” or “spot on.” |
-| **recast** | **Required** when their Spanish had a clear form, word-order, register, or construction error (not mere accent/typo). Give the clean model of what they meant — short. |
-| **explain** | Optional. `depth="brief"` (default): 1–2 lines focus-on-form. `depth="deep"` only if they asked “why?” / “is that correct?” or the same error repeated. Not a grammar lecture. |
-| **continue** | **Almost always.** Next conversational beat or stretch. Keep the lesson moving unless they are blocked. |
+| Part | When |
+|------|------|
+| **acknowledge** | Meaning / rapport. Not “perfect” on wrong Spanish. |
+| **recast** | Required on form/register/construction error. Clean model. |
+| **explain** | Optional 1–2 lines; deep only if they asked why. |
+| **model** | Usually required: 1–3 short Spanish targets. |
+| **try** | Almost always: one clear production task. |
+| **continue** | Optional extra beat after try. |
 
-### Priority when they produce imperfect Spanish
+### Teaching (not chat-buddy)
 
-1. **Recast** (and optional brief explain) **before** advancing a new stretch.  
-2. Do **not** skip correction just to chase `next_best` (e.g. leave-taking).  
-3. Typos/accents alone → no recast needed; model clean form in passing if useful.  
-4. Conceptual mix-ups (*va* + *está* jammed together, *me llamo es*, wrong person) → **recast required**.  
-5. If they only asked for a translation of *your* Spanish, acknowledge that — still recast if they also produced a broken reply.
+Every turn needs a teach move: **model**, **try**, and/or **recast+retry**.
+A lone open question with no model is wrong.
 
-### Examples of bad vs good
+Bad: only “¡Hola! ¿Cómo estás?” with no models.
+Good: model **Estoy bien / Estoy más o menos** then try “¿Cómo estás?”
 
-Bad: English cheerleading (“Good job!”, “You nailed it!”, “Spot on!”) + English
-frame + dual-subtitle every model, then skip form fix.  
-Good (Spanish-forward; infer meaning; recast first):
+After a recast, **try** = same form again — do not jump topics.
+
+### Example
+
 ```
 <tutor>
-  <acknowledge>¡Ah, sí! Todo va bien hoy.</acknowledge>
-  <recast>Natural: **Todo va bien** — o **Todo está bien**. Una sola idea.</recast>
-  <explain depth="brief">*Va bien* = how things are going; *está bien* = everything is fine. Don't mix both in one line.</explain>
-  <continue>¿Y tú? ¿Cómo te va?</continue>
+  <acknowledge>¡Ah, sí! Todo bien hoy.</acknowledge>
+  <recast>Natural: **Todo va bien** — o **Todo está bien**.</recast>
+  <explain depth="brief">Pick one pattern — don't mix va + está.</explain>
+  <model>**Todo va bien.** / **Estoy bien.**</model>
+  <try>Di una: **Todo va bien** o **Estoy bien**.</try>
 </tutor>
 ```
 """.strip()

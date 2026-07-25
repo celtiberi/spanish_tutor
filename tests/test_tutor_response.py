@@ -50,6 +50,25 @@ class TestTutorResponse(unittest.TestCase):
         p = parse_tutor_response(raw)
         self.assertEqual(p.explain_depth, "deep")
 
+    def test_model_and_try_parts(self):
+        raw = """
+        <tutor>
+          <model>**Estoy bien.** / **Estoy más o menos.**</model>
+          <try>¿Cómo estás hoy?</try>
+        </tutor>
+        """
+        p = parse_tutor_response(raw)
+        self.assertTrue(p.raw_had_structure)
+        self.assertIn("Estoy bien", p.model)
+        self.assertIn("Cómo estás", p.try_)
+        self.assertTrue(p.has_teach_move())
+        vis = compose_visible(p)
+        self.assertIn("Estoy bien", vis)
+        self.assertIn("Cómo estás", vis)
+        d = p.as_dict()
+        self.assertIn("model", d)
+        self.assertIn("try", d)
+
 
 if __name__ == "__main__":
     unittest.main()
