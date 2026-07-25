@@ -50,6 +50,11 @@ class ChatIn(BaseModel):
     input_mode: str = Field(default="text", pattern="^(text|speech)$")
 
 
+class StartIn(BaseModel):
+    """fresh=true: ignore cookie session and open a new chat (page restart)."""
+    fresh: bool = False
+
+
 class ResetIn(BaseModel):
     reset_sheet: bool = False
 
@@ -268,18 +273,50 @@ def create_app() -> FastAPI:
                 pass
 
     @app.post("/api/session/start")
-    def session_start(request: Request, response: Response):
+    def session_start(
+        request: Request,
+        response: Response,
+        body: StartIn | None = None,
+    ):
+        body = body or StartIn()
         sid = request.cookies.get(COOKIE)
+
+        # Explicit fresh start: drop cookie session (same as New chat, keep sheet)
+        if body.fresh:
+            if sid and sid in _sessions:
+                with _lock:
+                    old = _sessions.pop(sid, None)
+                if old and old.get("session"):
+                    try:
+                        old["session"].close(persist_sheet=True)
+                    except Exception:
+                        pass
+            sid = None
+
         sid, session = _get_or_create(sid)
+
+        # Always re-read sheet from disk so a manual file wipe shows up
+        try:
+            from .character_sheet import (
+                clear_session_scoped_affect,
+                load_sheet,
+            )
+            session.sheet = clear_session_scoped_affect(
+                load_sheet(session.sheet_path)
+            )
+        except Exception:
+            pass
+
         with _lock:
             meta = _sessions[sid]
             already = meta.get("opened")
-        if already and session.messages_for_ui:
-            # Resume existing browser session
+
+        if already and session.messages_for_ui and not body.fresh:
+            # Resume existing browser session (same cookie, F5)
             result = {
                 "reply": session.messages_for_ui[-1]["content"]
                 if session.messages_for_ui else "",
-                "notes": [],
+                "notes": ["resumed_session"],
                 "next_best": session.sheet.get("next_best"),
                 "skills": {
                     k: {"status": v.get("status"), "confidence": v.get("confidence")}
@@ -290,6 +327,11 @@ def create_app() -> FastAPI:
                 "resumed": True,
             }
         else:
+            # New open (or fresh=true wiped the old chat)
+            session.history = []
+            session.messages_for_ui = []
+            session._focus_panel = None
+            session._focus_key = None
             turn = session.open_session()
             if turn.error:
                 raise HTTPException(status_code=502, detail=turn.error)

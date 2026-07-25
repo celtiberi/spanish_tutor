@@ -500,12 +500,38 @@ function showMessages(list) {
 async function startSession() {
   setBusy(true);
   els.statusLine.textContent = "Connecting…";
+  // ?fresh=1 or ?new=1 → new chat on load (ignores resumed cookie session)
+  const params = new URLSearchParams(window.location.search || "");
+  const wantFresh =
+    params.has("fresh") || params.has("new") || params.get("session") === "new";
   try {
-    const data = await api("/api/session/start", { method: "POST", body: "{}" });
+    const data = await api("/api/session/start", {
+      method: "POST",
+      body: JSON.stringify({ fresh: wantFresh }),
+    });
     showMessages(data.messages);
     setNotes(data.notes);
     renderSheet(data.sheet);
-    els.statusLine.textContent = `Model ${data.model || "tutor"} · character sheet live`;
+    if (data.resumed) {
+      els.statusLine.textContent = `Resumed previous chat · model ${data.model || "tutor"}`;
+      addBubble(
+        "system",
+        "Resumed your last conversation (refresh keeps chat). " +
+          "Click **New chat** for a blank page (keeps sheet), or **Reset learner** to wipe the sheet."
+      );
+    } else {
+      els.statusLine.textContent = `Model ${data.model || "tutor"} · character sheet live`;
+      if (wantFresh) {
+        // Drop query flag so the next normal refresh can resume if desired
+        try {
+          const u = new URL(window.location.href);
+          u.searchParams.delete("fresh");
+          u.searchParams.delete("new");
+          u.searchParams.delete("session");
+          window.history.replaceState({}, "", u.pathname + u.search);
+        } catch (_) {}
+      }
+    }
     if (data.reply && !data.resumed) speak(data.reply);
   } catch (e) {
     addBubble("system", `Could not start: ${e.message}`);
