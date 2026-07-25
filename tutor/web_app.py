@@ -135,10 +135,19 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health")
     def health():
+        teach_cache = {}
+        try:
+            from .teach_assets import cache_stats, seed_index_from_disk
+
+            seed_index_from_disk()
+            teach_cache = cache_stats()
+        except Exception as e:
+            teach_cache = {"error": f"{type(e).__name__}: {e}"}
         return {
             "ok": True,
             "model": config.MODEL,
             "teacher_mode": getattr(config, "TEACHER_MODE", "planned"),
+            "teach_image_cache": teach_cache,
             "pack": config.DEFAULT_PACK_DIR.name,
             "tts": {
                 "enabled": tts_mod.tts_enabled(),

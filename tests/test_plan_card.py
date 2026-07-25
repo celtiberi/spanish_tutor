@@ -10,7 +10,13 @@ from tutor.plan_card import (
     gate_plan_card,
 )
 from tutor.rules_planner import plan_turn
-from tutor.teach_assets import assets_for_plan, resolve_concept
+from tutor.teach_assets import (
+    assets_for_plan,
+    cache_lookup,
+    cache_put,
+    ensure_asset,
+    resolve_concept,
+)
 
 
 class TestPlanCard(unittest.TestCase):
@@ -92,8 +98,32 @@ class TestRulesPlanner(unittest.TestCase):
         self.assertTrue(assets, "hola teach asset should resolve")
         self.assertEqual(assets[0]["concept"], "hola")
         self.assertIn("/static/teach_assets/", assets[0]["url"])
+        self.assertEqual(assets[0].get("cache"), "hit")
         self.assertIsNotNone(resolve_concept("hola"))
         self.assertIsNotNone(resolve_concept("estoy_bien"))
+
+    def test_cache_lookup_no_generate(self):
+        """Server must serve known concepts from disk without generation."""
+        hit = cache_lookup("hola")
+        self.assertIsNotNone(hit)
+        self.assertEqual(hit["cache"], "hit")
+        # Unknown concept: miss, no throw
+        miss = cache_lookup("totally_unknown_xyz")
+        self.assertIsNone(miss)
+        # ensure without generate stays None on miss
+        still = ensure_asset("totally_unknown_xyz", generate=False)
+        self.assertIsNone(still)
+
+    def test_cache_put_then_hit(self):
+        key = "test_cache_blob"
+        # tiny fake jpeg header-ish bytes
+        data = b"\xff\xd8\xff\xe0" + b"\x00" * 64
+        put = cache_put(key, data, form="Test", caption="cache unit", ext=".jpg")
+        self.assertIsNotNone(put)
+        hit = cache_lookup(key)
+        self.assertIsNotNone(hit)
+        self.assertEqual(hit["concept"], key)
+        self.assertEqual(hit["cache"], "hit")
 
 
 if __name__ == "__main__":
