@@ -170,11 +170,9 @@ def gate_plan_card(card: PlanCard | dict | None) -> GateResult:
             errors.append("recast_needs_try")
 
     if card.phase == "diagnostic":
-        if card.scaffold not in ("en_rescue", "es_forward"):
+        if card.scaffold not in ("en_rescue", "es_forward", "mostly_es"):
             errors.append("diagnostic_scaffold")
-        # Diagnostic should stay tiny
-        if card.allow_new_topic:
-            errors.append("diagnostic_no_new_topic")
+        # allow_new_topic OK on diagnostic — we probe in conversation, not worksheets
 
     if card.max_sentences < 1 or card.max_sentences > 12:
         errors.append("max_sentences_range")
@@ -189,25 +187,22 @@ def gate_plan_card(card: PlanCard | dict | None) -> GateResult:
 
 
 def fallback_diagnostic_card() -> PlanCard:
-    """Safe open when planner/gate fails."""
+    """Safe open when planner/gate fails — still a real Spanish question."""
     return PlanCard(
         phase="diagnostic",
-        move="english_frame",
-        models=["Hola.", "Estoy bien."],
-        try_prompt="Say **Hola** — or try **Estoy bien** (I am fine) if you can.",
-        english_frame=(
-            "Hi — I'm your Spanish tutor. We'll start tiny so I can see "
-            "what you already know."
-        ),
+        move="model_try",
+        models=["¡Hola! Estoy bien.", "¿Cómo estás?"],
+        try_prompt="¿Cómo estás?",
+        english_frame="¡Hola! Short Spanish is fine — how are you?",
         targets=PlanTargets(
             form_id="present_estar_person",
-            can_do="IP-01",
+            can_do="IP-04",
             concepts=["hola", "estoy_bien"],
         ),
         image_concept="hola",
-        scaffold="en_rescue",
-        allow_new_topic=False,
-        max_sentences=5,
-        reason="fallback_diagnostic",
+        scaffold="es_forward",
+        allow_new_topic=True,
+        max_sentences=6,
+        reason="fallback_comm_open",
         sheet_update_hints=["observe_greeting", "observe_estoy"],
     )

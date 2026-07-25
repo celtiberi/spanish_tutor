@@ -1,6 +1,8 @@
 """Rules-only pedagogical planner → PlanCard.
 
-No LLM. Sheet + learner utterance + error hits → closed decision.
+Communicative probes first (CLT). Flashcard ladders only when the learner
+is stuck / English-only / zero production. Association images still attach
+to new forms — but the *try* is a real conversational move when they can.
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ def _scaffold_for_sheet(sheet: dict) -> str:
     rec = sheet.get("receptive") or {}
     if rec.get("needs_english_scaffold", True):
         if is_blank_learner(sheet):
-            return "en_rescue"
+            return "es_forward"  # still Spanish-forward; EN only as lifeline
         return "es_forward"
     return "mostly_es"
 
@@ -38,6 +40,44 @@ def _skill_conf(sheet: dict, cid: str) -> float:
         return float(sk.get("confidence") or 0)
     except (TypeError, ValueError):
         return 0.0
+
+
+def probe_signals(learner: str) -> set[str]:
+    """What the *current utterance* already shows (placement, not a drill queue)."""
+    low = (learner or "").lower()
+    s: set[str] = set()
+    if not low.strip():
+        return s
+    if re.search(r"\b(hola|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches)\b", low):
+        s.add("greet")
+    if re.search(r"\bestoy\b", low):
+        s.add("estoy")
+    if re.search(r"\bme\s+llamo\b", low):
+        s.add("name")
+    if re.search(r"\bc[oó]mo\s+te\s+llamas\b", low):
+        s.add("ask_name")
+    if re.search(r"\bc[oó]mo\s+est[aá]s\b", low):
+        s.add("ask_how")
+    if re.search(r"\bme\s+gusta\b", low):
+        s.add("gusta")
+    if re.search(r"\b(gracias|por\s+favor|adi[oó]s|hasta\s+luego)\b", low):
+        s.add("polite")
+    if re.search(r"\b(caf[eé]|bote|barco|r[ií]o|comida|m[uú]sica)\b", low):
+        s.add("topic_vocab")
+    # Mostly English (few Spanish content words)
+    es_hits = len(re.findall(
+        r"\b(hola|estoy|llamo|llamas|gracias|gusta|soy|tengo|bien|sí|si|no|"
+        r"buenos|buenas|adiós|adios|dónde|donde|cómo|como)\b",
+        low,
+    ))
+    en_words = len(re.findall(r"\b[a-z]{3,}\b", low))
+    if en_words >= 3 and es_hits == 0:
+        s.add("english_only")
+    if es_hits >= 2 or (es_hits >= 1 and len(low.split()) <= 6):
+        s.add("spanish_ok")
+    if len(s & {"greet", "estoy", "name", "ask_name", "gusta"}) >= 2:
+        s.add("multi_skill")
+    return s
 
 
 def plan_turn(
@@ -55,37 +95,33 @@ def plan_turn(
     blank = is_blank_learner(sheet)
     active = active_error_patterns(sheet)
     nb = sheet.get("next_best") or {}
+    sig = probe_signals(learner)
 
-    # --- Open / blank diagnostic ---
+    # --- Open: real Spanish exchange, not "say hola if you can" ---
     if is_open or (blank and not learner):
         card = PlanCard(
             phase="diagnostic",
-            move="english_frame",
-            models=["Hola.", "Estoy bien."],
-            try_prompt=(
-                "Say **Hola** — or try **Estoy bien** (I am fine) if you can."
-            ),
+            move="model_try",
+            models=["¡Hola! Estoy bien.", "¿Cómo estás?"],
+            try_prompt="¿Cómo estás?",
             english_frame=(
-                "Hi — I'm your Spanish tutor. We'll start tiny so I can see "
-                "what you already know."
+                "¡Hola! We'll chat in Spanish — short answers are perfect."
             ),
             targets=PlanTargets(
                 form_id="present_estar_person",
-                can_do="IP-01",
+                can_do="IP-04",
                 concepts=["hola", "estoy_bien"],
             ),
-            # Primary visual: wave hello → associates Hola without English dump
             image_concept="hola",
-            scaffold="en_rescue" if blank else scaffold,
-            allow_new_topic=False,
-            max_sentences=5,
-            reason="diagnostic_open" if is_open else "blank_learner",
+            scaffold="es_forward",
+            allow_new_topic=True,  # conversation, not a worksheet cell
+            max_sentences=6,
+            reason="comm_open_probe",
             sheet_update_hints=["observe_greeting", "observe_estoy"],
         )
-        g = gate_plan_card(card)
-        return g.card if g.ok and g.card else fallback_diagnostic_card()
+        return _gated(card)
 
-    # --- Same-turn form error → recast + retry ---
+    # --- Form error: recast in conversation, then retry ---
     if hit_ids:
         pid = hit_ids[0]
         cat = ERROR_PATTERN_CATALOG.get(pid) or {}
@@ -108,23 +144,179 @@ def plan_turn(
             max_sentences=5,
             reason=f"error_hit:{pid}",
             sheet_update_hints=[f"error:{pid}", "observe_retry"],
-            english_frame=(
-                ""
-                if scaffold == "mostly_es"
-                else ""
-            ),
         )
-        g = gate_plan_card(card)
-        if g.ok and g.card:
-            return g.card
+        return _gated(card)
 
-    # --- Still diagnostic if blank but they spoke (English or minimal) ---
-    if blank:
-        card = _diagnostic_followup(sheet, learner, scaffold, resolves)
-        g = gate_plan_card(card)
-        return g.card if g.ok and g.card else fallback_diagnostic_card()
+    # --- Communicative branch from what they just said ---
+    if "ask_name" in sig:
+        # They asked our name — answer + new real question (NOT re-drill Me llamo)
+        card = PlanCard(
+            phase="chat_stretch",
+            move="model_try",
+            models=["Me llamo Sofía.", "¿Te gusta el café?"],
+            try_prompt="¿Te gusta el café? — **Sí, me gusta** / **No, no me gusta**.",
+            english_frame=(
+                "¡Claro! *¿Cómo te llamas?* = What's your name? "
+                "I'm Sofía. Now a preference:"
+            ),
+            targets=PlanTargets(
+                can_do="IP-06",
+                concepts=["me_gusta"],
+            ),
+            scaffold="es_forward",
+            allow_new_topic=True,
+            max_sentences=7,
+            reason="answered_ask_name_probe_gusta",
+            sheet_update_hints=["observe_gusta", "can_do:IP-06"],
+        )
+        return _gated(card)
 
-    # --- Hot error on sheet (weaning / focus) ---
+    if "name" in sig and "ask_name" not in sig:
+        # They gave their name — react, probe origin/preference in Spanish
+        name_m = re.search(
+            r"me\s+llamo\s+([A-Za-zÁÉÍÓÚáéíóúñÑ]+)",
+            learner,
+            re.I,
+        )
+        nm = name_m.group(1) if name_m else ""
+        card = PlanCard(
+            phase="chat_stretch",
+            move="model_try",
+            models=[
+                f"¡Mucho gusto{', ' + nm if nm else ''}!",
+                "¿De dónde eres?",
+                "Yo soy de Colombia.",
+            ],
+            try_prompt="¿De dónde eres? — **Soy de…**",
+            english_frame=(
+                f"¡Mucho gusto{', ' + nm if nm else ''}! "
+                "*¿De dónde eres?* = Where are you from?"
+            ),
+            targets=PlanTargets(
+                can_do="IP-07",
+                form_id="present_ser",
+                concepts=["soy_de"],
+            ),
+            scaffold="es_forward",
+            allow_new_topic=True,
+            max_sentences=7,
+            reason="name_given_probe_origin",
+            sheet_update_hints=["observe_origin", "can_do:IP-07"],
+        )
+        return _gated(card)
+
+    if "multi_skill" in sig or (
+        "greet" in sig and "estoy" in sig
+    ):
+        # Strong first production — skip flashcard ladder, probe names in chat
+        card = PlanCard(
+            phase="chat_stretch",
+            move="associate",
+            models=["Me llamo Sofía.", "¿Cómo te llamas?"],
+            try_prompt="¿Cómo te llamas?",
+            english_frame=(
+                "¡Muy bien! You greeted me and said how you are. "
+                "**Me llamo…** = My name is… / **¿Cómo te llamas?** = What's your name?"
+            ),
+            targets=PlanTargets(
+                can_do="IP-03",
+                concepts=["me_llamo"],
+            ),
+            image_concept="me_llamo",
+            scaffold="es_forward",
+            allow_new_topic=True,
+            max_sentences=7,
+            reason="probe_name_after_greeting_estoy",
+            sheet_update_hints=["observe_name", "can_do:IP-03"],
+        )
+        return _gated(card)
+
+    if "greet" in sig and "estoy" not in sig:
+        # Only hola — keep chatting about how they are (not a worksheet)
+        card = PlanCard(
+            phase="diagnostic",
+            move="associate",
+            models=["Estoy bien.", "¿Y tú? ¿Cómo estás?"],
+            try_prompt="¿Cómo estás? — **Estoy bien** / **Estoy más o menos**.",
+            english_frame=(
+                "¡Hola! **¿Cómo estás?** = How are you? "
+                "**Estoy bien** = I am fine."
+            ),
+            targets=PlanTargets(
+                form_id="present_estar_person",
+                can_do="IP-04",
+                concepts=["estoy_bien"],
+            ),
+            image_concept="estoy_bien",
+            scaffold="es_forward",
+            allow_new_topic=True,
+            max_sentences=6,
+            reason="probe_how_are_you",
+            sheet_update_hints=["observe_estoy"],
+        )
+        return _gated(card)
+
+    if "estoy" in sig and "greet" not in sig and "name" not in sig:
+        card = PlanCard(
+            phase="chat_stretch",
+            move="associate",
+            models=["Me llamo Sofía.", "¿Cómo te llamas?"],
+            try_prompt="¿Cómo te llamas?",
+            english_frame=(
+                "¡Bien! **Me llamo…** = My name is… "
+                "Picture = introducing myself."
+            ),
+            targets=PlanTargets(can_do="IP-03", concepts=["me_llamo"]),
+            image_concept="me_llamo",
+            scaffold="es_forward",
+            allow_new_topic=True,
+            max_sentences=6,
+            reason="estoy_then_name_chat",
+            sheet_update_hints=["observe_name"],
+        )
+        return _gated(card)
+
+    if "gusta" in sig or "topic_vocab" in sig:
+        card = PlanCard(
+            phase="chat_stretch",
+            move="model_try",
+            models=["A mí me gusta el café.", "¿Y el bote? ¿Te gusta?"],
+            try_prompt="¿Qué te gusta? — **Me gusta…**",
+            english_frame="Nice — keep going. **Me gusta…** = I like…",
+            targets=PlanTargets(can_do="IP-06", concepts=["me_gusta"]),
+            scaffold="es_forward",
+            allow_new_topic=True,
+            max_sentences=7,
+            reason="preference_chat",
+            sheet_update_hints=["observe_gusta"],
+        )
+        return _gated(card)
+
+    # English-only / stuck — then we scaffold harder (still a real question)
+    if "english_only" in sig or (blank and "spanish_ok" not in sig):
+        card = PlanCard(
+            phase="diagnostic",
+            move="english_frame",
+            models=["¡Hola!", "Estoy bien.", "¿Cómo estás?"],
+            try_prompt="Try: **Hola** or **Estoy bien** — or answer **¿Cómo estás?**",
+            english_frame=(
+                "No problem — English is fine for a second. "
+                "Here's a tiny Spanish chat move:"
+            ),
+            targets=PlanTargets(
+                can_do="IP-01",
+                concepts=["hola", "estoy_bien"],
+            ),
+            image_concept="hola",
+            scaffold="en_rescue",
+            allow_new_topic=True,
+            max_sentences=6,
+            reason="english_scaffold_probe",
+            sheet_update_hints=["observe_greeting", "observe_estoy"],
+        )
+        return _gated(card)
+
+    # Hot error on sheet (weaning)
     if active:
         top = active[0]
         pid = top["id"]
@@ -147,112 +339,25 @@ def plan_turn(
             reason=f"active_error:{pid}×{top.get('count')}",
             sheet_update_hints=[f"weave:{pid}"],
         )
-        g = gate_plan_card(card)
-        if g.ok and g.card:
-            return g.card
+        return _gated(card)
 
-    # --- Transfer if form getting usable ---
-    form_focus = nb.get("form_focus") or nb.get("error_pattern")
-    if form_focus and _form_transfer_ready(sheet, form_focus):
-        card = PlanCard(
-            phase="transfer",
-            move="transfer_try",
-            models=_transfer_models(form_focus),
-            try_prompt=_transfer_try(form_focus),
-            targets=PlanTargets(
-                form_id=form_focus if form_focus.startswith("present_") else None,
-                error_pattern=nb.get("error_pattern"),
-                can_do=nb.get("can_do"),
-                concepts=["estoy"] if "estar" in str(form_focus) else [],
-            ),
-            scaffold=scaffold,
-            allow_new_topic=False,
-            max_sentences=6,
-            reason="transfer_form",
-            sheet_update_hints=["observe_transfer"],
-        )
-        g = gate_plan_card(card)
-        if g.ok and g.card:
-            return g.card
+    # Known learner / next_best — still model+try but conversational
+    can_do = nb.get("can_do") or "IP-07"
+    card = _card_for_can_do(can_do, nb, scaffold)
+    return _gated(card)
 
-    # --- next_best stretch with model+try ---
-    can_do = nb.get("can_do") or "IP-04"
-    card = _card_for_can_do(can_do, nb, scaffold, resolves)
+
+def _gated(card: PlanCard) -> PlanCard:
     g = gate_plan_card(card)
     if g.ok and g.card:
         return g.card
+    # Retry with allow_new_topic relaxed if that was the only issue
+    if g.errors == ["diagnostic_no_new_topic"]:
+        card.allow_new_topic = False
+        g2 = gate_plan_card(card)
+        if g2.ok and g2.card:
+            return g2.card
     return fallback_diagnostic_card()
-
-
-def _diagnostic_followup(
-    sheet: dict, learner: str, scaffold: str, resolves: list[str],
-) -> PlanCard:
-    """After first reply on blank sheet: stay tiny, build evidence."""
-    low = learner.lower()
-    if re.search(r"\bhola\b", low) and not re.search(r"\bestoy\b", low):
-        return PlanCard(
-            phase="diagnostic",
-            move="associate",
-            models=["Estoy bien.", "Estoy más o menos."],
-            try_prompt="Your turn: **Estoy bien**.",
-            english_frame=(
-                "¡Muy bien! — *hola* is a greeting (hello). "
-                "Next: **Estoy bien** means “I am fine.” "
-                "Picture = feeling OK. Then say *Estoy bien*."
-            ),
-            targets=PlanTargets(
-                form_id="present_estar_person",
-                can_do="IP-04",
-                concepts=["estoy_bien"],
-            ),
-            image_concept="estoy_bien",
-            scaffold="en_rescue",
-            allow_new_topic=False,
-            max_sentences=6,
-            reason="diagnostic_after_hola",
-            sheet_update_hints=["observe_estoy"],
-        )
-    if "estoy" in resolves or re.search(r"\bestoy\b", low):
-        return PlanCard(
-            phase="diagnostic",
-            move="associate",
-            # One new form only — association, not a double question dump
-            models=["Me llamo Alex.", "Me llamo…"],
-            try_prompt="Your turn: **Me llamo** + your name.",
-            english_frame=(
-                "¡Muy bien! — you used *estoy*. "
-                "Next phrase: **Me llamo…** means “My name is…”. "
-                "Picture: pointing to myself. Then you say *Me llamo* + your name."
-            ),
-            targets=PlanTargets(
-                can_do="IP-03",
-                concepts=["me_llamo"],
-            ),
-            image_concept="me_llamo",
-            scaffold="en_rescue",
-            allow_new_topic=False,
-            max_sentences=6,
-            reason="diagnostic_after_estoy",
-            sheet_update_hints=["observe_name"],
-        )
-    # English or freeze
-    return PlanCard(
-        phase="diagnostic",
-        move="english_frame",
-        models=["Hola.", "Estoy bien."],
-        try_prompt="Just try one: **Hola** or **Estoy bien**.",
-        english_frame=(
-            "No problem — Spanish takes time. Copy one short line:"
-        ),
-        targets=PlanTargets(
-            form_id="present_estar_person",
-            can_do="IP-01",
-            concepts=["hola", "estoy_bien"],
-        ),
-        scaffold="en_rescue",
-        reason="diagnostic_english_or_stuck",
-        sheet_update_hints=["observe_greeting", "observe_estoy"],
-    )
 
 
 def _good_models_for_pattern(pid: str, cat: dict) -> list[str]:
@@ -272,8 +377,8 @@ def _good_models_for_pattern(pid: str, cat: dict) -> list[str]:
 def _try_for_pattern(pid: str, models: list[str]) -> str:
     m0 = models[0] if models else "…"
     if pid == "estar_yo_estoy_vs_esta":
-        return f"Di una: **{m0.replace('.', '')}**"
-    return f"Your turn — say: **{m0.replace('.', '')}**"
+        return f"¿Y tú? Di: **{m0.replace('.', '')}**"
+    return f"Your turn — **{m0.replace('.', '')}**"
 
 
 def _concepts_for_pattern(pid: str) -> list[str]:
@@ -286,94 +391,79 @@ def _concepts_for_pattern(pid: str) -> list[str]:
     }.get(pid, [])
 
 
-def _form_transfer_ready(sheet: dict, form_focus: str) -> bool:
-    g = (sheet.get("grammar") or {}).get(form_focus) or {}
-    try:
-        conf = float(g.get("confidence") or 0)
-    except (TypeError, ValueError):
-        conf = 0.0
-    status = (g.get("status") or "").lower()
-    return conf >= 0.45 or status in ("emerging", "known", "usable")
-
-
-def _transfer_models(form_focus: str) -> list[str]:
-    if "estar" in str(form_focus):
-        return ["Estoy relajado/a.", "Estoy trabajando."]
-    return ["Otra frase con la misma forma."]
-
-
-def _transfer_try(form_focus: str) -> str:
-    if "estar" in str(form_focus):
-        return "¿Y tú? **Estoy** relajado/a o **estoy** trabajando?"
-    return "Try the same form in a new short sentence."
-
-
-def _card_for_can_do(
-    can_do: str, nb: dict, scaffold: str, resolves: list[str],
-) -> PlanCard:
-    """Map next_best can-do to models + try."""
-    catalog = {
+def _card_for_can_do(can_do: str, nb: dict, scaffold: str) -> PlanCard:
+    """Map next_best can-do to a *conversational* probe, not a flashcard."""
+    catalog: dict[str, tuple[list[str], str, list[str], str, str | None]] = {
+        # models, try, concepts, english_frame, image
         "IP-01": (
-            ["Hola.", "Buenos días."],
-            "Di: **Hola**.",
+            ["¡Hola!", "¿Qué tal?"],
+            "¿Qué tal?",
             ["hola"],
+            "Quick greeting chat:",
+            "hola",
         ),
         "IP-03": (
-            ["Me llamo…", "¿Cómo te llamas?"],
-            "Di: **Me llamo** + your name.",
+            ["Me llamo Sofía.", "¿Cómo te llamas?"],
+            "¿Cómo te llamas?",
             ["me_llamo"],
+            "**¿Cómo te llamas?** = What's your name?",
+            "me_llamo",
         ),
         "IP-04": (
-            ["Estoy bien.", "Estoy más o menos."],
-            "Di: **Estoy bien**.",
+            ["Estoy bien.", "¿Cómo estás hoy?"],
+            "¿Cómo estás hoy?",
             ["estoy_bien"],
+            "**¿Cómo estás?** = How are you?",
+            "estoy_bien",
         ),
         "IP-05": (
-            ["Adiós.", "Hasta luego."],
-            "Di: **Hasta luego**.",
+            ["Hasta luego.", "¡Nos vemos!"],
+            "Di: **Hasta luego** when you're done — or keep chatting: ¿Qué te gusta?",
             ["adios"],
+            "Leave-taking if you need it — or stay:",
+            None,
         ),
         "IP-06": (
-            ["Me gusta el café.", "Me gusta…"],
-            "Di: **Me gusta** + something you like.",
+            ["Me gusta el café.", "¿Te gusta la música?"],
+            "¿Qué te gusta?",
             ["me_gusta"],
+            "**Me gusta…** = I like…",
+            None,
         ),
         "IP-07": (
-            ["Estoy en…", "Soy de…"],
-            "Di where you are: **Estoy en**…",
-            ["estoy_en", "soy_de"],
+            ["Estoy en Guatemala.", "¿De dónde eres?"],
+            "¿De dónde eres? o ¿Dónde estás?",
+            ["soy_de", "estoy_en"],
+            "Personal chat: where from / where now?",
+            None,
         ),
     }
-    models, try_p, concepts = catalog.get(
+    models, try_p, concepts, frame, img = catalog.get(
         can_do,
         (
-            ["Estoy bien.", "Hola."],
-            "Di una frase corta en español.",
-            ["hola"],
+            ["¿Qué te gusta?", "Me gusta…"],
+            "¿Qué te gusta?",
+            ["me_gusta"],
+            "Let's keep chatting:",
+            None,
         ),
     )
-    phase = "chat_stretch"
-    if can_do in ("IP-01", "IP-04") and _skill_conf_from_nb(nb) < 0.4:
-        phase = "teach_form"
     return PlanCard(
-        phase=phase,
+        phase="chat_stretch",
         move="model_try",
         models=list(models),
         try_prompt=try_p,
+        english_frame=frame,
         targets=PlanTargets(
             can_do=can_do,
             form_id=nb.get("form_focus"),
             error_pattern=nb.get("error_pattern"),
             concepts=list(concepts),
         ),
+        image_concept=img,
         scaffold=scaffold,
-        allow_new_topic=False,
-        max_sentences=6,
-        reason=f"next_best:{can_do}",
+        allow_new_topic=True,
+        max_sentences=7,
+        reason=f"next_best_chat:{can_do}",
         sheet_update_hints=[f"can_do:{can_do}"],
     )
-
-
-def _skill_conf_from_nb(nb: dict) -> float:
-    # Placeholder — planner uses sheet skills in callers when needed
-    return 0.3
