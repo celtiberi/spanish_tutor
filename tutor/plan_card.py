@@ -158,10 +158,15 @@ def gate_plan_card(card: PlanCard | dict | None) -> GateResult:
         "model_try", "recast_retry", "transfer_try", "associate", "english_frame",
     }
     if card.move in production_moves:
-        if not models:
-            errors.append("models_required")
-        if not try_prompt:
+        # models optional for free chat (executor invents Spanish)
+        if not try_prompt and card.move == "recast_retry":
             errors.append("try_prompt_required")
+        if not try_prompt and card.phase != "chat_stretch":
+            # chat_stretch may use open try intent in reason only — still want try
+            if not (card.reason or "").startswith("free_chat"):
+                errors.append("try_prompt_required")
+        if card.move == "recast_retry" and not models:
+            errors.append("models_required")
 
     if card.move == "recast_retry":
         if not models:

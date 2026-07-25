@@ -358,6 +358,8 @@ class ConversationalSession:
         self.logger: SessionLogger | None = None
         self.teacher_mode = (config.TEACHER_MODE or "planned").strip().lower()
         self.last_plan: dict | None = None
+        from .session_memory import SessionMemory
+        self.pedagogy_memory = SessionMemory()
         if log:
             self.logger = SessionLogger(
                 arch="conversational",
@@ -518,7 +520,15 @@ class ConversationalSession:
         from .plan_card import fallback_diagnostic_card, gate_plan_card
         from .rules_planner import plan_turn
 
-        card = plan_turn(self.sheet, learner=learner, is_open=is_open)
+        if not is_open and learner:
+            self.pedagogy_memory.note_learner(learner)
+
+        card = plan_turn(
+            self.sheet,
+            learner=learner,
+            is_open=is_open,
+            memory=self.pedagogy_memory,
+        )
         gated = gate_plan_card(card)
         if not gated.ok or not gated.card:
             card = fallback_diagnostic_card()
@@ -527,6 +537,7 @@ class ConversationalSession:
             card = gated.card
             gate_notes = ["plan_gate_ok"]
 
+        self.pedagogy_memory.note_plan_try(card.reason, card.try_prompt)
         self.last_plan = card.as_dict()
         from .teach_assets import assets_for_plan
 
@@ -540,7 +551,11 @@ class ConversationalSession:
             pack_palette=load_pack(self.pack_dir)[:8000],
         )
         task = build_executor_user_message(
-            card, learner=learner, is_open=is_open,
+            card,
+            learner=learner,
+            is_open=is_open,
+            session_memory=self.pedagogy_memory.snapshot(),
+            teach_images=teach_images,
         )
         if is_open:
             messages = [{"role": "user", "content": task}]
@@ -584,6 +599,8 @@ class ConversationalSession:
             f"plan:{card.phase}/{card.move}",
             f"plan_reason={card.reason}",
             f"teacher_mode={self.teacher_mode}",
+            f"mem_shown={','.join(sorted(self.pedagogy_memory.shown)) or '—'}",
+            f"mem_asked={','.join(sorted(self.pedagogy_memory.asked)) or '—'}",
         ]
         if result.parts is not None:
             result.parts = {
@@ -840,6 +857,9 @@ class ConversationalSession:
         self._focus_panel = None
         self._focus_key = None
         self._focus_meta = {"source": "static"}
+        from .session_memory import SessionMemory
+        self.pedagogy_memory = SessionMemory()
+        self.last_plan = None
         return self.sheet
 
     def sheet_human(self) -> str:

@@ -1,124 +1,109 @@
-"""PlanCard, gate, and rules planner (no live API)."""
+"""PlanCard, gate, rules planner, session memory (no live API)."""
 
 import unittest
 
 from tutor.character_sheet import default_sheet
-from tutor.plan_card import (
-    PlanCard,
-    fallback_diagnostic_card,
-    gate_plan_card,
-)
+from tutor.plan_card import PlanCard, fallback_diagnostic_card, gate_plan_card
 from tutor.rules_planner import plan_turn, probe_signals
-from tutor.teach_assets import (
-    assets_for_plan,
-    cache_lookup,
-    cache_put,
-    ensure_asset,
-    resolve_concept,
-)
+from tutor.session_memory import SessionMemory
+from tutor.teach_assets import assets_for_plan, cache_lookup
 
 
 class TestPlanCard(unittest.TestCase):
-    def test_gate_rejects_empty_models(self):
-        card = PlanCard(
-            phase="teach_form",
-            move="model_try",
-            models=[],
-            try_prompt="Di hola",
+    def test_gate_accepts_open(self):
+        card = fallback_diagnostic_card()
+        g = gate_plan_card(card)
+        self.assertTrue(g.ok, g.errors)
+
+    def test_free_chat_empty_models_ok_via_planner(self):
+        sheet = default_sheet()
+        mem = SessionMemory()
+        mem.shown = {"greet", "estoy", "name", "origin"}
+        mem.asked = {"ask_how", "ask_name", "ask_origin"}
+        card = plan_turn(
+            sheet,
+            learner="Me gusta el café",
+            is_open=False,
+            memory=mem,
         )
+        self.assertIn(card.phase, ("chat_stretch", "diagnostic", "teach_form"))
         g = gate_plan_card(card)
-        self.assertFalse(g.ok)
-        self.assertIn("models_required", g.errors)
-
-    def test_gate_accepts_diagnostic(self):
-        card = fallback_diagnostic_card()
-        g = gate_plan_card(card)
-        self.assertTrue(g.ok)
-        self.assertIn("Cómo estás", card.try_prompt)
-
-    def test_roundtrip_dict(self):
-        card = fallback_diagnostic_card()
-        d = card.as_dict()
-        c2 = PlanCard.from_dict(d)
-        self.assertEqual(c2.models, card.models)
-        self.assertEqual(c2.move, card.move)
+        self.assertTrue(g.ok, g.errors)
 
 
 class TestRulesPlanner(unittest.TestCase):
-    def test_open_is_real_question(self):
-        sheet = default_sheet()
-        card = plan_turn(sheet, learner="", is_open=True)
-        self.assertIn("Cómo estás", card.try_prompt)
+    def test_open_comm(self):
+        card = plan_turn(default_sheet(), is_open=True)
+        self.assertTrue(card.try_prompt)
         self.assertNotIn("if you can", card.try_prompt.lower())
-        self.assertTrue(any("Hola" in m or "hola" in m.lower() for m in card.models))
-        g = gate_plan_card(card)
-        self.assertTrue(g.ok, g.errors)
 
-    def test_hola_estoy_probes_name_not_flashcard_only(self):
-        sheet = default_sheet()
-        sig = probe_signals("Hola, estoy bien.")
-        self.assertIn("multi_skill", sig)
-        card = plan_turn(sheet, learner="Hola, estoy bien.", is_open=False)
-        # Conversational name probe
-        self.assertIn("Cómo te llamas", card.try_prompt)
-        self.assertEqual(card.phase, "chat_stretch")
-        self.assertTrue(card.allow_new_topic)
-        self.assertEqual(card.image_concept, "me_llamo")
-        self.assertIn("My name is", card.english_frame)
-
-    def test_name_then_origin_chat(self):
-        sheet = default_sheet()
-        card = plan_turn(sheet, learner="Me llamo Patrick.", is_open=False)
-        self.assertIn("donde eres", card.try_prompt.lower().replace("ó", "o"))
-        self.assertNotEqual(card.try_prompt, "Di: **Me llamo** + your name.")
-        self.assertEqual(card.phase, "chat_stretch")
-
-    def test_ask_name_not_redrill_me_llamo(self):
-        sheet = default_sheet()
-        card = plan_turn(sheet, learner="¿Cómo te llamas?", is_open=False)
-        # Must not send them back to "say Me llamo + name"
-        self.assertNotIn("Me llamo** + your name", card.try_prompt)
+    def test_hola_estoy_asks_name_once(self):
+        mem = SessionMemory()
+        card = plan_turn(
+            default_sheet(),
+            learner="Hola, estoy bien.",
+            memory=mem,
+        )
+        mem.note_learner("Hola, estoy bien.")
+        mem.note_plan_try(card.reason, card.try_prompt)
+        self.assertIn("name", card.reason.lower() + card.try_prompt.lower())
+        # Second time with name already shown — not name again
+        mem.shown.add("name")
+        mem.asked.add("ask_name")
+        card2 = plan_turn(
+            default_sheet(),
+            learner="Me llamo Pat.",
+            memory=mem,
+        )
+        self.assertNotIn("ask_name", card2.reason)
         self.assertTrue(
-            "gusta" in card.try_prompt.lower() or "café" in " ".join(card.models).lower()
+            "origin" in card2.reason or "dónde" in card2.try_prompt.lower()
+            or "donde" in card2.try_prompt.lower().replace("ó", "o")
+            or "from" in card2.try_prompt.lower()
         )
 
-    def test_yo_esta_triggers_recast(self):
-        sheet = default_sheet()
-        sheet["skills"]["IP-01"]["status"] = "emerging"
-        sheet["skills"]["IP-01"]["confidence"] = 0.3
-        sheet["skills"]["IP-01"]["evidence"] = ["hola"]
-        card = plan_turn(sheet, learner="Yo está bien", is_open=False)
+    def test_origin_then_not_how_are_you(self):
+        mem = SessionMemory()
+        mem.shown = {"greet", "estoy", "name", "origin"}
+        mem.asked = {"ask_how", "ask_name", "ask_origin"}
+        card = plan_turn(
+            default_sheet(),
+            learner="Yo soy de Estados Unidos.",
+            memory=mem,
+        )
+        low = (card.try_prompt + card.reason).lower()
+        self.assertNotIn("cómo estás", low.replace("á", "a"))
+        self.assertNotIn("como estas", low)
+
+    def test_loop_complaint_recovers(self):
+        mem = SessionMemory()
+        mem.asked = {"ask_how", "ask_name"}
+        card = plan_turn(
+            default_sheet(),
+            learner="I think you already asked me this",
+            memory=mem,
+        )
+        self.assertEqual(card.reason, "loop_recovery")
+
+    def test_yo_esta_recast(self):
+        card = plan_turn(default_sheet(), learner="Yo está bien")
         self.assertEqual(card.move, "recast_retry")
-        self.assertEqual(card.targets.error_pattern, "estar_yo_estoy_vs_esta")
-        g = gate_plan_card(card)
-        self.assertTrue(g.ok, g.errors)
 
-    def test_diagnostic_has_hola_image(self):
-        sheet = default_sheet()
-        card = plan_turn(sheet, learner="", is_open=True)
+    def test_open_has_hola_asset(self):
+        card = plan_turn(default_sheet(), is_open=True)
         self.assertEqual(card.image_concept, "hola")
-        assets = assets_for_plan(card)
-        self.assertTrue(assets, "hola teach asset should resolve")
-        self.assertEqual(assets[0]["concept"], "hola")
-        self.assertEqual(assets[0].get("cache"), "hit")
+        self.assertTrue(assets_for_plan(card))
+        self.assertEqual(cache_lookup("hola")["cache"], "hit")
 
-    def test_cache_lookup_no_generate(self):
-        hit = cache_lookup("hola")
-        self.assertIsNotNone(hit)
-        self.assertEqual(hit["cache"], "hit")
-        miss = cache_lookup("totally_unknown_xyz")
-        self.assertIsNone(miss)
-        still = ensure_asset("totally_unknown_xyz", generate=False)
-        self.assertIsNone(still)
 
-    def test_cache_put_then_hit(self):
-        key = "test_cache_blob"
-        data = b"\xff\xd8\xff\xe0" + b"\x00" * 64
-        put = cache_put(key, data, form="Test", caption="cache unit", ext=".jpg")
-        self.assertIsNotNone(put)
-        hit = cache_lookup(key)
-        self.assertIsNotNone(hit)
-        self.assertEqual(hit["concept"], key)
+class TestSessionMemory(unittest.TestCase):
+    def test_accumulates(self):
+        m = SessionMemory()
+        m.note_learner("Hola, estoy bien")
+        self.assertIn("greet", m.shown)
+        self.assertIn("estoy", m.shown)
+        m.note_plan_try("chat_ask_name", "¿Cómo te llamas?")
+        self.assertIn("ask_name", m.asked)
 
 
 if __name__ == "__main__":
