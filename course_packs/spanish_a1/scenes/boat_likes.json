@@ -1,0 +1,30 @@
+{
+  "id": "boat_likes",
+  "goal": {
+    "can_do": "IP-06",
+    "target_forms": [],
+    "exit_predicate": "skill:IP-06:min_conf=0.35"
+  },
+  "input": {
+    "model_lines": [
+      "Me gusta el café.",
+      "Me gusta la música.",
+      "Me gusta el bote."
+    ],
+    "image_concept": "cafe",
+    "listening_ok": true
+  },
+  "notice": {
+    "misconception_ids": [],
+    "error_patterns": []
+  },
+  "production": {
+    "elicit": "¿Qué te gusta — el café, la música, el bote…?",
+    "success_signals": ["me gusta"]
+  },
+  "transfer": {
+    "elicit": "¿Y en el bote, qué te gusta más?"
+  },
+  "scope": { "pack": "spanish_a1" },
+  "spacing": { "resurface_after_days": [2, 5] }
+}

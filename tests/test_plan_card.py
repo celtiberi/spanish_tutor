@@ -51,7 +51,8 @@ class TestAiTutorContext(unittest.TestCase):
         )
         self.assertIn("session_facts", msg)
         self.assertIn("hard_observations", msg)
-        self.assertIn("Decide the pedagogical move yourself", msg)
+        self.assertIn("mode", msg)
+        self.assertIn("Realize MODE only", msg)
         # Must not ship a scripted next-card ladder
         self.assertNotIn("chat_ask_name", msg)
         self.assertNotIn("origin_to_gusta", msg)

@@ -126,10 +126,13 @@ def build_ai_tutor_user_message(
     observations: dict | None = None,
     teach_images: list | None = None,
     blank_sheet: bool = False,
+    mode_decision: dict | None = None,
+    open_scene_hints: list | None = None,
 ) -> str:
-    """User-turn task: facts + direction — not a scripted PlanCard ladder."""
+    """User-turn task: code-selected mode + facts; AI realizes the turn."""
     mem = session_memory or {}
     obs = observations or {}
+    mode = mode_decision or {}
     payload = {
         "turn": {
             "learner_said": (
@@ -139,6 +142,16 @@ def build_ai_tutor_user_message(
             "is_open": is_open,
             "blank_character_sheet": blank_sheet,
         },
+        "mode": {
+            "name": mode.get("mode") or "conversation",
+            "reason": mode.get("reason") or "",
+            "hard_break": bool(mode.get("hard_break")),
+            "targets": mode.get("targets") or {},
+            "instructions": mode.get("instructions") or "",
+            "image_concept": mode.get("image_concept"),
+            "scene_ids": mode.get("scene_ids") or [],
+        },
+        "open_scene_goals": open_scene_hints or [],
         "session_facts": {
             "skills_learner_already_showed": mem.get("shown") or [],
             "topics_tutor_already_asked": mem.get("asked") or [],
@@ -146,7 +159,6 @@ def build_ai_tutor_user_message(
             "turn_index": mem.get("turns") or 0,
         },
         "hard_observations": {
-            # Code-detected hints only — you still decide how to teach
             "probe_signals": obs.get("signals") or [],
             "form_error_hits": obs.get("error_hits") or [],
             "active_error_patterns_on_sheet": obs.get("active_errors") or [],
@@ -163,29 +175,39 @@ def build_ai_tutor_user_message(
             ],
             "note": (
                 "If an image is attached, associate it with the Spanish you model. "
-                "Do not invent that an image is present when the list is empty. "
-                "You may introduce concrete nouns (café, bote…) when natural — "
-                "the app may attach a picture when it helps meaning."
+                "Do not invent an image when the list is empty."
             ),
         },
         "product_persona": {
             "who": (
-                "Adult conversational A1 — often false-beginners (some prior Spanish) "
-                "and true zeros mixed. Boat/café life is fine. Not a kids app."
+                "Adult conversational A1 — false-beginners + true zeros. "
+                "Boat/café life OK. Not a kids app."
             ),
-            "placement": (
-                "Blank sheet = unknown, not proven beginner. Open with a *wide ceiling*: "
-                "short clear Spanish they can copy, but room for a stronger learner to "
-                "show multi-skill Spanish. Calibrate to their first reply — do not floor "
-                "false-beginners for several turns, and do not monologue intermediate chat."
+            "system": (
+                "Conversation is the vehicle. MODE is the pedagogy for this turn — "
+                "obey mode.instructions. Hard breaks leave free-chat shape "
+                "(contrast, choice, image-led). Soft modes stay in chat."
             ),
         },
+        "mode_playbooks": {
+            "placement": "Wide ceiling open; model short Spanish; one elicit; not a worksheet.",
+            "conversation": "React, model, one real Spanish question; advance topics.",
+            "cf_recast": "Recast error in meaning; same-form try; stay conversational.",
+            "form_focus": (
+                "HARD BREAK: brief wrong→right contrast for the error_pattern; "
+                "one choice or produce; then transfer try in new micro-context."
+            ),
+            "association": (
+                "HARD BREAK: form + image meaning; Spanish-forward; try about the picture."
+            ),
+            "comprehension_check": "Yes/no or A/B on meaning of the model — not free production.",
+            "transfer": "Same form, new context; celebrate briefly; no re-drill.",
+        },
         "instructions": [
-            "Decide the pedagogical move yourself from the facts above.",
-            "React to what they said; advance if they already covered a topic.",
-            "Mostly Spanish. Teach with model + try (or recast).",
-            "No flashcard ladder. No re-asking answered probes.",
-            "If blank_character_sheet and is_open: adaptive placement — wide ceiling, not a Hola worksheet.",
+            "Realize MODE only — do not invent a different agenda.",
+            "React to what they said when in conversation/recast/transfer.",
+            "Mostly Spanish. No flashcard ladder. No re-asking covered probes.",
+            "Open scene goals are optional quests — close them opportunistically if natural.",
         ],
     }
     return (

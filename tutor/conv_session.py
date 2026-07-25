@@ -359,7 +359,10 @@ class ConversationalSession:
         self.teacher_mode = (config.TEACHER_MODE or "planned").strip().lower()
         self.last_plan: dict | None = None
         from .session_memory import SessionMemory
+        from .modes import ModeSessionState
         self.pedagogy_memory = SessionMemory()
+        self.mode_state = ModeSessionState()
+        self.last_mode_decision: dict | None = None
         if log:
             self.logger = SessionLogger(
                 arch="conversational",
@@ -541,8 +544,9 @@ class ConversationalSession:
         input_mode: str = "text",
         log_learner: str | None = None,
     ) -> TurnResult:
-        """AI decides the pedagogical move; code supplies facts + direction."""
+        """Code selects mode; AI realizes; gate verifies; sheet hard-updates."""
         from .executor import build_ai_tutor_system, build_ai_tutor_user_message
+        from .modes import Mode, select_mode
         from .observe import build_observations
         from .pedagogy_contract import (
             NOTE_DIAGNOSTIC_OPEN,
@@ -550,28 +554,66 @@ class ConversationalSession:
             is_blank_learner,
             open_phase,
         )
-        from .teach_assets import assets_for_ai_turn
+        from .scenes import open_scenes_for_sheet, scene_hints_for_prompt
+        from .teach_assets import assets_for_ai_turn, cache_lookup
 
         if not is_open and learner:
             self.pedagogy_memory.note_learner(learner)
-            # Track what we asked later from tutor try text
 
+        self.mode_state.tick()
         obs = build_observations(self.sheet, learner=learner, is_open=is_open)
         blank = bool(obs.get("blank_sheet") or is_blank_learner(self.sheet))
 
-        # Optional pre-turn image only for blank open (wave) — never a full ladder
-        pre_images: list = []
-        pre_decision = None
-        if is_open and blank and "hola" not in self.pedagogy_memory.images_shown:
-            pre_images, pre_decision = assets_for_ai_turn(
-                is_open=True,
-                blank_sheet=True,
+        sigs = set(obs.get("signals") or [])
+        if "english_only" in sigs:
+            self.mode_state.english_only_streak += 1
+        elif learner and not is_open:
+            self.mode_state.english_only_streak = 0
+
+        open_scenes = open_scenes_for_sheet(self.sheet, self.pack_dir)
+        self.mode_state.open_scene_ids = [
+            s.get("id") for s in open_scenes if s.get("id")
+        ]
+
+        decision = select_mode(
+            self.sheet,
+            observations=obs,
+            is_open=is_open,
+            learner=learner if not is_open else "",
+            mode_state=self.mode_state,
+            open_scenes=open_scenes,
+        )
+        self.last_mode_decision = decision.as_dict()
+
+        teach_images: list = []
+        image_decision = None
+        concept = decision.image_concept
+        if concept:
+            hit = cache_lookup(concept)
+            if hit:
+                teach_images = [{
+                    **hit,
+                    "decision_reason": f"mode:{decision.mode.value}",
+                    "visual_score": 1.0,
+                }]
+                self.pedagogy_memory.note_image(concept)
+            else:
+                from .teach_assets import warm_concept_background
+                warm_concept_background(concept)
+
+        if not teach_images and decision.mode in (Mode.PLACEMENT, Mode.ASSOCIATION):
+            teach_images, image_decision = assets_for_ai_turn(
+                is_open=is_open or decision.mode == Mode.PLACEMENT,
+                blank_sheet=blank,
+                learner=learner if not is_open else "",
+                tutor_models=list((decision.targets or {}).get("model_lines") or []),
+                signals=list(sigs),
                 images_shown=self.pedagogy_memory.images_shown,
                 turns_since_image=self.pedagogy_memory.turns_since_image,
                 session_turns=self.pedagogy_memory.turns,
             )
-            if pre_images:
-                self.pedagogy_memory.note_image(pre_images[0].get("concept"))
+            if teach_images:
+                self.pedagogy_memory.note_image(teach_images[0].get("concept"))
 
         system = build_ai_tutor_system(
             sheet_summary=format_sheet_for_prompt(self.sheet),
@@ -582,8 +624,10 @@ class ConversationalSession:
             is_open=is_open,
             session_memory=self.pedagogy_memory.snapshot(),
             observations=obs,
-            teach_images=pre_images,
+            teach_images=teach_images,
             blank_sheet=blank,
+            mode_decision=decision.as_dict(),
+            open_scene_hints=scene_hints_for_prompt(open_scenes),
         )
         if is_open:
             messages = [{"role": "user", "content": task}]
@@ -605,12 +649,12 @@ class ConversationalSession:
                 input_mode=input_mode,
             )
 
-        # Generate-then-verify: one bounded repair on output-gate fail
         from .output_gate import check_output_gate, repair_user_message
         from .tutor_response import process_tutor_raw as _ptr
 
         gate_notes: list[str] = []
         gate_result = None
+        image_present = bool(teach_images)
         try:
             _vis0, _parts0 = _ptr(raw or "")
             gate_result = check_output_gate(
@@ -619,6 +663,8 @@ class ConversationalSession:
                 is_open=is_open,
                 already_asked=self.pedagogy_memory.asked,
                 already_shown=self.pedagogy_memory.shown,
+                mode=decision.mode.value,
+                image_present=image_present,
             )
             if not gate_result.ok:
                 gate_notes.append("output_gate_fail:" + ",".join(gate_result.faults))
@@ -626,7 +672,6 @@ class ConversationalSession:
                     "role": "user",
                     "content": repair_user_message(gate_result, raw or ""),
                 }
-                # Second call: no tools (sheet already may have been tool-called)
                 final2, raw2, _td2, usage2, _ = tutor_turn(
                     self.client,
                     self.caps,
@@ -653,6 +698,8 @@ class ConversationalSession:
                         is_open=is_open,
                         already_asked=self.pedagogy_memory.asked,
                         already_shown=self.pedagogy_memory.shown,
+                        mode=decision.mode.value,
+                        image_present=image_present,
                     )
                     gate_result = gate2
                     if gate2.ok:
@@ -679,30 +726,23 @@ class ConversationalSession:
             is_open=is_open,
         )
 
-        # Session memory: what the tutor elicited (from try text)
         try_text = ""
         models: list[str] = []
-        ack = ""
         if result.parts:
             try_text = (result.parts.get("try") or result.parts.get("continue") or "")
-            models = []
             m = result.parts.get("model") or ""
             if m:
                 models = [m]
-            ack = result.parts.get("acknowledge") or ""
-            self.pedagogy_memory.note_plan_try("ai_tutor", try_text)
-        # Post-hoc image from what the AI actually taught (not a rules ladder)
-        teach_images = list(pre_images)
-        image_decision = pre_decision
-        if not teach_images:
+            self.pedagogy_memory.note_plan_try(decision.mode.value, try_text)
+
+        if not teach_images and models:
             teach_images, image_decision = assets_for_ai_turn(
-                is_open=is_open,
-                blank_sheet=blank,
+                is_open=False,
+                blank_sheet=False,
                 learner=learner if not is_open else "",
                 tutor_models=models,
                 tutor_try=try_text,
-                tutor_ack=ack,
-                signals=obs.get("signals") or [],
+                signals=list(sigs),
                 images_shown=self.pedagogy_memory.images_shown,
                 turns_since_image=self.pedagogy_memory.turns_since_image,
                 session_turns=self.pedagogy_memory.turns,
@@ -710,26 +750,53 @@ class ConversationalSession:
             if teach_images:
                 self.pedagogy_memory.note_image(teach_images[0].get("concept"))
 
+        if decision.hard_break:
+            self.mode_state.note_hard_break(decision.mode)
+        if decision.mode == Mode.FORM_FOCUS:
+            pid = (decision.targets or {}).get("error_pattern")
+            if pid:
+                self.mode_state.set_cooldown(str(pid), 4)
+        if decision.scene_ids:
+            for sid in decision.scene_ids:
+                if sid:
+                    self.mode_state.scene_modeled.add(sid)
+        from .character_sheet import detect_error_pattern_resolves
+        resolved = detect_error_pattern_resolves(learner) if learner and not is_open else []
+        if resolved:
+            self.mode_state.last_resolved_form = resolved[0]
+        elif decision.mode == Mode.TRANSFER:
+            self.mode_state.last_resolved_form = None
+        self.mode_state.last_mode = decision.mode.value
+
         phase = open_phase(self.sheet) if is_open else "ai"
         phase_note = (
             NOTE_DIAGNOSTIC_OPEN if (is_open and blank) else NOTE_KNOWN_LEARNER_OPEN
         )
         soft_plan = {
-            "source": "ai_tutor",
+            "source": "mode_runtime",
+            "mode": decision.mode.value,
+            "mode_reason": decision.reason,
+            "hard_break": decision.hard_break,
             "phase": "diagnostic" if (is_open and blank) else "chat",
+            "open_scenes": self.mode_state.open_scene_ids,
             "observations": {
                 "signals": obs.get("signals"),
                 "error_hit_ids": obs.get("error_hit_ids"),
                 "next_best": obs.get("next_best"),
             },
             "image": (teach_images[0].get("concept") if teach_images else None),
+            "targets": decision.targets,
         }
         self.last_plan = soft_plan
         result.notes = list(result.notes or []) + gate_notes + [
             phase_note,
             f"open_phase={phase}" if is_open else "phase=ai_tutor",
-            "plan_source=ai_tutor",
+            f"mode={decision.mode.value}",
+            f"mode_reason={decision.reason}",
+            f"hard_break={decision.hard_break}",
+            "plan_source=mode_runtime",
             f"teacher_mode={self.teacher_mode}",
+            f"open_scenes={','.join(self.mode_state.open_scene_ids) or '—'}",
             f"mem_shown={','.join(sorted(self.pedagogy_memory.shown)) or '—'}",
             f"mem_asked={','.join(sorted(self.pedagogy_memory.asked)) or '—'}",
         ]
@@ -737,6 +804,8 @@ class ConversationalSession:
             result.parts = {
                 **result.parts,
                 "plan": soft_plan,
+                "mode": decision.mode.value,
+                "mode_decision": decision.as_dict(),
                 "open_phase": phase if is_open else result.parts.get("open_phase"),
                 "teach_images": teach_images,
             }
@@ -1125,7 +1194,10 @@ class ConversationalSession:
         self._focus_key = None
         self._focus_meta = {"source": "static"}
         from .session_memory import SessionMemory
+        from .modes import ModeSessionState
         self.pedagogy_memory = SessionMemory()
+        self.mode_state = ModeSessionState()
+        self.last_mode_decision = None
         self.last_plan = None
         return self.sheet
 

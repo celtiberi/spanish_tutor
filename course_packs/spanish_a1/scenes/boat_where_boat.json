@@ -1,0 +1,30 @@
+{
+  "id": "boat_where_boat",
+  "goal": {
+    "can_do": "IP-07",
+    "target_forms": ["present_estar_person", "present_ser"],
+    "exit_predicate": "skill:IP-07:min_conf=0.35"
+  },
+  "input": {
+    "model_lines": [
+      "El bote está en el río.",
+      "Yo estoy en el bote.",
+      "Soy de Estados Unidos."
+    ],
+    "image_concept": "rio",
+    "listening_ok": true
+  },
+  "notice": {
+    "misconception_ids": ["M-4.1", "M-4.2"],
+    "error_patterns": ["ser_estar_confuse", "soy_de_origin", "estar_yo_estoy_vs_esta"]
+  },
+  "production": {
+    "elicit": "¿Dónde estás? ¿De dónde eres?",
+    "success_signals": ["estoy", "soy de"]
+  },
+  "transfer": {
+    "elicit": "¿El café está aquí o el bote está en el río?"
+  },
+  "scope": { "pack": "spanish_a1" },
+  "spacing": { "resurface_after_days": [1, 3, 7] }
+}

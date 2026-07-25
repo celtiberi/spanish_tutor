@@ -81,19 +81,28 @@ function renderTutorParts(parts, fallbackContent) {
 
   if (parts.acknowledge) {
     const plan = parts.plan || {};
+    const mode = parts.mode || plan.mode || "";
     const isDiag =
       plan.phase === "diagnostic" ||
       plan.move === "english_frame" ||
       plan.move === "associate" ||
+      mode === "placement" ||
+      mode === "association" ||
       parts.open_phase === "diagnostic";
     // Avoid empty "Got it" when we're framing meaning / associating a form
     let ackLabel = "Got it";
-    if (plan.move === "associate" || (isDiag && plan.english_frame)) {
+    if (mode === "form_focus") {
+      ackLabel = "Form focus";
+    } else if (mode === "association" || plan.move === "associate") {
       ackLabel = "Meaning";
-    } else if (isDiag || plan.move === "english_frame") {
+    } else if (mode === "placement" || isDiag || plan.move === "english_frame") {
       ackLabel = "Welcome";
-    } else if (plan.move === "recast_retry") {
+    } else if (mode === "cf_recast" || plan.move === "recast_retry") {
       ackLabel = "Almost";
+    } else if (mode === "transfer") {
+      ackLabel = "Try again";
+    } else if (mode === "comprehension_check") {
+      ackLabel = "Check";
     }
     blocks.push(
       `<div class="part part-ack"><span class="part-label">${ackLabel}</span>${esc(
@@ -117,15 +126,31 @@ function renderTutorParts(parts, fallbackContent) {
     );
   }
   if (parts.model) {
+    const mode = parts.mode || (parts.plan || {}).mode || "";
+    const modelLabel =
+      mode === "form_focus"
+        ? "Focus"
+        : mode === "association"
+          ? "Form"
+          : "Model";
     blocks.push(
-      `<div class="part part-model"><span class="part-label">Model</span>${esc(
+      `<div class="part part-model"><span class="part-label">${modelLabel}</span>${esc(
         parts.model
       )}</div>`
     );
   }
   if (parts.try) {
+    const mode = parts.mode || (parts.plan || {}).mode || "";
+    const tryLabel =
+      mode === "comprehension_check"
+        ? "Check"
+        : mode === "form_focus"
+          ? "Practice"
+          : mode === "transfer"
+            ? "Transfer"
+            : "Your turn";
     blocks.push(
-      `<div class="part part-try"><span class="part-label">Your turn</span>${esc(
+      `<div class="part part-try"><span class="part-label">${tryLabel}</span>${esc(
         parts.try
       )}</div>`
     );

@@ -96,23 +96,45 @@ def check_output_gate(
     is_open: bool = False,
     already_asked: set[str] | list[str] | None = None,
     already_shown: set[str] | list[str] | None = None,
+    mode: str | None = None,
+    image_present: bool = False,
 ) -> OutputGateResult:
-    """Hard checks on the composed tutor turn."""
+    """Hard checks on the composed tutor turn (+ optional per-mode contracts)."""
     parts = parts or {}
     asked = set(already_asked or [])
     shown = set(already_shown or [])
     faults: list[str] = []
     notes: list[str] = []
+    mode_l = (mode or "").strip().lower()
 
     ped = evaluate_turn(
         parts,
-        is_open=is_open,
+        is_open=is_open or mode_l == "placement",
         structured=bool(parts.get("structured")),
         visible=visible,
     )
     for v in ped.violations:
         faults.append(v)
     notes.extend(ped.notes)
+
+    # Per-mode contracts (teaching system v2)
+    if mode_l == "association" and not image_present:
+        # Soft: prefer image; do not hard-fail if cache miss (warm later)
+        notes.append("mode:association_no_image_cache")
+    if mode_l == "form_focus":
+        has_contrast = bool(
+            (parts.get("explain") or "").strip()
+            or (parts.get("recast") or "").strip()
+            or (parts.get("model") or "").strip()
+        )
+        if not has_contrast:
+            faults.append("gate:form_focus_needs_model")
+            notes.append("gate:form_focus_needs_model")
+    if mode_l == "comprehension_check":
+        try_t = (parts.get("try") or parts.get("continue") or "").lower()
+        if not any(x in try_t for x in ("?", "¿", " o ", "sí", "si", "no")):
+            faults.append("gate:comprehension_needs_check")
+            notes.append("gate:comprehension_needs_check")
 
     # English wall on learner-facing text (model+try+ack+recast+explain)
     blob = " ".join(
@@ -167,6 +189,12 @@ def check_output_gate(
                 "Do NOT re-ask how they are / their name / origin / likes if already covered. "
                 "Apologize briefly if needed and advance to new ground."
             )
+        if "gate:form_focus_needs_model" in faults:
+            bits.append(
+                "Form focus: show clear correct Spanish model (and brief contrast if helpful)."
+            )
+        if "gate:comprehension_needs_check" in faults:
+            bits.append("Ask a yes/no or A/B meaning check, not a free open question only.")
         repair = " ".join(bits) or "Fix the listed gate faults and reply again."
 
     return OutputGateResult(

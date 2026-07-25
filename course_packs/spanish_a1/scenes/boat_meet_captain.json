@@ -1,0 +1,30 @@
+{
+  "id": "boat_meet_captain",
+  "goal": {
+    "can_do": "IP-04",
+    "target_forms": ["present_estar_person"],
+    "exit_predicate": "form:present_estar_person:min=2"
+  },
+  "input": {
+    "model_lines": [
+      "¡Hola! ¿Cómo estás?",
+      "Estoy bien.",
+      "Estoy en el bote."
+    ],
+    "image_concept": "bote",
+    "listening_ok": true
+  },
+  "notice": {
+    "misconception_ids": ["M-4.1"],
+    "error_patterns": ["estar_yo_estoy_vs_esta", "ser_estar_confuse"]
+  },
+  "production": {
+    "elicit": "¿Y tú? ¿Cómo estás hoy?",
+    "success_signals": ["estoy"]
+  },
+  "transfer": {
+    "elicit": "¿Y tu amigo en el bote — cómo está?"
+  },
+  "scope": { "pack": "spanish_a1" },
+  "spacing": { "resurface_after_days": [1, 3, 7] }
+}
