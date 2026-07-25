@@ -1,7 +1,9 @@
 # Plan: New teacher (structured pedagogical control)
 
-**Status:** design — not implemented  
+**Status:** PR1–PR2 implemented (rules planner + executor path)  
 **Date:** 2026-07-25  
+**Flag:** `TEACHER_MODE=planned` (default) or `legacy`  
+**Code:** `tutor/plan_card.py`, `rules_planner.py`, `executor.py`, wired in `conv_session.py`  
 **Builds on:** character sheet, pedagogy contract v1.1, diagnostic open, conversational session, research on ITS / multi-agent tutors / Duolingo-style splits
 
 ---

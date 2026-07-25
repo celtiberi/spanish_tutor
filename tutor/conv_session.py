@@ -356,12 +356,15 @@ class ConversationalSession:
         self._focus_key: str | None = None
         self._focus_meta: dict = {"source": "static"}
         self.logger: SessionLogger | None = None
+        self.teacher_mode = (config.TEACHER_MODE or "planned").strip().lower()
+        self.last_plan: dict | None = None
         if log:
             self.logger = SessionLogger(
                 arch="conversational",
                 label=label,
                 meta={
                     "mode": "conversational",
+                    "teacher_mode": self.teacher_mode,
                     "model": self.model,
                     "focus_model": self.focus_model,
                     "pack": str(self.pack_dir),
@@ -494,8 +497,97 @@ class ConversationalSession:
             )
         return result
 
+    def _planned_enabled(self) -> bool:
+        return self.teacher_mode in ("planned", "plan", "new")
+
+    def _execute_planned(
+        self,
+        learner: str,
+        *,
+        is_open: bool,
+        input_mode: str = "text",
+        log_learner: str | None = None,
+    ) -> TurnResult:
+        """Rules PlanCard → gate → executor LLM → finish."""
+        from .executor import build_executor_system, build_executor_user_message
+        from .pedagogy_contract import (
+            NOTE_DIAGNOSTIC_OPEN,
+            NOTE_KNOWN_LEARNER_OPEN,
+            open_phase,
+        )
+        from .plan_card import fallback_diagnostic_card, gate_plan_card
+        from .rules_planner import plan_turn
+
+        card = plan_turn(self.sheet, learner=learner, is_open=is_open)
+        gated = gate_plan_card(card)
+        if not gated.ok or not gated.card:
+            card = fallback_diagnostic_card()
+            gate_notes = [f"plan_gate_fail:{','.join(gated.errors)}"]
+        else:
+            card = gated.card
+            gate_notes = ["plan_gate_ok"]
+
+        self.last_plan = card.as_dict()
+        system = build_executor_system(
+            sheet_summary=format_sheet_for_prompt(self.sheet),
+            pack_palette=load_pack(self.pack_dir)[:8000],
+        )
+        task = build_executor_user_message(
+            card, learner=learner, is_open=is_open,
+        )
+        if is_open:
+            messages = [{"role": "user", "content": task}]
+        else:
+            messages = self.history + [{"role": "user", "content": task}]
+
+        try:
+            final, raw, tool_delta, usage, _ = tutor_turn(
+                self.client,
+                self.caps,
+                system,
+                messages,
+                tools=self.tools,
+            )
+        except Exception as e:
+            return TurnResult(
+                reply="",
+                error=f"{type(e).__name__}: {e}",
+                input_mode=input_mode,
+            )
+
+        result = self._finish(
+            learner if not is_open else "",
+            raw or "",
+            tool_delta,
+            final,
+            usage,
+            input_mode=input_mode,
+            log_learner=log_learner if log_learner is not None else (
+                "(session open)" if is_open else None
+            ),
+            is_open=is_open,
+        )
+        phase = card.phase
+        phase_note = (
+            NOTE_DIAGNOSTIC_OPEN if phase == "diagnostic" else NOTE_KNOWN_LEARNER_OPEN
+        )
+        result.notes = list(result.notes or []) + gate_notes + [
+            phase_note,
+            f"open_phase={phase}" if is_open else f"phase={phase}",
+            f"plan:{card.phase}/{card.move}",
+            f"plan_reason={card.reason}",
+            f"teacher_mode={self.teacher_mode}",
+        ]
+        if result.parts is not None:
+            result.parts = {
+                **result.parts,
+                "plan": card.as_dict(),
+                "open_phase": phase if is_open else result.parts.get("open_phase"),
+            }
+        return result
+
     def open_session(self) -> TurnResult:
-        """Opening tutor turn — diagnostic if sheet blank, else known-learner open."""
+        """Opening tutor turn — planned PlanCard path or legacy harness."""
         from .pedagogy_contract import (
             NOTE_DIAGNOSTIC_OPEN,
             NOTE_KNOWN_LEARNER_OPEN,
@@ -508,6 +600,28 @@ class ConversationalSession:
             self.sheet = clear_session_scoped_affect(self.sheet)
         except Exception:
             pass
+
+        if self._planned_enabled():
+            result = self._execute_planned(
+                "", is_open=True, log_learner="(session open)",
+            )
+            if result.error:
+                return result
+            self.history = [
+                {"role": "user", "content": "(session open)"},
+                {"role": "assistant", "content": result.reply},
+            ]
+            self.messages_for_ui = [
+                {
+                    "role": "tutor",
+                    "content": result.reply,
+                    "input_mode": "text",
+                    "parts": result.parts,
+                },
+            ]
+            return result
+
+        # --- legacy path ---
         phase = open_phase(self.sheet)
         harness = open_harness_for_sheet(self.sheet)
         try:
@@ -531,7 +645,9 @@ class ConversationalSession:
         phase_note = (
             NOTE_DIAGNOSTIC_OPEN if phase == "diagnostic" else NOTE_KNOWN_LEARNER_OPEN
         )
-        result.notes = list(result.notes or []) + [phase_note, f"open_phase={phase}"]
+        result.notes = list(result.notes or []) + [
+            phase_note, f"open_phase={phase}", "teacher_mode=legacy",
+        ]
         if result.parts is not None:
             result.parts = {**result.parts, "open_phase": phase}
         self.history = [
@@ -559,6 +675,29 @@ class ConversationalSession:
         if not text:
             return TurnResult(reply="", error="empty message")
 
+        if self._planned_enabled():
+            result = self._execute_planned(
+                text, is_open=False, input_mode=input_mode,
+            )
+            if result.error:
+                return result
+            self.history = self.history + [
+                {"role": "user", "content": text},
+                {"role": "assistant", "content": result.reply},
+            ]
+            if len(self.history) > 24:
+                self.history = self.history[-24:]
+            self.messages_for_ui.append(
+                {"role": "you", "content": text, "input_mode": input_mode})
+            self.messages_for_ui.append({
+                "role": "tutor",
+                "content": result.reply,
+                "input_mode": "text",
+                "parts": result.parts,
+            })
+            return result
+
+        # --- legacy path ---
         scaffold = (self.sheet.get("receptive") or {}).get(
             "needs_english_scaffold", True)
         scaffold_line = (
@@ -654,6 +793,7 @@ class ConversationalSession:
         result = self._finish(
             text, raw or "", tool_delta, final, usage, input_mode=input_mode,
         )
+        result.notes = list(result.notes or []) + ["teacher_mode=legacy"]
         self.history = self.history + [
             {"role": "user", "content": text},
             {"role": "assistant", "content": result.reply},

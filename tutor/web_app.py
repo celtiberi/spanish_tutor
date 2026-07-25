@@ -138,6 +138,7 @@ def create_app() -> FastAPI:
         return {
             "ok": True,
             "model": config.MODEL,
+            "teacher_mode": getattr(config, "TEACHER_MODE", "planned"),
             "pack": config.DEFAULT_PACK_DIR.name,
             "tts": {
                 "enabled": tts_mod.tts_enabled(),

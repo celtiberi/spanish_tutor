@@ -33,6 +33,8 @@ MODEL = os.environ.get("TUTOR_MODEL", "gemini-3.6-flash")
 # Override with CONTROLLER_PLANNER / CONTROLLER_EXECUTOR or CLI flags.
 CONTROLLER_PLANNER = os.environ.get("CONTROLLER_PLANNER", "grok-4.5")
 CONTROLLER_EXECUTOR = os.environ.get("CONTROLLER_EXECUTOR", MODEL)
+# New teacher: "planned" = rules PlanCard + executor; "legacy" = single harness LLM.
+TEACHER_MODE = (os.environ.get("TEACHER_MODE", "planned") or "planned").strip().lower()
 # Side-rail focus/morphology enricher (cheap). "off" / "static" / "none" = templates only.
 FOCUS_MODEL = os.environ.get("FOCUS_MODEL", "grok-3-mini")
 FOCUS_MAX_TOKENS = int(os.environ.get("FOCUS_MAX_TOKENS", "512"))
