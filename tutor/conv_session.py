@@ -605,6 +605,67 @@ class ConversationalSession:
                 input_mode=input_mode,
             )
 
+        # Generate-then-verify: one bounded repair on output-gate fail
+        from .output_gate import check_output_gate, repair_user_message
+        from .tutor_response import process_tutor_raw as _ptr
+
+        gate_notes: list[str] = []
+        gate_result = None
+        try:
+            _vis0, _parts0 = _ptr(raw or "")
+            gate_result = check_output_gate(
+                _parts0.as_dict(),
+                _vis0,
+                is_open=is_open,
+                already_asked=self.pedagogy_memory.asked,
+                already_shown=self.pedagogy_memory.shown,
+            )
+            if not gate_result.ok:
+                gate_notes.append("output_gate_fail:" + ",".join(gate_result.faults))
+                repair_msg = {
+                    "role": "user",
+                    "content": repair_user_message(gate_result, raw or ""),
+                }
+                # Second call: no tools (sheet already may have been tool-called)
+                final2, raw2, _td2, usage2, _ = tutor_turn(
+                    self.client,
+                    self.caps,
+                    system,
+                    messages
+                    + [{"role": "assistant", "content": raw or ""}]
+                    + [repair_msg],
+                    tools=None,
+                )
+                if usage2:
+                    usage = {
+                        "input_tokens": (usage or {}).get("input_tokens", 0)
+                        + (usage2 or {}).get("input_tokens", 0),
+                        "output_tokens": (usage or {}).get("output_tokens", 0)
+                        + (usage2 or {}).get("output_tokens", 0),
+                    }
+                if raw2 and raw2.strip():
+                    raw = raw2
+                    final = final2
+                    _vis1, _parts1 = _ptr(raw or "")
+                    gate2 = check_output_gate(
+                        _parts1.as_dict(),
+                        _vis1,
+                        is_open=is_open,
+                        already_asked=self.pedagogy_memory.asked,
+                        already_shown=self.pedagogy_memory.shown,
+                    )
+                    gate_result = gate2
+                    if gate2.ok:
+                        gate_notes.append("output_gate_repaired")
+                    else:
+                        gate_notes.append(
+                            "output_gate_still_fail:" + ",".join(gate2.faults)
+                        )
+            else:
+                gate_notes.append("output_gate_ok")
+        except Exception as ge:
+            gate_notes.append(f"output_gate_error:{type(ge).__name__}")
+
         result = self._finish(
             learner if not is_open else "",
             raw or "",
@@ -630,7 +691,6 @@ class ConversationalSession:
                 models = [m]
             ack = result.parts.get("acknowledge") or ""
             self.pedagogy_memory.note_plan_try("ai_tutor", try_text)
-
         # Post-hoc image from what the AI actually taught (not a rules ladder)
         teach_images = list(pre_images)
         image_decision = pre_decision
@@ -665,7 +725,7 @@ class ConversationalSession:
             "image": (teach_images[0].get("concept") if teach_images else None),
         }
         self.last_plan = soft_plan
-        result.notes = list(result.notes or []) + [
+        result.notes = list(result.notes or []) + gate_notes + [
             phase_note,
             f"open_phase={phase}" if is_open else "phase=ai_tutor",
             "plan_source=ai_tutor",
@@ -680,6 +740,8 @@ class ConversationalSession:
                 "open_phase": phase if is_open else result.parts.get("open_phase"),
                 "teach_images": teach_images,
             }
+            if gate_result is not None:
+                result.parts["output_gate"] = gate_result.as_dict()
             if image_decision is not None:
                 result.parts["image_decision"] = image_decision.as_dict()
                 result.notes = list(result.notes or []) + [

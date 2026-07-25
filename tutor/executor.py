@@ -168,12 +168,24 @@ def build_ai_tutor_user_message(
                 "the app may attach a picture when it helps meaning."
             ),
         },
+        "product_persona": {
+            "who": (
+                "Adult conversational A1 — often false-beginners (some prior Spanish) "
+                "and true zeros mixed. Boat/café life is fine. Not a kids app."
+            ),
+            "placement": (
+                "Blank sheet = unknown, not proven beginner. Open with a *wide ceiling*: "
+                "short clear Spanish they can copy, but room for a stronger learner to "
+                "show multi-skill Spanish. Calibrate to their first reply — do not floor "
+                "false-beginners for several turns, and do not monologue intermediate chat."
+            ),
+        },
         "instructions": [
             "Decide the pedagogical move yourself from the facts above.",
             "React to what they said; advance if they already covered a topic.",
             "Mostly Spanish. Teach with model + try (or recast).",
             "No flashcard ladder. No re-asking answered probes.",
-            "If blank_character_sheet and is_open: place them gently with real chat.",
+            "If blank_character_sheet and is_open: adaptive placement — wide ceiling, not a Hola worksheet.",
         ],
     }
     return (

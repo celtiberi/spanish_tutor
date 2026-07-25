@@ -1520,36 +1520,31 @@ def process_turn(
                 sk[cid]["mode"] = CAN_DOS[cid]["mode"]
                 sk[cid]["band"] = CAN_DOS[cid]["band"]
                 sk[cid]["statement"] = CAN_DOS[cid]["statement"]
-        # Harness always re-detects patterns from learner text (tool may miss)
-        s = apply_error_pattern_updates(s, learner)
-        # Recompute when recurring errors must steer, or next_best incomplete
-        nb = s.get("next_best") or {}
-        if active_error_patterns(s) or not (nb.get("activity") or nb.get("stretch")):
-            s = recompute_next_best(s)
         s = _preserve_identity(sheet, s)
         notes = ["tool_update"]
         reason = tool_delta.get("reason") or tool_delta.get("notes")
         if isinstance(reason, str) and reason.strip():
             notes.append(f"why={reason.strip()[:80]}")
+        # Hard observer always runs (PR3): can-do/lexicon/error evidence is
+        # code-owned — never depend only on tool compliance.
+        s = apply_rule_updates(s, learner, visible)
+        notes.append("hard_observer")
     elif revised_sheet is not None:
         s = normalize_sheet(revised_sheet)
-        s = apply_error_pattern_updates(s, learner)
-        nb = s.get("next_best") or {}
-        if active_error_patterns(s) or not (nb.get("activity") or nb.get("stretch")):
-            s = recompute_next_best(s)
         s = _preserve_identity(sheet, s)
         notes = ["ai_update"]
+        s = apply_rule_updates(s, learner, visible)
+        notes.append("hard_observer")
     else:
         # Backup: rules + optional inline delta (no second model call)
         s = apply_rule_updates(sheet, learner, visible)
-        notes = ["rules_backup"]
+        notes = ["rules_backup", "hard_observer"]
         if inline_delta:
             s = apply_delta(s, inline_delta)
             notes.append("inline_delta")
         s = update_scaffold_flag(s, learner)
         s = recompute_next_best(s)
         s = _preserve_identity(sheet, s)
-
     # Surface hot error patterns in console notes
     for ep in active_error_patterns(s):
         notes.append(f"err×{ep['count']}:{ep['id']}")
