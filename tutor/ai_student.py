@@ -1,15 +1,14 @@
 """AI student (Grok) vs conversational Spanish tutor — simulation harness.
 
-Runs a Grok-powered learner with a fixed personality / ability profile against
-`ConversationalSession`, writing a **separate** character sheet so Patrick’s
-live sheet is untouched.
+Grok maintains a structured **learner_state** each turn (forms noticed,
+confidence, can_try_now) so it can simulate learning across the full chat.
 
   python -m tutor.ai_student
-  python -m tutor.ai_student --turns 6 --persona alex_boat
-  python -m tutor.ai_student --sheet logs/ai_student_sheet.json --reset-sheet
+  python -m tutor.ai_student --turns 8 --persona alex_boat
+  python -m tutor.ai_student --level intermediate_low --persona jordan_travel
 
 Env:
-  AI_STUDENT_MODEL   default grok-4.5 (capable learner for useful sims)
+  AI_STUDENT_MODEL   default grok-4.5
   TUTOR_MODEL        teacher model (default gemini-3.6-flash)
   GROK_API_KEY       required for the student
 """
@@ -39,8 +38,123 @@ DEFAULT_STUDENT_SHEET = config.REPO_ROOT / "logs" / "ai_student_sheet.json"
 DEFAULT_STUDENT_MODEL = "grok-4.5"
 DEFAULT_TURNS = 6
 
+LEARNER_STATE_OPEN = re.compile(r"<learner_state>", re.I)
+LEARNER_STATE_CLOSE = re.compile(r"</learner_state>", re.I)
+
 # ---------------------------------------------------------------------------
-# Personas
+# Ability levels (first-class bands Grok must obey)
+# ---------------------------------------------------------------------------
+
+ABILITY_LEVELS: dict[str, dict[str, Any]] = {
+    "novice_low": {
+        "id": "novice_low",
+        "label": "Novice Low",
+        "description": (
+            "Very limited Spanish. Mostly English with a few memorized words. "
+            "Heavy hesitation. Fragments OK. Often wrong person on estar."
+        ),
+        "english_ratio": 0.55,
+        "max_spanish_words": 10,
+        "sentence_complexity": "fragments_or_one_clause",
+        "inventory": [
+            "hola", "gracias", "sí", "no", "ok", "um", "café", "bote", "bien",
+        ],
+        "avoid_grammar": [
+            "subjunctive", "past tense", "long relative clauses", "por/para nuance",
+        ],
+        "default_form_seeds": {
+            "estoy_yo": {
+                "status": "error_prone",
+                "confidence": 0.15,
+                "attempts": 0,
+                "successes": 0,
+                "note": "tends to say yo está",
+            },
+            "greetings": {
+                "status": "emerging",
+                "confidence": 0.4,
+                "attempts": 0,
+                "successes": 0,
+            },
+        },
+    },
+    "novice_mid": {
+        "id": "novice_mid",
+        "label": "Novice Mid",
+        "description": (
+            "Can do short formulaic exchanges. Mixes EN/ES. Some correct "
+            "present-tense phrases; still confuses ser/estar and articles."
+        ),
+        "english_ratio": 0.35,
+        "max_spanish_words": 18,
+        "sentence_complexity": "one_or_two_simple_clauses",
+        "inventory": [
+            "hola", "gracias", "me llamo", "me gusta", "sí", "no", "café",
+            "familia", "hoy", "un poco",
+        ],
+        "avoid_grammar": ["subjunctive", "compound past", "conditionals"],
+        "default_form_seeds": {
+            "ser_estar": {
+                "status": "error_prone",
+                "confidence": 0.25,
+                "attempts": 0,
+                "successes": 0,
+                "note": "soy nerviosa / soy bien",
+            },
+            "me_gusta": {
+                "status": "emerging",
+                "confidence": 0.45,
+                "attempts": 0,
+                "successes": 0,
+            },
+            "greetings": {
+                "status": "usable",
+                "confidence": 0.6,
+                "attempts": 0,
+                "successes": 0,
+            },
+        },
+    },
+    "intermediate_low": {
+        "id": "intermediate_low",
+        "label": "Intermediate Low",
+        "description": (
+            "Can handle simple personal questions in Spanish with some English "
+            "backup. Occasional agreement errors; past tense rare and shaky."
+        ),
+        "english_ratio": 0.15,
+        "max_spanish_words": 35,
+        "sentence_complexity": "connected_simple_sentences",
+        "inventory": [
+            "present tense", "me gusta", "porque", "también", "pero",
+            "questions with qué/dónde/cómo",
+        ],
+        "avoid_grammar": ["subjunctive", "advanced connectors"],
+        "default_form_seeds": {
+            "estoy_yo": {
+                "status": "usable",
+                "confidence": 0.65,
+                "attempts": 0,
+                "successes": 0,
+            },
+            "me_gusta": {
+                "status": "usable",
+                "confidence": 0.7,
+                "attempts": 0,
+                "successes": 0,
+            },
+            "simple_questions": {
+                "status": "emerging",
+                "confidence": 0.4,
+                "attempts": 0,
+                "successes": 0,
+            },
+        },
+    },
+}
+
+# ---------------------------------------------------------------------------
+# Personas (personality + focus errors on top of an ability band)
 # ---------------------------------------------------------------------------
 
 PERSONAS: dict[str, dict[str, Any]] = {
@@ -56,29 +170,30 @@ PERSONAS: dict[str, dict[str, Any]] = {
         "L1": "English",
         "interests": ["boats", "Río Dulce", "coffee", "weather", "simple travel"],
         "solid_phrases": ["hola", "gracias", "sí", "no", "ok", "um"],
-        # id aligns with character_sheet ERROR_PATTERN catalog when possible
         "error_tendencies": [
             {
                 "id": "estar_yo_estoy_vs_esta",
+                "form_key": "estoy_yo",
                 "label": "yo + está instead of estoy",
                 "bad_examples": [
                     "Yo está en el bote",
                     "Yo está bien",
-                    "Está en Río Dulce",  # intending "I am"
+                    "Está en Río Dulce",
                 ],
                 "good_examples": ["Estoy en el bote", "Estoy bien", "Yo estoy aquí"],
                 "strength": 0.85,
             },
             {
                 "id": "register_tu_usted_mix",
+                "form_key": "register_tu",
                 "label": "mix tú/usted casually without control",
                 "bad_examples": ["Cómo está? (to a peer while also saying tú)"],
                 "good_examples": ["¿Cómo estás?"],
                 "strength": 0.4,
             },
         ],
-        "learning_rate": 0.18,
-        "notes": "Default sim student for sheet / recast testing.",
+        "learning_rate": 0.22,
+        "notes": "Default sim — form focus + boat life.",
     },
     "maya_shy": {
         "id": "maya_shy",
@@ -94,6 +209,7 @@ PERSONAS: dict[str, dict[str, Any]] = {
         "error_tendencies": [
             {
                 "id": "ser_estar_confuse",
+                "form_key": "ser_estar",
                 "label": "ser/estar confusion for location and mood",
                 "bad_examples": [
                     "Soy nerviosa",
@@ -110,8 +226,32 @@ PERSONAS: dict[str, dict[str, Any]] = {
                 "strength": 0.7,
             },
         ],
-        "learning_rate": 0.12,
-        "notes": "Slightly stronger base; different error focus.",
+        "learning_rate": 0.18,
+        "notes": "Novice mid — ser/estar feelings.",
+    },
+    "jordan_travel": {
+        "id": "jordan_travel",
+        "name": "Jordan",
+        "personality": (
+            "Outgoing traveler who has had some Spanish classes. Risks longer "
+            "sentences, mixes codes, laughs off mistakes. Loves cities and food."
+        ),
+        "ability": "intermediate_low",
+        "L1": "English",
+        "interests": ["travel", "food", "cities", "music"],
+        "solid_phrases": ["hola", "me gusta", "porque", "también", "¿dónde está?"],
+        "error_tendencies": [
+            {
+                "id": "ser_estar_confuse",
+                "form_key": "ser_estar",
+                "label": "occasional ser/estar slip under pressure",
+                "bad_examples": ["Soy cansado después del viaje"],
+                "good_examples": ["Estoy cansado después del viaje"],
+                "strength": 0.35,
+            },
+        ],
+        "learning_rate": 0.25,
+        "notes": "Stronger learner — tests transfer and lighter scaffolding.",
     },
 }
 
@@ -130,73 +270,236 @@ def get_persona(name: str | None) -> dict[str, Any]:
     key = (name or "alex_boat").strip().lower()
     if key not in PERSONAS:
         raise SystemExit(
-            f"Unknown persona {name!r}. Choose: {', '.join(PERSONAS)}"
+            f"Unknown persona {name!r}. Choose: {', '.join(sorted(PERSONAS))}"
         )
     return copy.deepcopy(PERSONAS[key])
 
 
+def get_ability_level(level_id: str | None, persona: dict | None = None) -> dict[str, Any]:
+    lid = (level_id or (persona or {}).get("ability") or "novice_low").strip().lower()
+    if lid not in ABILITY_LEVELS:
+        raise SystemExit(
+            f"Unknown ability level {level_id!r}. Choose: {', '.join(sorted(ABILITY_LEVELS))}"
+        )
+    return copy.deepcopy(ABILITY_LEVELS[lid])
+
+
+def initial_learner_state(persona: dict, ability: dict) -> dict[str, Any]:
+    """Seed structured state from ability band + persona error foci."""
+    forms = copy.deepcopy(ability.get("default_form_seeds") or {})
+    still_hard = []
+    for e in persona.get("error_tendencies") or []:
+        fk = e.get("form_key") or e.get("id") or "form"
+        strength = float(e.get("strength") or 0.5)
+        forms[fk] = {
+            "status": (
+                "error_prone" if strength >= 0.55
+                else "emerging" if strength >= 0.35
+                else "usable"
+            ),
+            "confidence": max(0.05, 1.0 - strength),
+            "attempts": 0,
+            "successes": 0,
+            "note": e.get("label") or "",
+            "error_id": e.get("id"),
+            "bad_examples": list(e.get("bad_examples") or []),
+            "good_examples": list(e.get("good_examples") or []),
+        }
+        still_hard.append(e.get("label") or fk)
+    return {
+        "level": ability.get("id") or "novice_low",
+        "forms": forms,
+        "noticed_this_session": [],
+        "can_try_now": [],
+        "still_hard": still_hard,
+        "recent_recasts": [],
+        "topic_intent": "respond naturally",
+        "self_check": "session start",
+        "turns": 0,
+    }
+
+
+def extract_learner_output(raw: str) -> tuple[str, dict | None, bool]:
+    """Split model output into (utterance, learner_state, parse_ok).
+
+    Prefer explicit <learner_state>...</learner_state> tags (handles nested JSON).
+    """
+    text = (raw or "").strip()
+    m_open = LEARNER_STATE_OPEN.search(text)
+    m_close = LEARNER_STATE_CLOSE.search(text)
+    if m_open and m_close and m_close.start() > m_open.end():
+        visible = text[: m_open.start()].strip()
+        body = text[m_open.end() : m_close.start()].strip()
+        try:
+            state = json.loads(body)
+            if not isinstance(state, dict):
+                return visible, None, False
+            return visible, state, True
+        except json.JSONDecodeError:
+            return visible, None, False
+    # Truncated open tag — hide from tag onward so tutor never sees it
+    if m_open:
+        return text[: m_open.start()].strip(), None, False
+    # Fallback: trailing JSON object with "forms" key
+    brace = text.rfind("\n{")
+    if brace >= 0:
+        candidate = text[brace:].strip()
+        try:
+            state = json.loads(candidate)
+            if isinstance(state, dict) and "forms" in state:
+                return text[:brace].strip(), state, True
+        except json.JSONDecodeError:
+            pass
+    return text, None, False
+
+
+def merge_learner_state(prev: dict, incoming: dict | None) -> tuple[dict, list[str]]:
+    """Merge model state with previous; clamp; return (state, change_notes)."""
+    notes: list[str] = []
+    if not incoming:
+        return copy.deepcopy(prev), ["state_parse_failed"]
+
+    out = copy.deepcopy(prev)
+    out["turns"] = int(prev.get("turns") or 0) + 1
+
+    # lists
+    for key in ("noticed_this_session", "can_try_now", "still_hard", "recent_recasts"):
+        if key in incoming and isinstance(incoming[key], list):
+            old = list(out.get(key) or [])
+            new = [str(x)[:120] for x in incoming[key] if x is not None]
+            # union, prefer new order, cap length
+            merged: list[str] = []
+            for x in new + old:
+                if x not in merged:
+                    merged.append(x)
+            out[key] = merged[:12]
+            if new != old[: len(new)]:
+                notes.append(f"{key}↻")
+
+    for key in ("topic_intent", "self_check", "level"):
+        if key in incoming and incoming[key] is not None:
+            val = str(incoming[key])[:200]
+            if val != out.get(key):
+                notes.append(f"{key}={val[:40]}")
+            out[key] = val
+
+    # forms
+    forms_in = incoming.get("forms")
+    if isinstance(forms_in, dict):
+        forms = dict(out.get("forms") or {})
+        for fk, fv in forms_in.items():
+            if not isinstance(fv, dict):
+                continue
+            prev_f = dict(forms.get(fk) or {})
+            conf = fv.get("confidence", prev_f.get("confidence", 0.2))
+            try:
+                conf = float(conf)
+            except (TypeError, ValueError):
+                conf = float(prev_f.get("confidence") or 0.2)
+            conf = max(0.0, min(1.0, conf))
+            status = fv.get("status") or prev_f.get("status") or "emerging"
+            if status not in ("error_prone", "emerging", "usable", "solid"):
+                status = prev_f.get("status") or "emerging"
+            try:
+                attempts = int(fv.get("attempts", prev_f.get("attempts") or 0))
+            except (TypeError, ValueError):
+                attempts = int(prev_f.get("attempts") or 0)
+            try:
+                successes = int(fv.get("successes", prev_f.get("successes") or 0))
+            except (TypeError, ValueError):
+                successes = int(prev_f.get("successes") or 0)
+            # Prevent magical jumps: conf can't leap more than +0.35 per turn
+            old_c = float(prev_f.get("confidence") or 0.2)
+            if conf > old_c + 0.35:
+                conf = old_c + 0.35
+                notes.append(f"clamp:{fk}")
+            if conf < old_c - 0.25:
+                conf = old_c - 0.25
+            new_f = {
+                **prev_f,
+                "status": status,
+                "confidence": round(conf, 3),
+                "attempts": max(0, attempts),
+                "successes": max(0, successes),
+            }
+            if fv.get("note"):
+                new_f["note"] = str(fv.get("note"))[:120]
+            if prev_f.get("confidence") != new_f["confidence"] or prev_f.get("status") != status:
+                notes.append(
+                    f"form:{fk} {prev_f.get('status')}/{old_c:.2f}→{status}/{conf:.2f}"
+                )
+            forms[fk] = new_f
+        out["forms"] = forms
+
+    return out, notes
+
+
 # ---------------------------------------------------------------------------
-# True ability state (ground truth — not the teacher's sheet)
+# True ability (derived view for checks — from learner_state)
 # ---------------------------------------------------------------------------
 
 @dataclass
 class TrueAbility:
-    """What the simulated student 'really' can do / still messes up."""
+    """Projection of learner_state for verification checks."""
 
     error_strength: dict[str, float] = field(default_factory=dict)
     recasts_seen: dict[str, int] = field(default_factory=dict)
     turns: int = 0
+    learner_state: dict = field(default_factory=dict)
 
     @classmethod
-    def from_persona(cls, persona: dict) -> "TrueAbility":
-        strengths = {
-            e["id"]: float(e.get("strength") or 0.5)
-            for e in persona.get("error_tendencies") or []
-            if e.get("id")
-        }
-        return cls(error_strength=strengths)
+    def from_persona(cls, persona: dict, ability: dict | None = None) -> "TrueAbility":
+        ability = ability or get_ability_level(persona.get("ability"), persona)
+        state = initial_learner_state(persona, ability)
+        strengths = {}
+        for e in persona.get("error_tendencies") or []:
+            eid = e.get("id")
+            if not eid:
+                continue
+            fk = e.get("form_key") or eid
+            form = (state.get("forms") or {}).get(fk) or {}
+            conf = float(form.get("confidence") or 0.2)
+            strengths[eid] = max(0.05, 1.0 - conf)
+        return cls(
+            error_strength=strengths,
+            learner_state=state,
+            turns=0,
+        )
+
+    def sync_from_state(self, state: dict, persona: dict) -> None:
+        self.learner_state = copy.deepcopy(state)
+        self.turns = int(state.get("turns") or self.turns)
+        forms = state.get("forms") or {}
+        for e in persona.get("error_tendencies") or []:
+            eid = e.get("id")
+            if not eid:
+                continue
+            fk = e.get("form_key") or eid
+            form = forms.get(fk) or {}
+            conf = float(form.get("confidence") or 0.2)
+            self.error_strength[eid] = max(0.05, min(0.95, 1.0 - conf))
+            # treat successes as recast-driven learning signal
+            self.recasts_seen[eid] = int(form.get("successes") or 0)
 
     def on_tutor_reply(self, tutor_text: str, persona: dict) -> list[str]:
-        """Weaken errors when tutor clearly models the good form."""
+        """Legacy hook — learning now primarily via model learner_state.
+
+        Still bumps recast counters lightly for logging when tutor models forms.
+        """
         notes: list[str] = []
         low = (tutor_text or "").lower()
-        # Strip accents for matching
-        fold = (
-            low.replace("á", "a")
-            .replace("é", "e")
-            .replace("í", "i")
-            .replace("ó", "o")
-            .replace("ú", "u")
-        )
         for err in persona.get("error_tendencies") or []:
             eid = err.get("id") or ""
             goods = err.get("good_examples") or []
-            hit = False
-            for g in goods:
-                g_tokens = re.findall(r"[a-záéíóúüñ]{3,}", g.lower())
-                # need at least one distinctive token present
-                if g_tokens and any(t in low for t in g_tokens[:3]):
-                    hit = True
-                    break
-            # pattern-specific boosts
-            if eid == "estar_yo_estoy_vs_esta" and re.search(
-                r"\bestoy\b", low
-            ):
-                hit = True
-            if eid == "ser_estar_confuse" and (
-                re.search(r"\bestoy\s+(nervios|bien|mal|feliz|triste)", fold)
-                or re.search(r"\buse\s+\*?estar\*?\b", fold)
-                or ("estar" in fold and "soy" in fold and "nerv" in fold)
-            ):
+            hit = any(
+                any(t in low for t in re.findall(r"[a-záéíóúüñ]{3,}", g.lower())[:2])
+                for g in goods
+            )
+            if eid == "estar_yo_estoy_vs_esta" and re.search(r"\bestoy\b", low):
                 hit = True
             if hit and eid:
                 self.recasts_seen[eid] = self.recasts_seen.get(eid, 0) + 1
-                rate = float(persona.get("learning_rate") or 0.15)
-                old = self.error_strength.get(eid, 0.5)
-                new = max(0.05, old * (1.0 - rate))
-                self.error_strength[eid] = new
-                notes.append(f"learn:{eid} {old:.2f}→{new:.2f}")
-        self.turns += 1
+                notes.append(f"tutor_modeled:{eid}")
         return notes
 
     def snapshot(self) -> dict:
@@ -204,6 +507,7 @@ class TrueAbility:
             "error_strength": dict(self.error_strength),
             "recasts_seen": dict(self.recasts_seen),
             "turns": self.turns,
+            "learner_state": copy.deepcopy(self.learner_state),
         }
 
 
@@ -279,22 +583,31 @@ def clean_student_utterance(raw: str, *, persona_name: str = "") -> str:
 
 
 class AIStudentAgent:
-    """Grok-backed learner that emits one student utterance per tutor turn."""
+    """Grok-backed learner with structured learner_state + full chat memory."""
 
     def __init__(
         self,
         persona: dict[str, Any],
         *,
         model: str | None = None,
+        ability_level: str | None = None,
     ):
         config.load_env()
-        self.persona = persona
+        self.persona = copy.deepcopy(persona)
+        self.ability = get_ability_level(
+            ability_level or self.persona.get("ability"), self.persona
+        )
+        # CLI --level overrides persona default band
+        self.persona["ability"] = self.ability.get("id") or self.persona.get("ability")
         self.model = model or default_student_model()
         self.caps = config.caps_for(self.model)
         self.client = config.make_client_for(self.model)
-        self.true = TrueAbility.from_persona(persona)
-        self.history: list[dict] = []  # student-visible: user=tutor, assistant=self
+        self.true = TrueAbility.from_persona(self.persona, self.ability)
+        self.learner_state: dict[str, Any] = copy.deepcopy(self.true.learner_state)
+        self.history: list[dict] = []  # full session: user=tutor, assistant=self
         self._leave_streak = 0
+        self.last_state_notes: list[str] = []
+        self.last_state_parse_ok: bool = False
 
     def _leave_looping(self) -> bool:
         """True if last few student lines were only leave-taking."""
@@ -310,83 +623,121 @@ class AIStudentAgent:
             for t in recent
         )
 
-    def _system_text(self, *, tutor_message: str = "") -> str:
-        base = STUDENT_PROMPT.read_text() if STUDENT_PROMPT.exists() else (
-            "You are a Spanish learner. Reply only as the student."
-        )
-        p = self.persona
-        err_lines = []
-        for e in p.get("error_tendencies") or []:
+    def _form_guidance_lines(self) -> list[str]:
+        """Translate learner_state forms into actable instructions."""
+        lines: list[str] = []
+        forms = self.learner_state.get("forms") or {}
+        for e in self.persona.get("error_tendencies") or []:
             eid = e.get("id") or "?"
-            strength = self.true.error_strength.get(
-                eid, float(e.get("strength") or 0.5)
-            )
-            prefer = (
-                "PREFER GOOD forms now (strength low)"
-                if strength < 0.4
-                else "usually make the MISTAKE"
-            )
-            err_lines.append(
-                f"- {eid} (strength={strength:.2f} — {prefer}): {e.get('label')}\n"
+            fk = e.get("form_key") or eid
+            form = forms.get(fk) or {}
+            conf = float(form.get("confidence") or 0.2)
+            status = form.get("status") or "error_prone"
+            if conf >= 0.55 or status in ("usable", "solid"):
+                prefer = "PREFER GOOD forms (you've been learning this)"
+            elif conf >= 0.35 or status == "emerging":
+                prefer = "MIXED — try good form if tutor just modeled it, else may err"
+            else:
+                prefer = "usually make the MISTAKE"
+            lines.append(
+                f"- {eid} / form={fk} (status={status}, conf={conf:.2f} — {prefer}): "
+                f"{e.get('label')}\n"
                 f"  mistakes: {e.get('bad_examples')}\n"
                 f"  good forms: {e.get('good_examples')}"
             )
+        return lines
+
+    def _system_text(self, *, tutor_message: str = "") -> str:
+        base = STUDENT_PROMPT.read_text() if STUDENT_PROMPT.exists() else (
+            "You are a Spanish learner. Reply only as the student, then emit "
+            "<learner_state> JSON."
+        )
+        p = self.persona
+        ab = self.ability
         profile = {
             "name": p.get("name"),
             "personality": p.get("personality"),
-            "ability": p.get("ability"),
+            "ability": ab.get("id"),
+            "ability_label": ab.get("label"),
             "L1": p.get("L1"),
             "interests": p.get("interests"),
             "solid_phrases": p.get("solid_phrases"),
             "learning_rate": p.get("learning_rate"),
-            "error_strength_now": self.true.error_strength,
         }
+        ability_block = {
+            "id": ab.get("id"),
+            "label": ab.get("label"),
+            "description": ab.get("description"),
+            "english_ratio": ab.get("english_ratio"),
+            "max_spanish_words": ab.get("max_spanish_words"),
+            "sentence_complexity": ab.get("sentence_complexity"),
+            "inventory": ab.get("inventory"),
+            "avoid_grammar": ab.get("avoid_grammar"),
+        }
+        err_lines = self._form_guidance_lines()
         extra = ""
         if self._leave_looping():
+            topics = ", ".join((p.get("interests") or ["boats", "coffee"])[:4])
             extra += (
                 "\n## Harness override — STOP THE GOODBYE LOOP\n"
                 "You already said goodbye. Do **not** say adiós/gracias only. "
-                "Answer with a real chat line about the boat, weather, coffee, "
+                f"Answer with a real chat line about {topics}, "
                 "or how you feel — or ask a simple question.\n"
             )
-        # If tutor models estoy and strength is moderate, nudge attempt
+        # If tutor models estoy and confidence is rising, nudge attempt
         if re.search(r"\bestoy\b", tutor_message or "", re.I):
-            st = self.true.error_strength.get("estar_yo_estoy_vs_esta", 1.0)
-            if st < 0.55:
+            form = (self.learner_state.get("forms") or {}).get("estoy_yo") or {}
+            conf = float(form.get("confidence") or 0.2)
+            if conf >= 0.35 or "estoy" in " ".join(
+                self.learner_state.get("can_try_now") or []
+            ).lower():
                 extra += (
                     "\n## Harness nudge\n"
                     "Tutor just modeled **estoy**. Try using *estoy* (not *está*) "
-                    "for yourself this turn if you talk about where you are / how you are.\n"
+                    "for yourself this turn if you talk about where you are / how you are. "
+                    "Update learner_state if you succeed or notice the form.\n"
                 )
+        can_try = self.learner_state.get("can_try_now") or []
+        if can_try:
+            extra += (
+                "\n## Forms you can try now\n"
+                + "\n".join(f"- {x}" for x in can_try[:6])
+                + "\n"
+            )
         return (
             base
-            + "\n\n## Your profile (ground truth)\n"
+            + "\n\n## Your profile\n"
             + json.dumps(profile, ensure_ascii=False, indent=2)
-            + "\n\n## Error tendencies (follow these)\n"
+            + "\n\n## Ability band (hard constraints)\n"
+            + json.dumps(ability_block, ensure_ascii=False, indent=2)
+            + "\n\n## Current learner_state (your memory — update every turn)\n"
+            + json.dumps(self.learner_state, ensure_ascii=False, indent=2)
+            + "\n\n## Form guidance (from learner_state + persona)\n"
             + ("\n".join(err_lines) if err_lines else "(none)")
             + f"\n\n## Name\nYou are **{p.get('name') or 'the student'}**.\n"
             + extra
+            + "\nRemember: first the spoken reply only, then <learner_state> JSON.\n"
         )
 
     def respond(self, tutor_message: str) -> tuple[str, dict]:
-        """Return (student_utterance, usage)."""
+        """Return (student_utterance, usage). Updates learner_state each turn."""
         tutor_message = (tutor_message or "").strip()
         if not tutor_message:
             tutor_message = "(The tutor is waiting for you to say something.)"
 
-        # history: from student POV, tutor is "user"
+        # Full memory: tutor is "user" from the student's POV
         self.history.append({"role": "user", "content": tutor_message})
 
         system = [{
             "type": "text",
             "text": self._system_text(tutor_message=tutor_message),
         }]
-        # Keep last few exchanges only (cheap + focused)
-        msgs = self.history[-12:]
+        # Full conversation history (sims are short; memory is the point)
+        msgs = list(self.history)
 
         final = self.client.messages.create(
             model=self.caps.model,
-            max_tokens=256,
+            max_tokens=768,  # room for utterance + learner_state JSON
             system=system,
             messages=msgs,
         )
@@ -396,19 +747,35 @@ class AIStudentAgent:
                 t = getattr(b, "text", "") or ""
                 if t:
                     texts.append(t)
-        raw = "\n".join(texts).strip()
-        raw = clean_student_utterance(
-            raw, persona_name=str(self.persona.get("name") or "")
+        raw_full = "\n".join(texts).strip()
+        visible, state_in, parse_ok = extract_learner_output(raw_full)
+        self.last_state_parse_ok = parse_ok
+        utterance = clean_student_utterance(
+            visible, persona_name=str(self.persona.get("name") or "")
         )
 
         # Soft break if model still only goodbyes while looping
-        if self._leave_looping() and _LEAVE_RE.search(raw) and len(raw.split()) <= 6:
+        if (
+            self._leave_looping()
+            and _LEAVE_RE.search(utterance)
+            and len(utterance.split()) <= 6
+        ):
             interests = self.persona.get("interests") or ["the boat"]
-            topic = interests[self.true.turns % len(interests)]
-            raw = f"Um… wait — about {topic}, it is nice today."
+            topic = interests[int(self.learner_state.get("turns") or 0) % len(interests)]
+            utterance = f"Um… wait — about {topic}, it is nice today."
 
-        self.history.append({"role": "assistant", "content": raw})
-        if _LEAVE_RE.search(raw) and len(raw.split()) <= 6:
+        # Merge structured learning memory
+        self.learner_state, state_notes = merge_learner_state(
+            self.learner_state, state_in
+        )
+        self.true.sync_from_state(self.learner_state, self.persona)
+        self.last_state_notes = list(state_notes)
+        if not parse_ok:
+            self.last_state_notes = list(state_notes) + ["state_parse_failed"]
+
+        # History stores only what the tutor hears (no state tags)
+        self.history.append({"role": "assistant", "content": utterance})
+        if _LEAVE_RE.search(utterance) and len(utterance.split()) <= 6:
             self._leave_streak += 1
         else:
             self._leave_streak = 0
@@ -421,8 +788,10 @@ class AIStudentAgent:
                 getattr(final, "usage", None), "output_tokens", 0
             ),
             "model": self.model,
+            "state_parse_ok": parse_ok,
+            "state_notes": list(self.last_state_notes),
         }
-        return raw, usage
+        return utterance, usage
 
 
 # ---------------------------------------------------------------------------
@@ -671,6 +1040,7 @@ def run_simulation(
     turns: int | None = DEFAULT_TURNS,
     minutes: float | None = None,
     persona_id: str = "alex_boat",
+    ability_level: str | None = None,
     student_model: str | None = None,
     tutor_model: str | None = None,
     sheet_path: Path | None = None,
@@ -681,6 +1051,7 @@ def run_simulation(
     """Run student↔tutor exchanges for N turns and/or wall-clock minutes."""
     config.load_env()
     persona = get_persona(persona_id)
+    ability = get_ability_level(ability_level or persona.get("ability"), persona)
     sheet_path = Path(sheet_path or DEFAULT_STUDENT_SHEET)
     if reset_sheet and sheet_path.exists():
         sheet_path.unlink()
@@ -694,7 +1065,7 @@ def run_simulation(
         sheet.setdefault("identity", {})["name"] = persona.get("name") or "Alex"
         sheet["identity"]["L1"] = persona.get("L1") or "English"
         sheet["identity"]["goals"] = [
-            f"Sim student ({persona.get('id')}) — practice chat"
+            f"Sim student ({persona.get('id')}, {ability.get('id')}) — practice chat"
         ]
         save_sheet(sheet_path, sheet)
 
@@ -705,13 +1076,16 @@ def run_simulation(
         focus_model=focus_model if focus_model is not None else "off",
     )
     student = AIStudentAgent(
-        persona, model=student_model or default_student_model()
+        persona,
+        model=student_model or default_student_model(),
+        ability_level=ability.get("id"),
     )
 
     slog = SimLogger(
         label=persona.get("id") or "student",
         meta={
             "persona": persona.get("id"),
+            "ability_level": ability.get("id"),
             "student_model": student.model,
             "tutor_model": teacher.model,
             "sheet": str(sheet_path),
@@ -748,13 +1122,18 @@ def run_simulation(
             break
         i += 1
         _live(f"── turn {i} ──", "tutor_label")
-        student_text, _su = student.respond(tutor_msg)
+        student_text, su = student.respond(tutor_msg)
         _live(f"student> {student_text}", "ok")
         tr = teacher.user_turn(student_text, input_mode="text")
         if tr.error:
             raise RuntimeError(f"teacher turn {i} failed: {tr.error}")
         _live(f"tutor> {tr.reply}", "tutor_label")
-        ln = student.true.on_tutor_reply(tr.reply, persona)
+        # Tutor modeling signals (logging) + student's own state merge notes
+        model_notes = student.true.on_tutor_reply(tr.reply, persona)
+        state_notes = list(student.last_state_notes or [])
+        if su.get("state_parse_ok") is False:
+            state_notes = list(state_notes) + ["parse_miss"]
+        ln = state_notes + model_notes
         sheet_after = copy.deepcopy(load_sheet(sheet_path))
         diff = _sheet_diff(sheet_before, sheet_after)
         if tr.notes:
@@ -769,6 +1148,13 @@ def run_simulation(
             _live(f"  [learn: {'; '.join(ln)}]", "ok")
         if (tr.parts or {}).get("recast"):
             _live(f"  [recast] {(tr.parts or {}).get('recast')}", "ok")
+        ls = student.learner_state
+        _live(
+            f"  [learner_state turns={ls.get('turns')} "
+            f"can_try={ls.get('can_try_now')!r} "
+            f"parse_ok={su.get('state_parse_ok')}]",
+            "meta",
+        )
 
         slog.turn(
             n=i,
@@ -804,6 +1190,7 @@ def run_simulation(
     sheet = load_sheet(sheet_path)
     report = {
         "persona": persona.get("id"),
+        "ability_level": ability.get("id"),
         "student_name": persona.get("name"),
         "student_model": student.model,
         "tutor_model": teacher.model,
@@ -814,6 +1201,7 @@ def run_simulation(
         "log_jsonl": str(slog.jsonl_path),
         "session_id": slog.session_id,
         "true_ability_final": student.true.snapshot(),
+        "learner_state_final": copy.deepcopy(student.learner_state),
         "sheet_error_patterns": (sheet.get("error_patterns") or {}),
         "sheet_next_best": sheet.get("next_best") or {},
         "sheet_skills_sample": {
@@ -880,16 +1268,39 @@ def _verification_checks(
             f"any_recast={any_recast} patterns={list(pattern_ids)[:6]}"
         ),
     })
+    # Learning via learner_state: if model raised conf on a form, strength should fall
+    ls = true.learner_state or {}
+    forms = ls.get("forms") or {}
+    if log and forms:
+        first_ls = (log[0].true_ability.get("learner_state") or {})
+        first_forms = first_ls.get("forms") or {}
+        improved = []
+        for fk, fv in forms.items():
+            if not isinstance(fv, dict):
+                continue
+            c0 = float((first_forms.get(fk) or {}).get("confidence") or 0)
+            c1 = float(fv.get("confidence") or 0)
+            if c1 > c0 + 0.05:
+                improved.append(f"{fk}:{c0:.2f}→{c1:.2f}")
+        checks.append({
+            "id": "learner_state_present",
+            "ok": bool(forms),
+            "detail": (
+                f"forms={list(forms.keys())[:6]} "
+                f"turns={ls.get('turns')} improved={improved or 'none'}"
+            ),
+        })
     for eid, n in true.recasts_seen.items():
         if n <= 0 or not log:
             continue
         first = (log[0].true_ability.get("error_strength") or {}).get(eid)
         last = true.error_strength.get(eid)
-        ok = first is None or last is None or last <= first + 1e-6
+        # Strength should not *increase* after successful practice signals
+        ok = first is None or last is None or last <= first + 0.05
         checks.append({
             "id": f"learning_down_{eid}",
             "ok": ok,
-            "detail": f"recasts={n} strength {first}→{last}",
+            "detail": f"success_signals={n} strength {first}→{last}",
         })
     name = (sheet.get("identity") or {}).get("name")
     checks.append({
@@ -904,7 +1315,7 @@ def print_report(report: dict, *, verbose: bool = True) -> None:
     p = palette()
     print(paint(
         f"AI student sim — {report.get('student_name')} "
-        f"({report.get('persona')})",
+        f"({report.get('persona')}, {report.get('ability_level')})",
         "header",
         p=p,
     ))
@@ -952,6 +1363,10 @@ def print_report(report: dict, *, verbose: bool = True) -> None:
     print(paint("## True ability (student ground truth)", "header", p=p))
     print(json.dumps(report.get("true_ability_final"), indent=2, ensure_ascii=False))
     print()
+    if report.get("learner_state_final"):
+        print(paint("## Learner state final", "header", p=p))
+        print(json.dumps(report.get("learner_state_final"), indent=2, ensure_ascii=False)[:2500])
+        print()
     print(paint("## Sheet error_patterns (teacher model)", "header", p=p))
     print(json.dumps(report.get("sheet_error_patterns"), indent=2, ensure_ascii=False)[:2000])
     print()
@@ -968,6 +1383,12 @@ def main(argv: list[str] | None = None) -> None:
         default="alex_boat",
         choices=sorted(PERSONAS.keys()),
         help="Student persona preset",
+    )
+    ap.add_argument(
+        "--level",
+        default=None,
+        choices=sorted(ABILITY_LEVELS.keys()),
+        help="Ability band override (default: persona's ability)",
     )
     ap.add_argument(
         "--turns",
@@ -1033,6 +1454,7 @@ def main(argv: list[str] | None = None) -> None:
         turns=turns,
         minutes=minutes,
         persona_id=args.persona,
+        ability_level=args.level,
         student_model=args.student_model,
         tutor_model=args.tutor_model,
         sheet_path=args.sheet,

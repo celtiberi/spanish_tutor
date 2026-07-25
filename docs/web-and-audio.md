@@ -123,13 +123,16 @@ Run a Grok-powered learner against the tutor on a **separate** sheet:
 # requires GROK_API_KEY (+ tutor GEMINI_API_KEY by default)
 python -m tutor.ai_student --turns 6 --persona alex_boat
 python -m tutor.ai_student --persona maya_shy --keep-sheet --turns 4
+python -m tutor.ai_student --level intermediate_low --persona jordan_travel --turns 6
 python -m tutor.ai_student --json-out logs/ai_student_report.json
 ```
 
 - Sheet: `logs/ai_student_sheet.json` (not Patrick’s live sheet)
 - Student model: `AI_STUDENT_MODEL` (default `grok-4.5`)
 - Teacher model: `TUTOR_MODEL`
-- Personas: `alex_boat` (yo/está errors), `maya_shy` (ser/estar)
+- Personas: `alex_boat` (yo/está), `maya_shy` (ser/estar), `jordan_travel` (stronger)
+- Ability bands (`--level`): `novice_low`, `novice_mid`, `intermediate_low`
+- Student keeps structured `learner_state` each turn (forms, confidence, can_try_now) + full chat memory
 - Prints turn log + verification checks (error tracking, learning, recasts)
 
 See `tutor/ai_student.py` and `prompts/ai_student.md`.
