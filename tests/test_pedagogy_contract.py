@@ -5,6 +5,7 @@ from pathlib import Path
 
 from tutor.pedagogy_contract import (
     CONTRACT_VERSION,
+    TEACH_MODALITIES,
     VIOLATION_NO_TEACH_MOVE,
     VIOLATION_OPEN_NEEDS_MODEL_TRY,
     VIOLATION_RECAST_WITHOUT_TRY,
@@ -18,6 +19,16 @@ from tutor.tutor_response import parse_tutor_response
 class TestPedagogyContract(unittest.TestCase):
     def test_version_pinned(self):
         self.assertTrue(CONTRACT_VERSION)
+
+    def test_visual_image_is_registered_modality(self):
+        """Images are pedagogy (planned), not an afterthought feature."""
+        self.assertIn("visual_image", TEACH_MODALITIES)
+        vis = TEACH_MODALITIES["visual_image"]
+        self.assertEqual(vis["status"], "planned")
+        self.assertIn("target_linked", vis.get("rules") or [])
+        # Active text modalities still enforced in v1
+        self.assertEqual(TEACH_MODALITIES["text_model"]["status"], "active")
+        self.assertEqual(TEACH_MODALITIES["text_try"]["status"], "active")
 
     def test_chat_buddy_open_fails(self):
         """Bare greeting = the failure mode we actually shipped."""

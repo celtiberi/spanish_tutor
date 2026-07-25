@@ -59,9 +59,64 @@ bump `CONTRACT_VERSION` and update tests **in the same PR**.
 
 Do **not** “just soften the prompt” to see if chat feels nicer.
 
+## Teaching modalities (the system expands here)
+
+Pedagogy is not “text chat with a smart tone.” It is a **set of channels** that
+build form–meaning links. v1 only enforces text moves (`model` / `try` /
+`recast`). Later channels join the **same contract**, not the decorative UI.
+
+| Modality | Pedagogical job | Status |
+|----------|-----------------|--------|
+| **Text model** | Put target form in ears/eyes | v1 required path |
+| **Text try** | Elicit production | v1 required path |
+| **Recast** | Focus on form in meaning | v1 |
+| **Audio (TTS)** | Pronunciation + memory via voice | shipped (playback) |
+| **STT** | Production under speaking pressure | shipped (mic) |
+| **Visual / image** | Bind **nouns, scenes, concepts** to form so the learner associates meaning without English gloss | **planned — pedagogy, not garnish** |
+| **Gesture / emoji (light)** | Comprehensible-input scaffold | opportunistic only |
+| **Task / roleplay** | TBLT use of form | sheet `next_best` activities |
+
+### Visual association (image generation)
+
+When we add images, they are a **teach move**, not a wallpaper:
+
+1. **Target-linked** — image depicts the *same* noun/scene/concept as the
+   form in `model` / `try` (e.g. *el bote*, *estoy en el bote*, *café*).
+2. **Same turn as the form** — show image with model/try so form + meaning
+   land together (dual coding / CI support).
+3. **Contract-shaped** — e.g. structured part `<image concept="bote" …>` or
+   a sheet/tool field `teach_assets[]` with `{concept, form, asset_id}`.
+4. **Measurable** — sim/live logs: “image present for target concept?” not
+   “pretty picture count.”
+5. **Experiment, not vibe** — enable via contract version bump + tests
+   (when is image required? which concepts? cache vs generate?).
+
+Images must **not** become:
+
+- random decoration unrelated to the teach target  
+- English-label stickers that short-circuit inference  
+- a side feature the tutor “sometimes remembers”
+
+They belong in the **same teach cycle**:
+
+```
+meaning → model (+ visual of the referent) → try → recast → transfer
+```
+
+### How modalities enter the system
+
+1. Name the modality in this doc + `TEACH_MODALITIES` in code.  
+2. Define when it is **optional** vs **required** (contract version).  
+3. Wire structured part or tool + logging.  
+4. Tests for the new invariant.  
+5. Prompt/harness only after the contract knows about it.
+
 ## Future (deliberate upgrades)
 
 - Blocking retry when model omits teach moves (one re-ask to the LLM).
 - UI badge when `pedagogy:no_teach_move` fires.
 - Sim report section: % turns with teach moves.
 - Link can-do `next_best` to required try templates.
+- **v1.x:** optional `image` teach asset on noun/lexicon targets.
+- **v2:** contract may require visual for selected concept classes
+  (concrete nouns, locations, food) when generation is reliable.
