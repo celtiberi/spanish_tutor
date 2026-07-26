@@ -6,6 +6,7 @@ Sheet = learner context; tool call update_character_sheet keeps it current.
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -358,6 +359,9 @@ class ConversationalSession:
         self._focus_panel: dict | None = None
         self._focus_key: str | None = None
         self._focus_meta: dict = {"source": "static"}
+        self._focus_version: int = 0
+        self._focus_lock = threading.Lock()
+        self._focus_inflight = False
         self.logger: SessionLogger | None = None
         self.teacher_mode = (config.TEACHER_MODE or "planned").strip().lower()
         self.last_plan: dict | None = None
@@ -393,7 +397,7 @@ class ConversationalSession:
         tutor_reply: str = "",
         use_ai: bool = True,
     ) -> None:
-        """Update cached focus/morphology rail (static + optional cheap model)."""
+        """Update cached focus/morphology rail (static and/or AI)."""
         key = focus_cache_key(self.sheet)
         panel, meta = enrich_focus_panel(
             self.sheet,
@@ -404,9 +408,76 @@ class ConversationalSession:
                 not use_ai or not focus_model_enabled(self.focus_model)
             ),
         )
-        self._focus_panel = panel
-        self._focus_key = key
-        self._focus_meta = meta
+        with self._focus_lock:
+            self._focus_panel = panel
+            self._focus_key = key
+            self._focus_meta = meta
+            self._focus_version = int(self._focus_version or 0) + 1
+
+    def _schedule_focus_enrich(
+        self,
+        *,
+        learner: str = "",
+        tutor_reply: str = "",
+        force_ai: bool = False,
+    ) -> None:
+        """Static rail now; optional FOCUS_MODEL in a background thread.
+
+        Conversation latency must not wait on the side rail. Client can
+        poll GET /api/sheet and re-render when focus_version bumps.
+        """
+        # Always paint static immediately
+        self._refresh_focus(
+            learner=learner,
+            tutor_reply=tutor_reply,
+            use_ai=False,
+        )
+        if not focus_model_enabled(self.focus_model):
+            return
+        if getattr(config, "FOCUS_BLOCKING", False):
+            # Rare: wait for AI rail (slow path for debugging)
+            self._refresh_focus(
+                learner=learner,
+                tutor_reply=tutor_reply,
+                use_ai=True,
+            )
+            return
+        if not getattr(config, "FOCUS_ASYNC", True) and not force_ai:
+            return
+        with self._focus_lock:
+            if self._focus_inflight:
+                return
+            self._focus_inflight = True
+        # Snapshot for the worker (avoid racing sheet mutations)
+        sheet_snap = dict(self.sheet) if isinstance(self.sheet, dict) else {}
+        model = self.focus_model
+        key = focus_cache_key(self.sheet)
+
+        def _work() -> None:
+            try:
+                panel, meta = enrich_focus_panel(
+                    sheet_snap,
+                    learner=learner,
+                    tutor_reply=tutor_reply,
+                    model=model,
+                    force_static=False,
+                )
+                with self._focus_lock:
+                    # Only apply if still relevant to this stretch
+                    if self._focus_key == key or not self._focus_key:
+                        self._focus_panel = panel
+                        self._focus_key = key
+                        self._focus_meta = meta
+                        self._focus_version = int(self._focus_version or 0) + 1
+            except Exception:
+                pass
+            finally:
+                with self._focus_lock:
+                    self._focus_inflight = False
+
+        threading.Thread(
+            target=_work, name="focus-enrich", daemon=True
+        ).start()
 
     def _finish(
         self,
@@ -439,25 +510,12 @@ class ConversationalSession:
         visible = composed or _sheet_visible or compose_if_needed(tutor_parts)
         save_sheet(self.sheet_path, self.sheet)
         if refresh_focus:
-            key = focus_cache_key(self.sheet)
-            key_changed = self._focus_key != key
-            has_panel = self._focus_panel is not None
-            # Focus LLM is optional and expensive — never block the tutor reply
-            # unless FOCUS_BLOCKING=1. Static templates keep the rail useful.
-            want_ai = bool(
-                getattr(config, "FOCUS_BLOCKING", False)
-                and (
-                    not has_panel
-                    or key_changed
-                    or any(n == "tool_update" for n in notes)
-                )
+            # Static rail immediately; FOCUS_MODEL enriches async (non-blocking)
+            self._schedule_focus_enrich(
+                learner=learner,
+                tutor_reply=visible,
             )
-            if want_ai or not has_panel or key_changed:
-                self._refresh_focus(
-                    learner=learner,
-                    tutor_reply=visible,
-                    use_ai=want_ai,
-                )
+            notes = list(notes) + ["focus_async"]
         if tutor_parts.has_recast() and "recast" not in notes:
             notes = list(notes) + ["recast"]
         if parts_dict.get("structured"):
@@ -1308,6 +1366,8 @@ class ConversationalSession:
             or (self._focus_meta or {}).get("source")
             or "static",
             "focus_model": self.focus_model,
+            "focus_version": int(getattr(self, "_focus_version", 0) or 0),
+            "focus_pending": bool(getattr(self, "_focus_inflight", False)),
             "score": compute_progress_score(self.sheet),
         }
 

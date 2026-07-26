@@ -79,9 +79,15 @@ TEACH_IMAGE_GENERATE = (
 # Side-rail focus/morphology enricher (cheap). "off" / "static" / "none" = templates only.
 FOCUS_MODEL = os.environ.get("FOCUS_MODEL", "grok-3-mini")
 FOCUS_MAX_TOKENS = int(os.environ.get("FOCUS_MAX_TOKENS", "512"))
-# If false (default), rail uses static templates only — no extra LLM before reply.
+# If true, wait for focus LLM before returning the tutor turn (slow — avoid).
+# Default false: static rail immediately, FOCUS_MODEL enrich runs in background.
 FOCUS_BLOCKING = (
     os.environ.get("FOCUS_BLOCKING", "false").strip().lower()
+    in ("1", "true", "yes", "on")
+)
+# Async focus enrich after reply (default on when model is enabled).
+FOCUS_ASYNC = (
+    os.environ.get("FOCUS_ASYNC", "true").strip().lower()
     in ("1", "true", "yes", "on")
 )
 # Tool-call sheet updates add a second model round-trip; hard_observer already

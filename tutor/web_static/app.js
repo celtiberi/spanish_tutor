@@ -664,6 +664,46 @@ function showMessages(list) {
   }
 }
 
+/** Side-rail focus LLM runs async on the server — poll until it settles. */
+let railPollTimer = null;
+let lastFocusVersion = null;
+
+function scheduleRailRefresh() {
+  if (railPollTimer) {
+    clearTimeout(railPollTimer);
+    railPollTimer = null;
+  }
+  const delays = [350, 900, 1800, 3200];
+  let i = 0;
+  const tick = async () => {
+    try {
+      const sheet = await api("/api/sheet");
+      const ver = sheet?.focus_version;
+      if (ver != null && ver !== lastFocusVersion) {
+        lastFocusVersion = ver;
+        renderSheet(sheet);
+      } else if (sheet) {
+        // Still refresh score / sheet fields even if version unchanged
+        renderSheet(sheet);
+        lastFocusVersion = ver ?? lastFocusVersion;
+      }
+      if (sheet?.focus_pending && i < delays.length - 1) {
+        i += 1;
+        railPollTimer = setTimeout(tick, delays[i]);
+        return;
+      }
+      // One more pull after pending clears
+      if (!sheet?.focus_pending && i < 2) {
+        i += 1;
+        railPollTimer = setTimeout(tick, delays[Math.min(i, delays.length - 1)]);
+      }
+    } catch (_) {
+      /* ignore */
+    }
+  };
+  railPollTimer = setTimeout(tick, delays[0]);
+}
+
 async function startSession() {
   setBusy(true);
   els.statusLine.textContent = "Connecting…";
@@ -678,6 +718,8 @@ async function startSession() {
     showMessages(data.messages);
     setNotes(data.notes);
     renderSheet(data.sheet);
+    lastFocusVersion = data.sheet?.focus_version ?? null;
+    scheduleRailRefresh();
     els.statusLine.textContent = `Model ${data.model || "tutor"} · new chat`;
     if (data.reply) speak(data.reply, data.parts);
   } catch (e) {
@@ -724,7 +766,9 @@ async function sendMessage(text, inputMode = "text", opts = {}) {
     typing.remove();
     addBubble("tutor", data.reply, { parts: data.parts });
     setNotes(data.notes);
-    renderSheet(data.sheet);
+    renderSheet(data.sheet); // score + static rail immediately
+    lastFocusVersion = data.sheet?.focus_version ?? lastFocusVersion;
+    scheduleRailRefresh(); // focus LLM finishes async → pull updated rail
     // Start voice ASAP (browser TTS); don't block UI on server TTS RTT
     speak(data.reply, data.parts);
     setMicStatus("idle", micIdleHint);
