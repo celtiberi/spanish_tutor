@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Spanish tutor</title>
-  <link rel="stylesheet" href="/static/styles.css?v=20260725e" />
+  <link rel="stylesheet" href="/static/styles.css?v=20260726a" />
 </head>
 <body>
   <div class="app">
@@ -14,6 +14,21 @@
         <div>
           <h1>Spanish tutor</h1>
           <p class="sub" id="statusLine">Starting…</p>
+        </div>
+      </div>
+      <div class="score-board" id="scoreBoard" title="Progress from your character sheet" aria-live="polite">
+        <div class="score-main">
+          <span class="score-label">Progress</span>
+          <span class="score-value" id="scoreValue">0</span>
+          <span class="score-delta hidden" id="scoreDelta"></span>
+        </div>
+        <div class="score-bar-wrap" aria-hidden="true">
+          <div class="score-bar" id="scoreBar" style="width:0%"></div>
+        </div>
+        <div class="score-meta">
+          <span id="scoreLevel">Just starting</span>
+          <span class="score-sep">·</span>
+          <span id="scoreSkills">0 known</span>
         </div>
       </div>
       <div class="header-actions">
@@ -90,6 +105,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=20260725e"></script>
+  <script src="/static/app.js?v=20260726a"></script>
 </body>
 </html>

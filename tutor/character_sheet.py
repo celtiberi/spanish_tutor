@@ -378,6 +378,68 @@ def fold(s: str) -> str:
     return re.sub(r"\s+", " ", s)
 
 
+def compute_progress_score(sheet: dict | None) -> dict:
+    """Simple 0–100 learner score from the character sheet (can-do confidences).
+
+    Crude but visible “you are advancing” signal for the web UI. Refine later.
+    """
+    sheet = sheet if isinstance(sheet, dict) else {}
+    skills = sheet.get("skills") or {}
+    # Track core A1 interpersonal + a few others
+    track = [f"IP-{i:02d}" for i in range(1, 9)] + ["IT-01", "IT-02", "PR-01"]
+    total_conf = 0.0
+    known = 0
+    emerging = 0
+    for cid in track:
+        sk = skills.get(cid) if isinstance(skills.get(cid), dict) else {}
+        try:
+            conf = float(sk.get("confidence") or 0)
+        except (TypeError, ValueError):
+            conf = 0.0
+        conf = max(0.0, min(1.0, conf))
+        total_conf += conf
+        status = str(sk.get("status") or "unknown").lower()
+        if status == "known" or conf >= 0.7:
+            known += 1
+        elif status in ("emerging", "fragile") or conf > 0.05:
+            emerging += 1
+    n = len(track)
+    score = int(round((total_conf / max(n, 1)) * 100))
+    score = max(0, min(100, score))
+
+    # Light bonus for resolved error work (capped)
+    err_bonus = 0
+    for _pid, ent in (sheet.get("error_patterns") or {}).items():
+        if not isinstance(ent, dict):
+            continue
+        streak = int(ent.get("resolved_streak") or 0)
+        if streak >= 2:
+            err_bonus += 1
+    score = min(100, score + min(5, err_bonus))
+
+    if score < 12:
+        level = "Just starting"
+    elif score < 30:
+        level = "Emerging"
+    elif score < 50:
+        level = "Building"
+    elif score < 70:
+        level = "Solid core"
+    else:
+        level = "Strong A1"
+
+    name = ((sheet.get("identity") or {}).get("preferred_name") or "").strip()
+    return {
+        "total": score,
+        "level": level,
+        "known": known,
+        "emerging": emerging,
+        "tracked": n,
+        "name": name or None,
+        "label": f"{score}",
+    }
+
+
 def format_sheet_for_prompt(sheet: dict, *, max_lex: int = 40) -> str:
     """Compact JSON-ish summary for the tutor system context.
 

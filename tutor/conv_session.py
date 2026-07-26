@@ -16,6 +16,7 @@ from .can_dos import build_focus_panel
 from .character_sheet import (
     UPDATE_CHARACTER_SHEET_TOOL,
     clear_session_scoped_affect,
+    compute_progress_score,
     default_sheet,
     extract_sheet_delta,
     format_sheet_for_prompt,
@@ -1281,6 +1282,7 @@ class ConversationalSession:
             or (self._focus_meta or {}).get("source")
             or "static",
             "focus_model": self.focus_model,
+            "score": compute_progress_score(self.sheet),
         }
 
     def close(self, *, persist_sheet: bool = True) -> str | None:

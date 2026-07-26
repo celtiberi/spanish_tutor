@@ -25,6 +25,13 @@ const els = {
   focusPill: $("focusPill"),
   focusTitle: $("focusTitle"),
   focusMeta: $("focusMeta"),
+  scoreBoard: $("scoreBoard"),
+  scoreValue: $("scoreValue"),
+  scoreDelta: $("scoreDelta"),
+  scoreBar: $("scoreBar"),
+  scoreLevel: $("scoreLevel"),
+  scoreSkills: $("scoreSkills"),
+
   morphPill: $("morphPill"),
   morphBody: $("morphBody"),
 };
@@ -354,6 +361,63 @@ function renderMorphology(sheet) {
   els.morphBody.innerHTML = html;
 }
 
+/** Last rendered progress total — used to show +Δ when score advances. */
+let lastScoreTotal = null;
+let scoreFlashTimer = null;
+
+function renderScore(sheet) {
+  if (!els.scoreBoard || !els.scoreValue) return;
+  const sc = sheet?.score || {};
+  let total = Number(sc.total);
+  if (!Number.isFinite(total)) {
+    // Client fallback if API older
+    const skills = sheet?.skills || {};
+    const ids = [
+      "IP-01", "IP-02", "IP-03", "IP-04", "IP-05", "IP-06", "IP-07", "IP-08",
+      "IT-01", "IT-02", "PR-01",
+    ];
+    let sum = 0;
+    for (const id of ids) {
+      sum += Number(skills[id]?.confidence || 0);
+    }
+    total = Math.round((sum / ids.length) * 100);
+  }
+  total = Math.max(0, Math.min(100, Math.round(total)));
+  const level = sc.level || "Progress";
+  const known = Number(sc.known || 0);
+  const emerging = Number(sc.emerging || 0);
+
+  const prev = lastScoreTotal;
+  els.scoreValue.textContent = String(total);
+  if (els.scoreBar) els.scoreBar.style.width = `${total}%`;
+  if (els.scoreLevel) els.scoreLevel.textContent = level;
+  if (els.scoreSkills) {
+    els.scoreSkills.textContent =
+      emerging > 0
+        ? `${known} known · ${emerging} emerging`
+        : `${known} known`;
+  }
+
+  if (els.scoreDelta) {
+    if (prev !== null && total > prev) {
+      const d = total - prev;
+      els.scoreDelta.textContent = `+${d}`;
+      els.scoreDelta.classList.remove("hidden");
+      els.scoreBoard.classList.add("score-up");
+      if (scoreFlashTimer) clearTimeout(scoreFlashTimer);
+      scoreFlashTimer = setTimeout(() => {
+        els.scoreDelta.classList.add("hidden");
+        els.scoreBoard.classList.remove("score-up");
+      }, 2800);
+    } else if (prev !== null && total < prev) {
+      // reset learner etc. — no flash
+      els.scoreDelta.classList.add("hidden");
+      els.scoreBoard.classList.remove("score-up");
+    }
+  }
+  lastScoreTotal = total;
+}
+
 function renderSheet(sheet) {
   if (!sheet) {
     // Keep rail usable even if API omitted sheet
@@ -375,6 +439,11 @@ function renderSheet(sheet) {
         avoid: sheet.next_best.avoid,
       },
     };
+  }
+  try {
+    renderScore(sheet);
+  } catch (e) {
+    console.error("renderScore", e);
   }
   try {
     renderFocus(sheet);
