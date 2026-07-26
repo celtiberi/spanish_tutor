@@ -1,7 +1,29 @@
 import os
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+
+def _find_repo_root() -> Path:
+    """Locate course_packs + prompts (dev tree, installed wheel, or Vercel)."""
+    here = Path(__file__).resolve().parent
+    candidates = [
+        here.parent,  # normal: repo_root/tutor/config.py
+        Path.cwd(),
+        Path(os.environ.get("VERCEL_PROJECT_ROOT", "")),
+        Path("/var/task"),
+        Path("/vercel/path0"),
+        here,  # fallback: package dir only
+    ]
+    for c in candidates:
+        if not c or str(c) == ".":
+            continue
+        if (c / "course_packs").is_dir() and (c / "prompts").is_dir():
+            return c
+        if (c / "tutor").is_dir() and (c / "course_packs").is_dir():
+            return c
+    return here.parent
+
+
+REPO_ROOT = _find_repo_root()
 POLICY_PATH = REPO_ROOT / "prompts" / "teaching_policy.md"
 DEFAULT_PACK_DIR = REPO_ROOT / "course_packs" / "spanish_a1"
 
