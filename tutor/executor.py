@@ -95,9 +95,12 @@ def build_ai_tutor_system(
         except OSError:
             stance = ""
     text = AI_TUTOR_SYSTEM
+    stance_cap = getattr(config, "STANCE_PROMPT_CHARS", 2200)
+    pack_cap = getattr(config, "PACK_PROMPT_CHARS", 1800)
+    sheet_cap = 2500
     if stance:
-        # Methods reinforce; AI_TUTOR_SYSTEM leads so it wins conflicts
-        text += "\n\n# Teaching methods (detail)\n" + stance[:5000]
+        # Methods reinforce; keep short for latency (was 5–6k chars)
+        text += "\n\n# Teaching methods (detail)\n" + stance[:stance_cap]
     blocks: list[dict] = [{"type": "text", "text": text}]
     if sheet_summary:
         blocks.append({
@@ -106,17 +109,16 @@ def build_ai_tutor_system(
                 "# Student character sheet — your model of this learner\n"
                 "Adapt level and stretch. Do not ignore fragile forms or "
                 "next_best, but never ignore what they just said.\n\n"
-                + sheet_summary[:5000]
+                + sheet_summary[:sheet_cap]
             ),
         })
     if pack_palette:
         blocks.append({
             "type": "text",
-            "text": "# Course pack palette (stay in scope)\n" + pack_palette[:6000],
+            "text": "# Course pack palette (stay in scope)\n" + pack_palette[:pack_cap],
             "cache_control": {"type": "ephemeral"},
         })
     return blocks
-
 
 def build_ai_tutor_user_message(
     *,

@@ -79,11 +79,38 @@ TEACH_IMAGE_GENERATE = (
 # Side-rail focus/morphology enricher (cheap). "off" / "static" / "none" = templates only.
 FOCUS_MODEL = os.environ.get("FOCUS_MODEL", "grok-3-mini")
 FOCUS_MAX_TOKENS = int(os.environ.get("FOCUS_MAX_TOKENS", "512"))
+# If false (default), rail uses static templates only — no extra LLM before reply.
+FOCUS_BLOCKING = (
+    os.environ.get("FOCUS_BLOCKING", "false").strip().lower()
+    in ("1", "true", "yes", "on")
+)
+# Tool-call sheet updates add a second model round-trip; hard_observer already
+# writes evidence. Default off for latency; set SHEET_TOOLS=1 to re-enable.
+SHEET_TOOLS = (
+    os.environ.get("SHEET_TOOLS", "false").strip().lower()
+    in ("1", "true", "yes", "on")
+)
+# Second LLM only for critical output-gate failures (missing teach move / English wall).
+GATE_REPAIR = (
+    os.environ.get("GATE_REPAIR", "true").strip().lower()
+    in ("1", "true", "yes", "on")
+)
+# Prompt size caps (tokens ≈ chars/4; keep small for speed)
+PACK_PROMPT_CHARS = int(os.environ.get("PACK_PROMPT_CHARS", "1800"))
+STANCE_PROMPT_CHARS = int(os.environ.get("STANCE_PROMPT_CHARS", "2200"))
+HISTORY_TURNS = int(os.environ.get("HISTORY_TURNS", "8"))  # message pairs cap
 # Server TTS (Gemini). Browser speechSynthesis is fallback only.
 TTS_MODEL = os.environ.get("TTS_MODEL", "gemini-2.5-flash-preview-tts")
 TTS_VOICE = os.environ.get("TTS_VOICE", "Sulafat")  # Warm
 TTS_ENABLED = os.environ.get("TTS_ENABLED", "true")
+# Prefer browser TTS for instant start (server Gemini TTS is a full extra RTT).
+TTS_PREFER_BROWSER = (
+    os.environ.get("TTS_PREFER_BROWSER", "true").strip().lower()
+    in ("1", "true", "yes", "on")
+)
 MAX_TOKENS = 8192
+# Tutor replies stay short for TTS + latency
+TUTOR_MAX_TOKENS = int(os.environ.get("TUTOR_MAX_TOKENS", "1024"))
 # Planner only emits a small JSON decision — keep this tight for latency.
 PLANNER_MAX_TOKENS = int(os.environ.get("PLANNER_MAX_TOKENS", "768"))
 

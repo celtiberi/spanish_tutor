@@ -506,12 +506,41 @@ function speakBrowser(text) {
   speechSynthesis.speak(u);
 }
 
-/** Prefer server Gemini TTS; fall back to browser speechSynthesis (macOS voice). */
-async function speak(text) {
+/**
+ * Prefer short speech: model + try (skip long English explains).
+ */
+function speechTextFromParts(parts, fallback) {
+  if (parts && typeof parts === "object") {
+    const core = [parts.model, parts.try, parts.recast]
+      .map((s) => (s || "").trim())
+      .filter(Boolean);
+    if (core.length) return core.join(". ").slice(0, 600);
+    const soft = [parts.acknowledge, parts.model, parts.try]
+      .map((s) => (s || "").trim())
+      .filter(Boolean);
+    if (soft.length) return soft.join(". ").slice(0, 600);
+  }
+  return (fallback || "").trim().slice(0, 600);
+}
+
+/**
+ * Instant voice: browser TTS by default (no extra network RTT).
+ * Server Gemini TTS only if localStorage ttsPreferServer=1 or window.__TTS_SERVER__.
+ */
+async function speak(text, parts) {
   if (!els.speakToggle.checked) return;
-  const t = (text || "").trim();
+  const t = speechTextFromParts(parts, text);
   if (!t) return;
   stopSpeech();
+
+  const preferServer =
+    window.__TTS_SERVER__ === true ||
+    localStorage.getItem("ttsPreferServer") === "1";
+
+  if (!preferServer) {
+    speakBrowser(t);
+    return;
+  }
 
   try {
     const res = await fetch("/api/audio/speak", {
@@ -541,24 +570,11 @@ async function speak(text) {
     };
     audio.onerror = () => {
       URL.revokeObjectURL(url);
-      console.warn("server TTS audio play failed → browser voice");
-      if (typeof setMicStatus === "function") {
-        setMicStatus(
-          "error",
-          "Server voice failed to play — using Mac/browser voice"
-        );
-      }
       speakBrowser(t);
     };
     await audio.play();
   } catch (e) {
     console.warn("server TTS failed, browser fallback:", e);
-    if (typeof setMicStatus === "function") {
-      setMicStatus(
-        "error",
-        "Server voice offline — using Mac/browser voice (not Gemini)"
-      );
-    }
     speakBrowser(t);
   }
 }
@@ -663,7 +679,7 @@ async function startSession() {
     setNotes(data.notes);
     renderSheet(data.sheet);
     els.statusLine.textContent = `Model ${data.model || "tutor"} · new chat`;
-    if (data.reply) speak(data.reply);
+    if (data.reply) speak(data.reply, data.parts);
   } catch (e) {
     addBubble("system", `Could not start: ${e.message}`);
     els.statusLine.textContent = "Error — check API keys / server logs";
@@ -709,7 +725,8 @@ async function sendMessage(text, inputMode = "text", opts = {}) {
     addBubble("tutor", data.reply, { parts: data.parts });
     setNotes(data.notes);
     renderSheet(data.sheet);
-    speak(data.reply);
+    // Start voice ASAP (browser TTS); don't block UI on server TTS RTT
+    speak(data.reply, data.parts);
     setMicStatus("idle", micIdleHint);
     return true;
   } catch (e) {

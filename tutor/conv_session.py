@@ -250,7 +250,9 @@ def _assistant_content_blocks(final) -> list[dict]:
 def _call(client, caps, system, messages, *, max_tokens=None, tools=None):
     kwargs = dict(
         model=caps.model,
-        max_tokens=max_tokens or config.MAX_TOKENS,
+        max_tokens=max_tokens
+        or getattr(config, "TUTOR_MAX_TOKENS", None)
+        or config.MAX_TOKENS,
         system=system,
         messages=messages,
     )
@@ -440,13 +442,17 @@ class ConversationalSession:
             key = focus_cache_key(self.sheet)
             key_changed = self._focus_key != key
             has_panel = self._focus_panel is not None
-            # Cheap AI when stretch changes, sheet tool fired, or first paint
-            want_ai = (
-                not has_panel
-                or key_changed
-                or any(n == "tool_update" for n in notes)
+            # Focus LLM is optional and expensive — never block the tutor reply
+            # unless FOCUS_BLOCKING=1. Static templates keep the rail useful.
+            want_ai = bool(
+                getattr(config, "FOCUS_BLOCKING", False)
+                and (
+                    not has_panel
+                    or key_changed
+                    or any(n == "tool_update" for n in notes)
+                )
             )
-            if want_ai or not has_panel:
+            if want_ai or not has_panel or key_changed:
                 self._refresh_focus(
                     learner=learner,
                     tutor_reply=visible,
@@ -648,7 +654,7 @@ class ConversationalSession:
 
         system = build_ai_tutor_system(
             sheet_summary=format_sheet_for_prompt(self.sheet),
-            pack_palette=load_pack(self.pack_dir)[:8000],
+            pack_palette=load_pack(self.pack_dir)[: getattr(config, 'PACK_PROMPT_CHARS', 1800)],
         )
         task = build_ai_tutor_user_message(
             learner=learner,
@@ -663,15 +669,20 @@ class ConversationalSession:
         if is_open:
             messages = [{"role": "user", "content": task}]
         else:
-            messages = self.history + [{"role": "user", "content": task}]
+            # Cap history for latency (full history still grows on self.history)
+            hist_cap = max(2, int(getattr(config, "HISTORY_TURNS", 8)) * 2)
+            messages = self.history[-hist_cap:] + [{"role": "user", "content": task}]
 
         try:
+            # No tool round-trips by default (SHEET_TOOLS=0); hard_observer updates sheet
+            tools = self.tools if getattr(config, "SHEET_TOOLS", False) else None
             final, raw, tool_delta, usage, _ = tutor_turn(
                 self.client,
                 self.caps,
                 system,
                 messages,
-                tools=self.tools,
+                tools=tools,
+                max_tool_rounds=1 if tools else 0,
             )
         except Exception as e:
             return TurnResult(
@@ -697,7 +708,22 @@ class ConversationalSession:
                 mode=decision.mode.value,
                 image_present=image_present,
             )
-            if not gate_result.ok:
+            critical = {
+                "pedagogy:no_teach_move",
+                "pedagogy:open_needs_model_try",
+                "gate:english_wall",
+                "gate:form_focus_needs_model",
+            }
+            needs_repair = (
+                getattr(config, "GATE_REPAIR", True)
+                and not gate_result.ok
+                and any(f in critical for f in (gate_result.faults or []))
+            )
+            if not gate_result.ok and not needs_repair:
+                gate_notes.append(
+                    "output_gate_soft_fail:" + ",".join(gate_result.faults)
+                )
+            elif needs_repair:
                 gate_notes.append("output_gate_fail:" + ",".join(gate_result.faults))
                 repair_msg = {
                     "role": "user",
@@ -917,7 +943,7 @@ class ConversationalSession:
 
         system = build_executor_system(
             sheet_summary=format_sheet_for_prompt(self.sheet),
-            pack_palette=load_pack(self.pack_dir)[:8000],
+            pack_palette=load_pack(self.pack_dir)[: getattr(config, 'PACK_PROMPT_CHARS', 1800)],
         )
         task = build_executor_user_message(
             card,
