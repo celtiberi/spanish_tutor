@@ -39,17 +39,31 @@ def probe_signals(learner: str) -> set[str]:
         s.add("origin")
     if re.search(r"\b(gracias|por\s+favor|adi[oó]s|hasta\s+luego)\b", low):
         s.add("polite")
-    if re.search(r"\b(caf[eé]|bote|barco|r[ií]o|comida|m[uú]sica)\b", low):
+    if re.search(r"\b(caf[eé]|bote|barco|r[ií]o|comida|m[uú]sica|calor|fr[ií]o)\b", low):
         s.add("topic_vocab")
+    # Broader Spanish surface markers (include imperfect learner forms)
     es_hits = len(re.findall(
-        r"\b(hola|estoy|llamo|llamas|gracias|gusta|soy|tengo|bien|sí|si|no|"
-        r"buenos|buenas|adiós|adios|dónde|donde|cómo|como)\b",
+        r"\b(hola|estoy|est[aá]s|est[aá]|llamo|llamas|gracias|gusta|gustan|"
+        r"soy|eres|tengo|tiene|bien|mal|sí|si|no|buenos|buenas|adi[oó]s|"
+        r"dónde|donde|c[oó]mo|como|hace|calor|fr[ií]o|hoy|muy|poco|"
+        r"en|mi|tu|el|la|los|las|un|una|de|del|con|y|pero|también|"
+        r"tambien|r[ií]o|bote|caf[eé]|m[uú]sica|comida)\b",
         low,
     ))
-    en_words = len(re.findall(r"\b[a-z]{3,}\b", low))
-    if en_words >= 3 and es_hits == 0:
+    # Real English function words — not "any Latin token" (that false-flagged Spanish)
+    en_func = len(re.findall(
+        r"\b(the|and|you|your|are|is|was|were|have|has|had|will|would|should|"
+        r"could|this|that|with|from|what|where|when|why|how|should|right|"
+        r"said|have|don't|does|did|can|can't|not|just|really|because|"
+        r"think|know|want|need|please|thanks|hello|today|weather)\b",
+        low,
+    ))
+    # Pure English meta questions about Spanish still count as English frame
+    if en_func >= 2 and es_hits == 0:
         s.add("english_only")
-    if es_hits >= 2 or (es_hits >= 1 and len(low.split()) <= 6):
+    elif en_func >= 3 and es_hits <= 1:
+        s.add("english_only")
+    if es_hits >= 2 or (es_hits >= 1 and len(low.split()) <= 8):
         s.add("spanish_ok")
     if len(s & {"greet", "estoy", "name", "ask_name", "gusta", "origin"}) >= 2:
         s.add("multi_skill")

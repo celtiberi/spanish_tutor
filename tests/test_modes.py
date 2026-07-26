@@ -43,6 +43,33 @@ class TestSelectMode(unittest.TestCase):
         self.assertEqual(d.mode, Mode.CF_RECAST)
         self.assertEqual(d.targets.get("error_pattern"), "gender_number_article")
 
+    def test_esta_calor_recast_not_english_stuck(self):
+        """Broken Spanish weather must recast to *hace calor*, not association."""
+        from tutor.observe import probe_signals
+        from tutor.character_sheet import detect_error_pattern_hits
+
+        utt = "esta un poco calor hoy en rio dulce"
+        sig = probe_signals(utt)
+        self.assertNotIn("english_only", sig)
+        self.assertIn("spanish_ok", sig)
+        hits = detect_error_pattern_hits(utt)
+        self.assertTrue(any(h[0] == "weather_hace" for h in hits), hits)
+
+        sheet = default_sheet()
+        sheet["skills"]["IP-01"] = {"status": "emerging", "confidence": 0.4}
+        state = ModeSessionState()
+        state.english_only_streak = 5  # even if streak is high, form error wins
+        d = select_mode(
+            sheet,
+            learner=utt,
+            observations={"blank_sheet": False, "signals": sorted(sig)},
+            images_shown=set(),
+            mode_state=state,
+        )
+        self.assertEqual(d.mode, Mode.CF_RECAST)
+        self.assertEqual(d.targets.get("error_pattern"), "weather_hace")
+        self.assertTrue(d.targets.get("require_recast_tag"))
+
 
     def test_default_conversation(self):
         sheet = default_sheet()

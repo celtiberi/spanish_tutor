@@ -311,28 +311,8 @@ def select_mode(
             scene_ids=[s.get("id") for s in open_scenes if s.get("id")][:3],
         )
 
-    # 3) Stuck English → association (picture kills English wall)
-    eng_streak = state.english_only_streak
-    if "english_only" in signals:
-        eng_streak = eng_streak + 1
-    no_entiendo = bool(
-        learner and re_search_no_entiendo(learner)
-    )
-    if can_hard and (eng_streak >= 2 or no_entiendo):
-        concept = _noun_from_text(learner, sheet) or "bote"
-        return ModeDecision(
-            Mode.ASSOCIATION,
-            reason="english_stuck_association",
-            hard_break=True,
-            image_concept=concept,
-            targets={"concept": concept, "form": _form_for_concept(concept)},
-            instructions=(
-                f"Hard break: show meaning with image for '{concept}'. Spanish form only; "
-                "minimal English. Invite them to use the form about the picture."
-            ),
-        )
-
-    # 4) Error streak → form_focus
+    # 3) Form errors FIRST — short correction must not be skipped for association
+    #    (association after english_stuck used to bury recasts like está calor → hace calor)
     top = _top_active_error(sheet)
     if top and int(top.get("count") or 0) >= 2:
         pid = top["id"]
@@ -356,24 +336,52 @@ def select_mode(
                 ),
             )
 
-    # Soft recast: single hit this turn (still attach image if noun present)
-    if hits and not (top and int(top.get("count") or 0) >= 2):
+    # Soft recast: any clear form hit this turn — keep chat moving after a short correction
+    if hits:
         pid = hits[0][0]
         noun = _noun_from_text(learner, sheet, images_shown=shown_imgs)
+        good = _good_models(pid)
+        contrast = _contrast_for(pid)
         return ModeDecision(
             Mode.CF_RECAST,
             reason=f"single_error:{pid}",
             hard_break=False,
-            image_concept=noun,
+            image_concept=noun,  # optional dual-code; recast still required
             targets={
                 "error_pattern": pid,
                 "snippet": hits[0][1],
-                "good_models": _good_models(pid),
-                "contrast": _contrast_for(pid),
+                "good_models": good,
+                "contrast": contrast,
+                "require_recast_tag": True,
             },
             instructions=(
-                "Stay in conversation. Recast the form error cleanly; same-form try "
-                "in meaning. If an image is attached, bind the noun too."
+                "REQUIRED: put the clean form in <recast> (one short line, Spanish). "
+                f"Prefer: {good[0] if good else 'correct form'}. "
+                "Do NOT only bury the fix inside acknowledge. "
+                "Then continue the conversation with one try — do not derail into a grammar lecture. "
+                "English only if they asked 'why' / meta about the form."
+            ),
+        )
+
+    # 4) Stuck English → association (picture kills English wall)
+    #    Only after form-error handling so broken Spanish is not misrouted here.
+    eng_streak = state.english_only_streak
+    if "english_only" in signals:
+        eng_streak = eng_streak + 1
+    no_entiendo = bool(
+        learner and re_search_no_entiendo(learner)
+    )
+    if can_hard and (eng_streak >= 2 or no_entiendo) and "spanish_ok" not in signals:
+        concept = _noun_from_text(learner, sheet, images_shown=shown_imgs) or "bote"
+        return ModeDecision(
+            Mode.ASSOCIATION,
+            reason="english_stuck_association",
+            hard_break=True,
+            image_concept=concept,
+            targets={"concept": concept, "form": _form_for_concept(concept)},
+            instructions=(
+                f"Hard break: show meaning with image for '{concept}'. Spanish form only; "
+                "minimal English. Invite them to use the form about the picture."
             ),
         )
 
@@ -495,6 +503,8 @@ def _good_models(pid: str) -> list[str]:
         return ["Estoy bien.", "Soy de Colombia."]
     if pid == "gender_number_article":
         return ["los edificios", "las casas", "Me gustan los edificios."]
+    if pid == "weather_hace":
+        return ["Hace calor.", "Hace un poco de calor.", "Hace frío."]
     return ["Estoy bien."]
 
 
@@ -512,6 +522,12 @@ def _contrast_for(pid: str) -> dict[str, str]:
             "avoid": "la edificios / me gusta los…",
             "prefer": "los edificios / me gustan los…",
             "hint": "Article and noun must match number/gender; plural often *gustan*.",
+        }
+    if pid == "weather_hace":
+        return {
+            "avoid": "Está calor / Es calor",
+            "prefer": "Hace calor",
+            "hint": "Weather heat/cold → hace (not está).",
         }
     return {"prefer": "Estoy bien.", "hint": ""}
 

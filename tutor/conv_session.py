@@ -771,7 +771,24 @@ class ConversationalSession:
                 "pedagogy:open_needs_model_try",
                 "gate:english_wall",
                 "gate:form_focus_needs_model",
+                "gate:missing_recast",  # form error must surface a short correction
             }
+            need_recast = bool(
+                decision.mode.value in ("cf_recast", "form_focus")
+                or (decision.targets or {}).get("require_recast_tag")
+            )
+            # Re-check with recast requirement if mode demands it
+            if need_recast:
+                gate_result = check_output_gate(
+                    _parts0.as_dict(),
+                    _vis0,
+                    is_open=is_open,
+                    already_asked=self.pedagogy_memory.asked,
+                    already_shown=self.pedagogy_memory.shown,
+                    mode=decision.mode.value,
+                    image_present=image_present,
+                    require_recast=True,
+                )
             needs_repair = (
                 getattr(config, "GATE_REPAIR", True)
                 and not gate_result.ok
@@ -815,6 +832,7 @@ class ConversationalSession:
                         already_shown=self.pedagogy_memory.shown,
                         mode=decision.mode.value,
                         image_present=image_present,
+                        require_recast=need_recast,
                     )
                     gate_result = gate2
                     if gate2.ok:

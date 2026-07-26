@@ -194,7 +194,11 @@ def build_ai_tutor_user_message(
         "mode_playbooks": {
             "placement": "Wide ceiling open; model short Spanish; one elicit; not a worksheet.",
             "conversation": "React, model, one real Spanish question; advance topics.",
-            "cf_recast": "Recast error in meaning; same-form try; stay conversational.",
+            "cf_recast": (
+                "REQUIRED short <recast> with clean Spanish (one line). "
+                "Then continue chat — do not derail into a long grammar lecture."
+            ),
+
             "form_focus": (
                 "HARD BREAK: brief wrong→right contrast for the error_pattern; "
                 "one choice or produce; then transfer try in new micro-context."

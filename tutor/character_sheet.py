@@ -177,6 +177,28 @@ ERROR_PATTERN_CATALOG: dict[str, dict] = {
             r"\bme\s+gustan\s+(los|las)\b",
         ],
     },
+    "weather_hace": {
+        "label": "weather: hace calor/frío (not está calor)",
+        "form_id": None,
+        "can_dos": ["IP-04", "IP-07"],
+        "teach_hint": (
+            "Weather heat/cold uses *hace*: *Hace calor*, *Hace frío*, *Hace buen tiempo*. "
+            "Not *está calor* / *es calor*. (*Está caliente* is for things, not the weather.)"
+        ),
+        "detect": [
+            (r"\best[aá]\s+(un\s+poco\s+(de\s+)?)?calor\b", "está calor"),
+            (r"\best[aá]\s+mucho\s+calor\b", "está mucho calor"),
+            (r"\best[aá]\s+(un\s+poco\s+(de\s+)?)?fr[ií]o\b", "está frío weather?"),
+            (r"\bes\s+(un\s+poco\s+(de\s+)?)?calor\b", "es calor"),
+            (r"\bes\s+fr[ií]o\s+hoy\b", "es frío hoy"),
+            (r"\bhay\s+calor\b", "hay calor"),
+        ],
+        "resolve": [
+            r"\bhace\s+(mucho\s+|un\s+poco\s+de\s+)?calor\b",
+            r"\bhace\s+(mucho\s+|un\s+poco\s+de\s+)?fr[ií]o\b",
+            r"\bhace\s+buen\s+tiempo\b",
+        ],
+    },
 }
 
 ERROR_PATTERN_PRIORITY_THRESHOLD = 2  # count at/above → force teaching focus
@@ -199,6 +221,10 @@ ERROR_PATTERN_ALIASES: dict[str, str] = {
     "gender_agreement": "gender_number_article",
     "article_agreement": "gender_number_article",
     "number_agreement": "gender_number_article",
+    "hace_calor": "weather_hace",
+    "esta_calor": "weather_hace",
+    "está_calor": "weather_hace",
+    "weather": "weather_hace",
 }
 
 

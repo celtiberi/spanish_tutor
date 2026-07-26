@@ -98,6 +98,7 @@ def check_output_gate(
     already_shown: set[str] | list[str] | None = None,
     mode: str | None = None,
     image_present: bool = False,
+    require_recast: bool = False,
 ) -> OutputGateResult:
     """Hard checks on the composed tutor turn (+ optional per-mode contracts)."""
     parts = parts or {}
@@ -116,6 +117,13 @@ def check_output_gate(
     for v in ped.violations:
         faults.append(v)
     notes.extend(ped.notes)
+
+    # Form error this turn → must expose a short recast (not only soft rewrite in ack)
+    if require_recast or mode_l in ("cf_recast", "form_focus"):
+        has_recast = bool((parts.get("recast") or "").strip())
+        if not has_recast:
+            faults.append("gate:missing_recast")
+            notes.append("gate:missing_recast")
 
     # Per-mode contracts (teaching system v2)
     if mode_l == "association" and not image_present:
@@ -192,6 +200,11 @@ def check_output_gate(
         if "gate:form_focus_needs_model" in faults:
             bits.append(
                 "Form focus: show clear correct Spanish model (and brief contrast if helpful)."
+            )
+        if "gate:missing_recast" in faults:
+            bits.append(
+                "REQUIRED: add a short <recast>…</recast> with the clean Spanish form "
+                "(one line). Then continue the chat — do not only fix it silently in acknowledge."
             )
         if "gate:comprehension_needs_check" in faults:
             bits.append("Ask a yes/no or A/B meaning check, not a free open question only.")
