@@ -417,6 +417,7 @@ class ConversationalSession:
         log_learner: str | None = None,
         refresh_focus: bool = True,
         is_open: bool = False,
+        skip_log: bool = False,
     ) -> TurnResult:
         # Strip legacy sheet_delta, then parse multi-part tutor structure
         stripped, _ = extract_sheet_delta(raw if raw else "")
@@ -477,30 +478,54 @@ class ConversationalSession:
             focus_meta=dict(self._focus_meta or {}),
             parts=parts_dict,
         )
-        if self.logger:
-            self.logger.log_simple_turn(
-                learner=log_learner if log_learner is not None else learner,
-                visible=visible,
-                state={
-                    "next_best": result.next_best,
-                    "skills": result.skills,
-                    "notes": notes,
-                    "input_mode": input_mode,
-                    "focus_source": (self._focus_meta or {}).get("source"),
-                    "parts": parts_dict,
-                    "pedagogy": ped.as_dict(),
-                },
-                stop_reason=result.stop_reason,
-                usage=usage,
-                extra={
-                    "sheet_notes": notes,
-                    "tool_delta": tool_delta,
-                    "focus_meta": self._focus_meta,
-                    "parts": parts_dict,
-                    "pedagogy": ped.as_dict(),
-                },
+        # Mode runtime attaches plan/mode/images *after* finish — log then.
+        if self.logger and not skip_log:
+            self._log_turn_result(
+                result,
+                log_learner=log_learner if log_learner is not None else learner,
             )
         return result
+
+    def _log_turn_result(
+        self,
+        result: TurnResult,
+        *,
+        log_learner: str = "",
+    ) -> None:
+        """Write session log with final parts (mode/plan/gate/images included)."""
+        if not self.logger:
+            return
+        parts = result.parts or {}
+        self.logger.log_simple_turn(
+            learner=log_learner,
+            visible=result.reply,
+            state={
+                "next_best": result.next_best,
+                "skills": result.skills,
+                "notes": list(result.notes or []),
+                "input_mode": result.input_mode,
+                "focus_source": (result.focus_meta or {}).get("source")
+                or (self._focus_meta or {}).get("source"),
+                "parts": parts,
+                "pedagogy": parts.get("pedagogy") or result.__dict__.get("pedagogy"),
+                "mode": parts.get("mode"),
+                "plan": parts.get("plan"),
+            },
+            stop_reason=result.stop_reason,
+            usage=result.usage,
+            extra={
+                "sheet_notes": list(result.notes or []),
+                "tool_delta": result.tool_delta,
+                "focus_meta": result.focus_meta or self._focus_meta,
+                "parts": parts,
+                "pedagogy": parts.get("pedagogy"),
+                "mode": parts.get("mode"),
+                "mode_decision": parts.get("mode_decision"),
+                "plan": parts.get("plan"),
+                "output_gate": parts.get("output_gate"),
+                "teach_images": parts.get("teach_images"),
+            },
+        )
 
     def _planned_enabled(self) -> bool:
         # planned / plan / new / ai = AI-first tutor (default)
@@ -582,6 +607,7 @@ class ConversationalSession:
             learner=learner if not is_open else "",
             mode_state=self.mode_state,
             open_scenes=open_scenes,
+            images_shown=self.pedagogy_memory.images_shown,
         )
         self.last_mode_decision = decision.as_dict()
 
@@ -601,7 +627,11 @@ class ConversationalSession:
                 from .teach_assets import warm_concept_background
                 warm_concept_background(concept)
 
-        if not teach_images and decision.mode in (Mode.PLACEMENT, Mode.ASSOCIATION):
+        # Any mode may request association image; placement always tries open assets
+        if not teach_images and (
+            decision.mode in (Mode.PLACEMENT, Mode.ASSOCIATION)
+            or decision.image_concept
+        ):
             teach_images, image_decision = assets_for_ai_turn(
                 is_open=is_open or decision.mode == Mode.PLACEMENT,
                 blank_sheet=blank,
@@ -724,6 +754,7 @@ class ConversationalSession:
                 "(session open)" if is_open else None
             ),
             is_open=is_open,
+            skip_log=True,  # log after mode/plan/images attached
         )
 
         try_text = ""
@@ -820,6 +851,13 @@ class ConversationalSession:
                 result.notes = list(result.notes or []) + [
                     f"teach_image:{teach_images[0].get('concept')}"
                 ]
+        # Log once with full mode/plan/gate/images
+        self._log_turn_result(
+            result,
+            log_learner=log_learner if log_learner is not None else (
+                "(session open)" if is_open else (learner or "")
+            ),
+        )
         return result
 
     def _execute_rules_planned(

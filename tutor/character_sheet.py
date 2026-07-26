@@ -152,6 +152,31 @@ ERROR_PATTERN_CATALOG: dict[str, dict] = {
             r"\bsoy\s+(estudiante|de)\b",
         ],
     },
+    "gender_number_article": {
+        "label": "article/noun gender-number agreement",
+        "form_id": None,
+        "can_dos": ["IP-06", "IT-01"],
+        "teach_hint": (
+            "Match article and noun: *el edificio* / *los edificios* / *la casa* / "
+            "*las casas*. Recast *la edificios* → *los edificios*; *el casas* → *las casas*."
+        ),
+        "detect": [
+            # la + plural masculine-looking nouns (common A1 slip)
+            (r"\bla\s+(edificios|barcos|botes|libros|cafés|cafes|rios|ríos|amigos)\b",
+             "la + plural masc"),
+            (r"\bel\s+(casas|amigas|comidas|músicas|musicas)\b", "el + plural fem"),
+            (r"\blas\s+(edificios|barcos|botes|libros)\b", "las + masc plural"),
+            (r"\blos\s+(casas|amigas|comidas)\b", "los + fem plural"),
+            # me gusta + plural (should often be gustan) — light detect
+            (r"\bme\s+gusta\s+los?\s+\w+s\b", "me gusta + plural"),
+            (r"\bme\s+gusta\s+las?\s+\w+s\b", "me gusta + plural"),
+        ],
+        "resolve": [
+            r"\blos\s+edificios\b",
+            r"\blas\s+casas\b",
+            r"\bme\s+gustan\s+(los|las)\b",
+        ],
+    },
 }
 
 ERROR_PATTERN_PRIORITY_THRESHOLD = 2  # count at/above → force teaching focus
@@ -171,6 +196,9 @@ ERROR_PATTERN_ALIASES: dict[str, str] = {
     "ser_vs_estar_feelings": "ser_estar_confuse",
     "ser_vs_estar": "ser_estar_confuse",
     "soy_nerviosa": "ser_estar_confuse",
+    "gender_agreement": "gender_number_article",
+    "article_agreement": "gender_number_article",
+    "number_agreement": "gender_number_article",
 }
 
 

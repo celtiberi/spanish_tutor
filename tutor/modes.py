@@ -5,6 +5,7 @@ See docs/teaching-system.md. Conversation is the outer loop; modes are pedagogy.
 
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any
@@ -138,39 +139,101 @@ def _top_active_error(sheet: dict) -> dict | None:
     return active[0]
 
 
-def _new_concrete_noun(signals: set[str] | list[str], sheet: dict) -> str | None:
-    """Return a concrete noun concept if learner/topic suggests one not in lexicon."""
+def _new_concrete_noun(
+    signals: set[str] | list[str],
+    sheet: dict,
+    *,
+    images_shown: set[str] | None = None,
+) -> str | None:
+    """Return a concrete noun concept if learner/topic suggests one."""
+    shown = set(images_shown or [])
     lex = sheet.get("lexicon") or {}
-    # From signals topic_vocab we don't know which noun — scan is done by caller
-    # via obs or explicit. Here: check lexicon missing common boat nouns if
-    # topic_vocab in signals.
     if "topic_vocab" not in set(signals):
         return None
     for noun in ("cafe", "bote", "musica", "comida", "rio"):
-        entry = lex.get(noun) or lex.get(noun.replace("c", "c"))
+        if noun in shown:
+            continue
+        entry = lex.get(noun) or {}
         conf = float((entry or {}).get("confidence") or 0) if isinstance(entry, dict) else 0
-        if conf < 0.15:
+        if conf < 0.35 or noun not in shown:
             return noun
     return None
 
 
-def _noun_from_text(text: str, sheet: dict) -> str | None:
+def _noun_from_text(
+    text: str,
+    sheet: dict,
+    *,
+    images_shown: set[str] | None = None,
+) -> str | None:
+    """First session mention of a concrete noun → associate (even if lexicon knows it)."""
     low = (text or "").lower()
-    mapping = {
-        "café": "cafe", "cafe": "cafe",
-        "bote": "bote", "barco": "bote",
-        "música": "musica", "musica": "musica",
-        "comida": "comida",
-        "río": "rio", "rio": "rio",
-    }
-    lex = sheet.get("lexicon") or {}
-    for needle, concept in mapping.items():
+    shown = set(images_shown or [])
+    # longer needles first
+    pairs = [
+        ("río dulce", "rio"),
+        ("rio dulce", "rio"),
+        ("café", "cafe"),
+        ("cafe", "cafe"),
+        ("barco", "bote"),
+        ("bote", "bote"),
+        ("música", "musica"),
+        ("musica", "musica"),
+        ("comida", "comida"),
+        ("río", "rio"),
+        ("rio", "rio"),
+        ("edificio", "bote"),  # no edificio asset — skip via allowlist below
+    ]
+    allow = {"cafe", "bote", "musica", "comida", "rio"}
+    for needle, concept in pairs:
+        if concept not in allow:
+            continue
         if needle in low:
-            entry = lex.get(concept) or {}
+            # Associate first time this session even if lexicon confidence is high
+            if concept not in shown:
+                return concept
+            entry = (sheet.get("lexicon") or {}).get(concept) or {}
             conf = float(entry.get("confidence") or 0) if isinstance(entry, dict) else 0
-            if conf < 0.2:
+            if conf < 0.25:
                 return concept
     return None
+
+
+def _scene_for_topic(
+    open_scenes: list[dict],
+    state: ModeSessionState,
+    *,
+    learner: str = "",
+    signals: set[str] | None = None,
+) -> dict | None:
+    """Pick open scene matching live topic (boat/location/likes) before generic next_best."""
+    low = (learner or "").lower()
+    sigs = set(signals or [])
+    scored: list[tuple[int, dict]] = []
+    for sc in open_scenes or []:
+        sid = sc.get("id") or ""
+        if not sid or sid in state.scene_modeled:
+            # still allow modeled scenes if exit not done — soft prefer unmodeled
+            pass
+        score = 0
+        blob = json.dumps(sc, ensure_ascii=False).lower()
+        if any(w in low for w in ("bote", "barco", "río", "rio", "guatemala", "dulce")):
+            if "bote" in blob or "rio" in blob or "captain" in blob or "boat" in blob:
+                score += 3
+        if any(w in low for w in ("gusta", "café", "cafe", "música", "musica")):
+            if "gusta" in blob or "like" in blob or "cafe" in blob:
+                score += 3
+        if "estoy" in low or "dónde" in low or "donde" in low or "origin" in sigs:
+            if "estar" in blob or "estoy" in blob or "ip-04" in blob or "ip-07" in blob:
+                score += 2
+        if sid and sid not in state.scene_modeled:
+            score += 1
+        if score:
+            scored.append((score, sc))
+    if not scored:
+        return _scene_needs_model(open_scenes, state)
+    scored.sort(key=lambda x: -x[0])
+    return scored[0][1]
 
 
 def _scene_needs_model(
@@ -192,6 +255,7 @@ def select_mode(
     learner: str = "",
     mode_state: ModeSessionState | None = None,
     open_scenes: list[dict] | None = None,
+    images_shown: set[str] | list[str] | None = None,
 ) -> ModeDecision:
     """Deterministic mode selection — first matching guard wins.
 
@@ -201,6 +265,7 @@ def select_mode(
     state = mode_state or ModeSessionState()
     signals = set(obs.get("signals") or [])
     open_scenes = open_scenes or []
+    shown_imgs = set(images_shown or [])
     blank = bool(obs.get("blank_sheet") if "blank_sheet" in obs else is_blank_learner(sheet))
     hits = detect_error_pattern_hits(learner) if learner and not is_open else []
     hit_ids = {pid for pid, _ in hits}
@@ -291,19 +356,25 @@ def select_mode(
                 ),
             )
 
-    # Soft recast: single hit this turn, not hard-break eligible
+    # Soft recast: single hit this turn (still attach image if noun present)
     if hits and not (top and int(top.get("count") or 0) >= 2):
         pid = hits[0][0]
+        noun = _noun_from_text(learner, sheet, images_shown=shown_imgs)
         return ModeDecision(
             Mode.CF_RECAST,
             reason=f"single_error:{pid}",
             hard_break=False,
+            image_concept=noun,
             targets={
                 "error_pattern": pid,
                 "snippet": hits[0][1],
                 "good_models": _good_models(pid),
+                "contrast": _contrast_for(pid),
             },
-            instructions="Stay in conversation. Recast cleanly; same-form try in meaning.",
+            instructions=(
+                "Stay in conversation. Recast the form error cleanly; same-form try "
+                "in meaning. If an image is attached, bind the noun too."
+            ),
         )
 
     # 5) Just resolved focus form → transfer
@@ -323,10 +394,13 @@ def select_mode(
             scene_ids=[s.get("id") for s in open_scenes if s.get("id")][:2],
         )
 
-    # 6) New concrete noun → association (hard if budget allows) else chat+hint
-    noun = _noun_from_text(learner, sheet) or _new_concrete_noun(signals, sheet)
+    # 6) Concrete noun first-time this session → association (+ image)
+    noun = _noun_from_text(learner, sheet, images_shown=shown_imgs) or _new_concrete_noun(
+        signals, sheet, images_shown=shown_imgs
+    )
     if noun:
-        hard = can_hard and state.turns_since_hard_break >= 3
+        # Prefer hard association when budget allows; always set image_concept
+        hard = can_hard
         return ModeDecision(
             Mode.ASSOCIATION if hard else Mode.CONVERSATION,
             reason=f"new_noun:{noun}",
@@ -334,35 +408,43 @@ def select_mode(
             image_concept=noun,
             targets={"concept": noun, "form": _form_for_concept(noun)},
             instructions=(
-                f"Bind '{noun}' to meaning (image if present). Use Spanish form in chat; "
-                "one try about the referent."
+                f"Bind '{noun}' / {_form_for_concept(noun)} to meaning with the image. "
+                "Spanish-forward; one try about the referent. Minimal English."
             ),
         )
 
-    # 7) Open scene needs first model
-    sc = _scene_needs_model(open_scenes, state)
-    if sc and can_hard:
+    # 7) Topic-matched open scene (before weak next_best)
+    sc = _scene_for_topic(
+        open_scenes, state, learner=learner, signals=signals,
+    ) or _scene_needs_model(open_scenes, state)
+    if sc:
         goal = sc.get("goal") or {}
         inp = sc.get("input") or {}
+        img = inp.get("image_concept")
+        if img and img in shown_imgs:
+            img = None  # already shown this session — don't re-wallpaper
         return ModeDecision(
-            Mode.CONVERSATION,  # introduce via chat with scene models
-            reason=f"scene_intro:{sc.get('id')}",
+            Mode.CONVERSATION,
+            reason=f"scene_goal:{sc.get('id')}",
             hard_break=False,
-            image_concept=inp.get("image_concept"),
+            image_concept=img,
             targets={
                 "can_do": goal.get("can_do"),
                 "target_forms": goal.get("target_forms") or [],
                 "model_lines": inp.get("model_lines") or [],
                 "elicit": (sc.get("production") or {}).get("elicit"),
+                "transfer": (sc.get("transfer") or {}).get("elicit"),
+                "prefer_over_next_best": True,
             },
             scene_ids=[sc.get("id")] if sc.get("id") else [],
             instructions=(
-                f"Open scene '{sc.get('id')}': model the target lines in natural chat, "
-                "then elicit production. Not a flashcard list."
+                f"Pursue open scene goal '{sc.get('id')}' (can-do {goal.get('can_do')}) "
+                "in natural chat — not a flashcard list. Prefer this over unrelated "
+                "next_best stretches. Model target forms; one elicit; advance if they already can."
             ),
         )
 
-    # 8) Default conversation
+    # 8) Default conversation (next_best is a weak guide only)
     nb = (sheet.get("next_best") or {})
     return ModeDecision(
         Mode.CONVERSATION,
@@ -371,11 +453,12 @@ def select_mode(
         targets={
             "can_do": nb.get("can_do"),
             "next_best": nb.get("statement") or nb.get("activity"),
+            "next_best_is_optional": True,
         },
         scene_ids=[s.get("id") for s in open_scenes if s.get("id")][:3],
         instructions=(
-            "Real Spanish conversation. React to them. One elicit. Teach with model+try. "
-            "No re-asking covered probes. Advance or deepen."
+            "Real Spanish conversation. React to them first. One elicit. Teach with model+try. "
+            "No re-asking covered probes. next_best is optional if the live topic is richer."
         ),
     )
 
@@ -410,6 +493,8 @@ def _good_models(pid: str) -> list[str]:
         return ["Soy de…"]
     if pid == "ser_estar_confuse":
         return ["Estoy bien.", "Soy de Colombia."]
+    if pid == "gender_number_article":
+        return ["los edificios", "las casas", "Me gustan los edificios."]
     return ["Estoy bien."]
 
 
@@ -422,6 +507,12 @@ def _contrast_for(pid: str) -> dict[str, str]:
         return {"avoid": "Me llamo es…", "prefer": "Me llamo…", "hint": "No es after me llamo."}
     if pid == "soy_de_origin":
         return {"avoid": "Estoy de…", "prefer": "Soy de…", "hint": "Origin → ser de."}
+    if pid == "gender_number_article":
+        return {
+            "avoid": "la edificios / me gusta los…",
+            "prefer": "los edificios / me gustan los…",
+            "hint": "Article and noun must match number/gender; plural often *gustan*.",
+        }
     return {"prefer": "Estoy bien.", "hint": ""}
 
 

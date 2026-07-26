@@ -68,13 +68,28 @@ function renderTeachImages(parts) {
     .join("");
 }
 
+function renderModeBadge(parts) {
+  const mode = parts?.mode || parts?.plan?.mode || "";
+  if (!mode) return "";
+  const reason = parts?.plan?.mode_reason || parts?.mode_decision?.reason || "";
+  const hard = parts?.plan?.hard_break || parts?.mode_decision?.hard_break;
+  const label = hard ? `Mode · ${mode} (focus)` : `Mode · ${mode}`;
+  const title = reason ? esc(reason) : esc(mode);
+  return (
+    `<div class="part part-mode" title="${title}">` +
+    `<span class="part-label">${esc(label)}</span></div>`
+  );
+}
+
 function renderTutorParts(parts, fallbackContent) {
   if (!parts || !parts.structured) {
     // Still show teach images if present on unstructured reply
     const img = renderTeachImages(parts);
-    return img + esc(fallbackContent || "");
+    return renderModeBadge(parts) + img + esc(fallbackContent || "");
   }
   const blocks = [];
+  const modeBadge = renderModeBadge(parts);
+  if (modeBadge) blocks.push(modeBadge);
   // Teach image first: associate form with meaning before/with the models
   const imgBlock = renderTeachImages(parts);
   if (imgBlock) blocks.push(imgBlock);

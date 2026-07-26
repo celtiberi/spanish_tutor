@@ -17,6 +17,33 @@ class TestSelectMode(unittest.TestCase):
         self.assertEqual(d.mode, Mode.PLACEMENT)
         self.assertTrue(d.hard_break)
 
+    def test_bote_triggers_association_image(self):
+        sheet = default_sheet()
+        sheet["skills"]["IP-01"] = {"status": "emerging", "confidence": 0.4}
+        d = select_mode(
+            sheet,
+            learner="estoy en mi bote",
+            observations={"blank_sheet": False, "signals": ["estoy", "topic_vocab"]},
+            images_shown=set(),
+            mode_state=ModeSessionState(),
+        )
+        self.assertEqual(d.image_concept, "bote")
+        self.assertIn(d.mode, (Mode.ASSOCIATION, Mode.CONVERSATION))
+
+    def test_gender_error_recast(self):
+        sheet = default_sheet()
+        sheet["skills"]["IP-01"] = {"status": "emerging", "confidence": 0.4}
+        d = select_mode(
+            sheet,
+            learner="Me gusta la edificios",
+            observations={"blank_sheet": False, "signals": []},
+            images_shown=set(),
+            mode_state=ModeSessionState(),
+        )
+        self.assertEqual(d.mode, Mode.CF_RECAST)
+        self.assertEqual(d.targets.get("error_pattern"), "gender_number_article")
+
+
     def test_default_conversation(self):
         sheet = default_sheet()
         # give some evidence so not blank placement mid-session
