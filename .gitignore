@@ -8,3 +8,5 @@ dist/
 evals/results/
 tutor/web_static/teach_assets/cache/
 tutor/web_static/teach_assets/cache_index.json
+.vercel
+.vercel/

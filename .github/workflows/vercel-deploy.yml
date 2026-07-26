@@ -1,0 +1,38 @@
+# Auto-deploy to Vercel when the Vercel team is unblocked and secrets are set.
+# Secrets (repo → Settings → Secrets): VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID
+# Get IDs from `.vercel/project.json` after a successful `vercel link`.
+#
+# Preferred path (no Actions needed): Vercel Dashboard → Import Git repo
+# github.com/celtiberi/spanish_tutor → Production Branch: main
+
+name: Deploy to Vercel
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.VERCEL_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@54
+
+      - name: Pull Vercel env
+        run: vercel pull --yes --environment=${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }} --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build
+        run: vercel build ${{ github.ref == 'refs/heads/main' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+          else
+            vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
+          fi

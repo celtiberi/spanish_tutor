@@ -4,9 +4,20 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 POLICY_PATH = REPO_ROOT / "prompts" / "teaching_policy.md"
 DEFAULT_PACK_DIR = REPO_ROOT / "course_packs" / "spanish_a1"
-LOG_DIR = REPO_ROOT / "logs" / "sessions"
-PROFILE_PATH = REPO_ROOT / "logs" / "profile.json"
-CHARACTER_SHEET_PATH = REPO_ROOT / "logs" / "character_sheet.json"
+
+# On Vercel (and similar serverless), repo is read-only; use /tmp for runtime data.
+_ON_SERVERLESS = bool(
+    os.environ.get("VERCEL")
+    or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
+    or os.environ.get("ML_TEACHER_DATA_DIR")
+)
+_DATA_ROOT = Path(
+    os.environ.get("ML_TEACHER_DATA_DIR")
+    or ("/tmp/ml_teacher" if _ON_SERVERLESS else str(REPO_ROOT / "logs"))
+)
+LOG_DIR = _DATA_ROOT / "sessions"
+PROFILE_PATH = _DATA_ROOT / "profile.json"
+CHARACTER_SHEET_PATH = _DATA_ROOT / "character_sheet.json"
 
 
 def load_env() -> None:

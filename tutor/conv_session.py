@@ -35,7 +35,7 @@ def compose_if_needed(parts) -> str:
     return compose_visible(parts)
 
 CONV_PROMPT = config.REPO_ROOT / "prompts" / "conversational_tutor.md"
-DEFAULT_SHEET_PATH = config.REPO_ROOT / "logs" / "character_sheet.json"
+DEFAULT_SHEET_PATH = config.CHARACTER_SHEET_PATH
 SHEET_TOOLS = [UPDATE_CHARACTER_SHEET_TOOL]
 
 # Known learner: sheet has evidence — still teach, but can go a bit faster
