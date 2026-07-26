@@ -70,6 +70,40 @@ class TestSelectMode(unittest.TestCase):
         self.assertEqual(d.targets.get("error_pattern"), "weather_hace")
         self.assertTrue(d.targets.get("require_recast_tag"))
 
+    def test_meta_comprehension_stays_on_same_try(self):
+        """'What does that mean?' must re-ask same idea, not a new topic."""
+        from tutor.observe import probe_signals
+
+        utt = (
+            '"Qué gusto saludarte de nuevo!" - I think this is.. saludarte is like '
+            'a greeting? I dont know what you are saying. '
+            '"Cómo van las cosas hoy por Río Dulce" - what things today for rio dulce?'
+        )
+        sig = probe_signals(utt)
+        self.assertIn("meta_comprehension", sig)
+
+        sheet = default_sheet()
+        sheet["skills"]["IP-01"] = {"status": "emerging", "confidence": 0.4}
+        mem = {
+            "last_tutor_try": "¿Cómo van las cosas hoy por Río Dulce?",
+            "last_tutor_model": "¡Qué gusto saludarte de nuevo!",
+            "last_concepts": ["rio"],
+            "await_comprehension": False,
+        }
+        d = select_mode(
+            sheet,
+            learner=utt,
+            observations={"blank_sheet": False, "signals": sorted(sig)},
+            images_shown=set(),
+            mode_state=ModeSessionState(),
+            session_memory=mem,
+        )
+        self.assertEqual(d.mode, Mode.COMPREHENSION_REPAIR)
+        self.assertTrue(d.targets.get("forbid_new_topic"))
+        self.assertEqual(d.image_concept, "rio")
+        # simplified rephrase of same wellbeing intent
+        self.assertIn("estás", (d.targets.get("rephrase_try") or "").lower())
+
 
     def test_default_conversation(self):
         sheet = default_sheet()

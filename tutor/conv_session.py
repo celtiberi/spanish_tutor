@@ -648,7 +648,12 @@ class ConversationalSession:
         from .teach_assets import assets_for_ai_turn, cache_lookup
 
         if not is_open and learner:
-            self.pedagogy_memory.note_learner(learner)
+            sig_pre = self.pedagogy_memory.note_learner(learner)
+            # Answering in Spanish without a meaning-meta → not stuck on last try
+            if "meta_comprehension" not in sig_pre and "spanish_ok" in sig_pre:
+                self.pedagogy_memory.clear_comprehension_hold()
+        else:
+            sig_pre = set()
 
         self.mode_state.tick()
         obs = build_observations(self.sheet, learner=learner, is_open=is_open)
@@ -673,6 +678,7 @@ class ConversationalSession:
             mode_state=self.mode_state,
             open_scenes=open_scenes,
             images_shown=self.pedagogy_memory.images_shown,
+            session_memory=self.pedagogy_memory.snapshot(),
         )
         self.last_mode_decision = decision.as_dict()
 
@@ -694,7 +700,11 @@ class ConversationalSession:
 
         # Any mode may request association image; placement always tries open assets
         if not teach_images and (
-            decision.mode in (Mode.PLACEMENT, Mode.ASSOCIATION)
+            decision.mode in (
+                Mode.PLACEMENT,
+                Mode.ASSOCIATION,
+                Mode.COMPREHENSION_REPAIR,
+            )
             or decision.image_concept
         ):
             teach_images, image_decision = assets_for_ai_turn(
@@ -868,6 +878,18 @@ class ConversationalSession:
             if m:
                 models = [m]
             self.pedagogy_memory.note_plan_try(decision.mode.value, try_text)
+            # Remember tutor Spanish so meta "what does that mean?" can re-ask SAME idea
+            img_concepts = [
+                (t.get("concept") or "")
+                for t in (teach_images or [])
+                if t.get("concept")
+            ]
+            self.pedagogy_memory.note_tutor_turn(
+                model=m,
+                try_=try_text,
+                acknowledge=result.parts.get("acknowledge") or "",
+                concepts=img_concepts or None,
+            )
 
         if not teach_images and models:
             teach_images, image_decision = assets_for_ai_turn(

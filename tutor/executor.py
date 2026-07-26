@@ -207,8 +207,14 @@ def build_ai_tutor_user_message(
                 "HARD BREAK: form + image meaning; Spanish-forward; try about the picture."
             ),
             "comprehension_check": "Yes/no or A/B on meaning of the model — not free production.",
+            "comprehension_repair": (
+                "They did not understand your last Spanish. Explain briefly, use image if present, "
+                "re-model simpler Spanish of the SAME idea, re-ask the SAME question — "
+                "NEVER a brand-new topic."
+            ),
             "transfer": "Same form, new context; celebrate briefly; no re-drill.",
         },
+
         "instructions": [
             "Realize MODE only — do not invent a different agenda.",
             "React to what they said when in conversation/recast/transfer.",

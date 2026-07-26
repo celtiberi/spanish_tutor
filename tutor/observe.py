@@ -69,6 +69,27 @@ def probe_signals(learner: str) -> set[str]:
         s.add("multi_skill")
     if re.search(r"\balready\s+asked\b|\bya\s+(me\s+)?pregunt", low):
         s.add("loop_complaint")
+    # Meta: asking what the tutor's Spanish means / not understanding the last turn
+    if re.search(
+        r"\bwhat\s+(does|do|is|are)\b|"
+        r"\bwhat\s+you\s+(are\s+)?saying\b|"
+        r"\bi\s+don'?t\s+know\s+what\b|"
+        r"\bi\s+don'?t\s+understand\b|"
+        r"\bno\s+entiendo\b|"
+        r"\bwhat\s+does\s+.+mean\b|"
+        r"\bmeans?\b.+\?|"
+        r"\bis\s+like\b|"
+        r"\bis\s+something\s+about\b|"
+        r"\bi\s+think\s+this\s+is\b|"
+        r"\bque\s+es\b|\bqué\s+es\b|"
+        r"\bwhat\s+things\b",
+        low,
+    ):
+        s.add("meta_comprehension")
+    # Quoted tutor Spanish often means "explain this phrase"
+    if re.search(r'[""«»].+[""«»]', learner or "") or re.search(r"'[^']{4,}'", learner or ""):
+        if re.search(r"[áéíóúñ¿¡]|hola|como|est|rio|gust|salud|cosas", low):
+            s.add("meta_comprehension")
     return s
 
 

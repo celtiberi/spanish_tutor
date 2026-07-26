@@ -1,10 +1,12 @@
 """Per-session pedagogy memory — what we already probed / they already showed.
 
 Stops re-asking ¿Cómo estás? / ¿Cómo te llamas? after success.
+Also tracks last tutor models/try for comprehension repair (re-ask same idea).
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from .observe import probe_signals
@@ -20,6 +22,13 @@ class SessionMemory:
     last_image_turn: int = -999  # session turn index when last image shown
     turns: int = 0
     last_learner: str = ""
+    # Last tutor linguistic targets — for "I didn't understand" repair
+    last_tutor_try: str = ""
+    last_tutor_model: str = ""
+    last_tutor_ack: str = ""
+    last_concepts: list[str] = field(default_factory=list)
+    # If True, next mode should repair same try (not advance topic)
+    await_comprehension: bool = False
 
     @property
     def turns_since_image(self) -> int:
@@ -41,6 +50,7 @@ class SessionMemory:
             "spanish_ok": "spanish_ok",
             "multi_skill": "multi_skill",
             "english_only": "english_only",
+            "meta_comprehension": "meta_comprehension",
         }
         for s, k in mapping.items():
             if s in sig:
@@ -51,6 +61,8 @@ class SessionMemory:
             self.shown.add("origin")
         self.last_learner = text or ""
         self.turns += 1
+        if "meta_comprehension" in sig or "english_only" in sig:
+            self.await_comprehension = True
         return sig
 
     def note_image(self, concept: str | None) -> None:
@@ -60,6 +72,27 @@ class SessionMemory:
             return
         self.images_shown.add(c)
         self.last_image_turn = self.turns
+
+    def note_tutor_turn(
+        self,
+        *,
+        model: str = "",
+        try_: str = "",
+        acknowledge: str = "",
+        concepts: list[str] | None = None,
+    ) -> None:
+        """Remember what we just taught / asked (for repair if they don't get it)."""
+        self.last_tutor_model = (model or "").strip()
+        self.last_tutor_try = (try_ or "").strip()
+        self.last_tutor_ack = (acknowledge or "").strip()
+        if concepts:
+            self.last_concepts = [c for c in concepts if c]
+        else:
+            self.last_concepts = _concepts_from_spanish(
+                f"{self.last_tutor_model} {self.last_tutor_try} {self.last_tutor_ack}"
+            )
+        # After we re-elicit successfully (learner answered in Spanish), clear below
+        # Callers set await_comprehension False when learner produces Spanish_ok without meta
 
     def note_plan_try(self, reason: str, try_prompt: str) -> None:
         """Record what we asked so we don't loop."""
@@ -84,6 +117,9 @@ class SessionMemory:
         if "gusta" in flat or "like" in flat or "preference" in flat:
             self.asked.add("ask_gusta")
 
+    def clear_comprehension_hold(self) -> None:
+        self.await_comprehension = False
+
     def already_asked(self, *keys: str) -> bool:
         return any(k in self.asked for k in keys)
 
@@ -98,12 +134,38 @@ class SessionMemory:
             "turns_since_image": self.turns_since_image,
             "last_image_turn": self.last_image_turn,
             "turns": self.turns,
+            "last_tutor_try": self.last_tutor_try,
+            "last_tutor_model": self.last_tutor_model,
+            "last_concepts": list(self.last_concepts),
+            "await_comprehension": self.await_comprehension,
         }
 
 
 def re_search_origin(low: str) -> bool:
-    import re
-    return bool(re.search(r"\bsoy\s+de\b", low) or re.search(r"\bde\s+(estados|ee\.?uu|usa|guatemala|méxico|mexico)\b", low))
+    return bool(
+        re.search(r"\bsoy\s+de\b", low)
+        or re.search(r"\bde\s+(estados|ee\.?uu|usa|guatemala|méxico|mexico)\b", low)
+    )
+
+
+def _concepts_from_spanish(text: str) -> list[str]:
+    low = (text or "").lower()
+    out: list[str] = []
+    mapping = [
+        ("río", "rio"), ("rio", "rio"),
+        ("bote", "bote"), ("barco", "bote"),
+        ("café", "cafe"), ("cafe", "cafe"),
+        ("música", "musica"), ("musica", "musica"),
+        ("comida", "comida"),
+        ("hola", "hola"),
+        ("estoy", "estoy_bien"),
+    ]
+    seen: set[str] = set()
+    for needle, concept in mapping:
+        if needle in low and concept not in seen:
+            seen.add(concept)
+            out.append(concept)
+    return out
 
 
 def _try_key(reason: str, try_prompt: str) -> str:
@@ -116,4 +178,6 @@ def _try_key(reason: str, try_prompt: str) -> str:
         return "ask_origin"
     if "gusta" in r or "preference" in r:
         return "ask_gusta"
+    if "comprehension" in r or "repair" in r:
+        return "comprehension_repair"
     return r[:40] if r else ""

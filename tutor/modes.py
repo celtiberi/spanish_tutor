@@ -27,6 +27,7 @@ HARD_BREAK_MODES = frozenset({
     "form_focus",
     "association",
     "comprehension_check",
+    "comprehension_repair",
     "placement",
 })
 
@@ -37,6 +38,7 @@ class Mode(str, Enum):
     CF_RECAST = "cf_recast"
     FORM_FOCUS = "form_focus"
     COMPREHENSION_CHECK = "comprehension_check"
+    COMPREHENSION_REPAIR = "comprehension_repair"  # didn't get last Spanish — stay on it
     ASSOCIATION = "association"
     TRANSFER = "transfer"  # conversation with explicit transfer try
 
@@ -256,12 +258,14 @@ def select_mode(
     mode_state: ModeSessionState | None = None,
     open_scenes: list[dict] | None = None,
     images_shown: set[str] | list[str] | None = None,
+    session_memory: dict | None = None,
 ) -> ModeDecision:
     """Deterministic mode selection — first matching guard wins.
 
     See docs/teaching-system.md § Break-from-conversation policy.
     """
     obs = observations or {}
+    mem = session_memory or {}
     state = mode_state or ModeSessionState()
     signals = set(obs.get("signals") or [])
     open_scenes = open_scenes or []
@@ -272,6 +276,11 @@ def select_mode(
     resolves = set(detect_error_pattern_resolves(learner)) if learner and not is_open else set()
     can_hard = _can_hard_break(state)
     energy = _affect_energy(sheet)
+
+    last_try = (mem.get("last_tutor_try") or "").strip()
+    last_model = (mem.get("last_tutor_model") or "").strip()
+    last_concepts = list(mem.get("last_concepts") or [])
+    await_comp = bool(mem.get("await_comprehension"))
 
     # 0) Time pressure — no hard break
     if energy == "limited_time":
@@ -290,14 +299,65 @@ def select_mode(
         )
 
     # 1) Boredom — new topic chat, never drill
-    if _boredom_high(sheet):
+    if _boredom_high(sheet) and "meta_comprehension" not in signals:
         return ModeDecision(
             Mode.CONVERSATION,
             reason="boredom_new_topic",
             instructions="Change topic (boat, café, music, food). No drills. Fun adult chat.",
         )
 
-    # 2) Placement
+    # 1b) Comprehension repair — they didn't understand OUR Spanish
+    #     MUST stay on same idea: explain + image + re-ask simplified SAME question
+    #     Never jump to a brand-new topic (¿Te gusta el río? after explaining saludarte).
+    if (
+        not is_open
+        and (
+            "meta_comprehension" in signals
+            or await_comp
+            or re_search_no_entiendo(learner)
+        )
+        and (last_try or last_model)
+    ):
+        img = None
+        for c in last_concepts:
+            if c and c not in shown_imgs:
+                img = c
+                break
+        if not img and last_concepts:
+            img = last_concepts[0]
+        # Prefer image for dual-coding even if already shown once
+        if not img:
+            img = _noun_from_text(
+                f"{last_try} {last_model} {learner}", sheet, images_shown=set()
+            )
+        simple_try = _simplify_try(last_try) or last_try
+        return ModeDecision(
+            Mode.COMPREHENSION_REPAIR,
+            reason="meta_comprehension_stay_on_topic",
+            hard_break=True,
+            image_concept=img,
+            targets={
+                "last_try": last_try,
+                "last_model": last_model,
+                "rephrase_try": simple_try,
+                "concepts": last_concepts,
+                "require_same_topic": True,
+                "forbid_new_topic": True,
+            },
+            instructions=(
+                "COMPREHENSION REPAIR — they did not understand your previous Spanish.\n"
+                "1) Brief English or ultra-simple Spanish: what the KEY phrase means "
+                f"(from: {last_model[:120]!r} / try: {last_try[:120]!r}).\n"
+                "2) If an image is attached, use it to bind the noun/meaning.\n"
+                "3) <model> the same idea in SIMPLER Spanish (shorter, high-frequency words).\n"
+                f"4) <try> MUST re-ask the SAME communicative intent, e.g. {simple_try!r} "
+                "— NOT a brand-new topic or new can-do. "
+                "Do NOT jump to '¿Te gusta…?' or a different question unless that WAS the last try.\n"
+                "5) Keep the turn short. Stay on this micro-goal until they answer the idea."
+            ),
+        )
+
+    # 2) Placement / known open
     if is_open and blank:
         return ModeDecision(
             Mode.PLACEMENT,
@@ -309,6 +369,20 @@ def select_mode(
                 "a stronger learner to show multi-skill Spanish. Not a Hola worksheet."
             ),
             scene_ids=[s.get("id") for s in open_scenes if s.get("id")][:3],
+        )
+    if is_open and not blank:
+        return ModeDecision(
+            Mode.CONVERSATION,
+            reason="known_open_simple",
+            hard_break=False,
+            image_concept=None,
+            scene_ids=[s.get("id") for s in open_scenes if s.get("id")][:3],
+            instructions=(
+                "Known learner open: warm but SIMPLE A1 Spanish only. "
+                "Prefer «¡Hola! ¿Cómo estás?» / short *estoy* models. "
+                "Avoid idioms like «qué gusto saludarte» or «cómo van las cosas» "
+                "until they show they can handle them. One clear try."
+            ),
         )
 
     # 3) Form errors FIRST — short correction must not be skipped for association
@@ -477,6 +551,27 @@ def re_search_no_entiendo(text: str) -> bool:
     return bool(
         re.search(r"\bno\s+entiendo\b|\bdon'?t\s+understand\b|\bwhat\s+does\s+.+\s+mean\b", low)
     )
+
+
+def _simplify_try(try_text: str) -> str:
+    """Heuristic simpler re-elicit of the same intent (not a new topic)."""
+    t = (try_text or "").strip()
+    if not t:
+        return ""
+    low = t.lower()
+    # Map common intermediate opens to simpler A1
+    if "cómo van" in low or "como van" in low or "las cosas" in low:
+        if "río" in low or "rio" in low or "dulce" in low:
+            return "¿Cómo estás hoy en Río Dulce?"
+        return "¿Cómo estás hoy?"
+    if "saludarte" in low or "gusto" in low:
+        return "¡Hola! ¿Cómo estás?"
+    if "dónde estás" in low or "donde estas" in low:
+        return "¿Dónde estás?"
+    if "te gusta" in low:
+        return t  # already simple
+    # Default: keep same try (executor will simplify wording)
+    return t
 
 
 def _form_for_concept(concept: str) -> str:
