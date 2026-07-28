@@ -2,12 +2,16 @@
 
 Research project: train/align a model that is an expert in **teaching**, with subject matter supplied by pluggable course packs. Full plan: `docs/research-and-plan.md`.
 
-**Current product path:** conversational Spanish + living **character sheet** (can-dos, scaffold, next_best). Plan/realize controller is tabled.
+**Living system overview (architecture, pedagogy, ops):** [`docs/system-overview.md`](docs/system-overview.md)
+
+**Current product path:** conversational Spanish + living **character sheet** (Spanish ability: can-dos, scaffold, next_best) + **learner profile** (personal facts: name, L1, hooks, sensitive care notes). Plan/realize controller is tabled.
 
 ```
 prompts/conversational_tutor.md   # teaching stance (CLT/TBLT/CI)
 course_packs/spanish_a1/          # legal language palette
 tutor/conv_session.py             # shared session engine
+tutor/character_sheet.py          # Spanish-ability sheet
+tutor/learner_profile.py          # personal profile (PII; separate lifecycle)
 tutor/conversational.py           # terminal UI
 tutor/web_app.py                  # browser UI (+ browser speech)
 ```
@@ -43,7 +47,7 @@ export GROK_API_KEY=...          # needed if FOCUS_MODEL is a grok-* id
 export TUTOR_MODEL=gemini-3.6-flash
 ```
 
-Session logs: `logs/sessions/*.jsonl`. Sheet: `logs/character_sheet.json`.
+Session logs: `logs/sessions/*.jsonl`. Ability sheet: `logs/character_sheet.json`. Personal profile: `logs/learner_profile.json`.
 
 ## Legacy single-model pack tutor
 

@@ -7,6 +7,7 @@ from tutor.tutor_response import (
     parse_tutor_response,
     process_tutor_raw,
 )
+from tutor.output_gate import check_output_gate, detect_sheet_leak
 
 
 class TestTutorResponse(unittest.TestCase):
@@ -68,6 +69,44 @@ class TestTutorResponse(unittest.TestCase):
         d = p.as_dict()
         self.assertIn("model", d)
         self.assertIn("try", d)
+
+    def test_sheet_json_is_gate_fault_not_silent_success(self):
+        """Root fault: model dumps sheet JSON. Gate must fail; do not hide it."""
+        raw = """
+        <tutor>
+          <acknowledge>¡Qué bien, Patrick! Es genial estar en el bote.</acknowledge>
+          <model>Yo estoy en mi casa hoy con un café.</model>
+        ```json { "active_error_focus": [ { "id": "estar_yo_estoy_vs_esta", "resolved_streak": 1, "correct_uses": 1 } ], "grammar": { "present_estar_person": { "confidence": 0.82, "solid_uses": 7 } } } ```
+        <try>Y tu hermana Carolyn, ¿cómo está?
+        </tutor>
+        """
+        self.assertTrue(detect_sheet_leak(raw))
+        vis, parts = process_tutor_raw(raw)
+        # Parser may still extract real parts (try unclosed) — that is fine
+        self.assertIn("Qué bien", parts.acknowledge)
+        self.assertIn("Carolyn", parts.try_ or "")
+        # Leftover sheet dump must not be promoted into continue as "content"
+        self.assertNotIn("active_error_focus", parts.continue_ or "")
+        # Gate on raw must fail so session will repair
+        gate = check_output_gate(
+            parts.as_dict(), vis, mode="transfer", raw=raw,
+        )
+        self.assertFalse(gate.ok)
+        self.assertIn("gate:sheet_leak", gate.faults)
+        self.assertIn("sheet", gate.repair_instruction.lower())
+
+    def test_clean_turn_no_false_sheet_leak(self):
+        raw = """
+        <tutor>
+          <acknowledge>¡Muy bien!</acknowledge>
+          <model>Estoy en el bote.</model>
+          <try>¿Dónde estás tú?</try>
+        </tutor>
+        """
+        self.assertFalse(detect_sheet_leak(raw))
+        vis, parts = process_tutor_raw(raw)
+        gate = check_output_gate(parts.as_dict(), vis, mode="conversation", raw=raw)
+        self.assertNotIn("gate:sheet_leak", gate.faults)
 
 
 if __name__ == "__main__":

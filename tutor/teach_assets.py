@@ -5,9 +5,10 @@
   would bind referent ↔ Spanish better than English gloss. Free chat, recasts
   of abstract grammar, and already-shown concepts usually get no image.
 
-**Cache-first (server, not browser):**
-  Hot path = disk lookup only. Never blocks on AI generation.
-  Miss → optional background warm if TEACH_IMAGE_GENERATE + generator registered.
+**Cache-first, generate-on-miss when wanted:**
+  Hit = disk lookup (fast). When the decision says we want an image and the
+  file is missing, generate once (Gemini), write to cache, serve same-turn.
+  No more "only if we pre-seeded it".
 
 See docs/pedagogy-contract.md § visual_image and docs/new-teacher-plan.md.
 """
@@ -32,10 +33,17 @@ INDEX_PATH = ASSETS_DIR / "cache_index.json"
 MANIFEST_PATH = ASSETS_DIR / "manifest.json"
 STATIC_URL_PREFIX = "/static/teach_assets"
 
-GENERATE_ON_MISS = (
-    os.environ.get("TEACH_IMAGE_GENERATE", "false").strip().lower()
-    in ("1", "true", "yes", "on")
-)
+def _generate_on_miss_flag() -> bool:
+    explicit = (os.environ.get("TEACH_IMAGE_GENERATE") or "").strip().lower()
+    if explicit in ("0", "false", "off", "no"):
+        return False
+    if explicit in ("1", "true", "yes", "on"):
+        return True
+    # Auto when Gemini key present (generator still required)
+    return bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
+
+
+GENERATE_ON_MISS = _generate_on_miss_flag()
 
 # ---------------------------------------------------------------------------
 # Image-worthy lexicon (concrete referents / gestures — not abstract grammar)
@@ -280,6 +288,32 @@ def resolve_concept_id(raw: str | None) -> str | None:
     return None
 
 
+def concept_in_text(concept: str | None, text: str) -> bool:
+    """Surface-form relevance: does this concept actually appear in text?
+
+    Code-owned check (observe.word_present is boundary-safe for words and
+    MWUs alike; no LLM). Used to guarantee an image can only bind a concept
+    the current exchange actually contains. Incident 2026-07-28: a stale
+    repair-target «hola» image attached to a digo/dices grammar question —
+    an absent image beats a wrong one (r5 multimodal law).
+    """
+    from .observe import word_present
+
+    key = _norm_key(concept)
+    if not key or not (text or "").strip():
+        return False
+    needles = {key.replace("_", " ")}
+    meta = CONCEPT_LEXICON.get(key) or {}
+    for a in meta.get("aliases") or ():
+        a = (a or "").strip()
+        if a:
+            needles.add(a)
+    form = str(meta.get("form") or "").strip(" …._")
+    if form:
+        needles.add(form)
+    return any(word_present(n, text) for n in needles)
+
+
 def extract_concept_candidates(card: PlanCard) -> list[str]:
     """Pull image-worthy concept ids from the plan (order = preference).
 
@@ -495,6 +529,13 @@ def register_generator(fn: Callable[[str, str, Path], bool] | None) -> None:
     _generator = fn
 
 
+def generation_ready() -> bool:
+    """A generator is registered — explicit generate=True calls can produce
+    images. Same fact cache_stats exposes as generator_registered; callers
+    use it to note WHY a miss produced no image (never silently)."""
+    return _generator is not None
+
+
 def load_catalog() -> dict[str, dict[str, str]]:
     """Seed lexicon + manifest + cache index (metadata only)."""
     cat: dict[str, dict[str, str]] = {}
@@ -674,44 +715,65 @@ def ensure_asset(
     prompt: str = "",
     generate: bool | None = None,
 ) -> dict[str, Any] | None:
-    """Cache-first; generate only on miss if enabled. Not for blocking hot path."""
+    """Cache-first; on miss generate same-turn when enabled + generator registered.
+
+    Pedagogy path (association / comprehension_repair): pass generate=True so
+    the image appears *this* turn, not after a background warm.
+    """
     hit = cache_lookup(concept)
     if hit:
         hit["cache"] = "hit"
         return hit
 
-    do_gen = GENERATE_ON_MISS if generate is None else generate
+    do_gen = GENERATE_ON_MISS if generate is None else bool(generate)
     key = _norm_key(concept)
+    if not key:
+        return None
     cat = load_catalog()
     meta = cat.get(key) or {}
     lex = CONCEPT_LEXICON.get(key) or {}
     form = form or meta.get("form") or lex.get("form") or key
-    caption = caption or meta.get("caption") or lex.get("caption") or ""
+    caption = caption or meta.get("caption") or lex.get("caption") or form
     prompt = prompt or meta.get("prompt") or lex.get("prompt") or _default_prompt(key, form)
 
     if not do_gen or _generator is None:
         return None
 
-    dest = CACHE_DIR / f"{key}.jpg"
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    # Generator may rewrite suffix (.png vs .jpg); check all after.
+    dest = CACHE_DIR / f"{key}.png"
     try:
-        ok = _generator(key, prompt, dest)
+        ok = bool(_generator(key, prompt, dest))
     except Exception:
         ok = False
-    if ok and dest.is_file() and dest.stat().st_size > 0:
-        _record_hit(
-            key,
-            f"cache/{key}.jpg",
-            form=form,
-            caption=caption,
-            prompt=prompt,
-            source="generated",
-        )
-        out = cache_lookup(key)
-        if out:
-            out["cache"] = "miss_generated"
-        return out
-    return None
+    if not ok:
+        return None
+
+    # Find whatever file the generator actually wrote
+    written: Path | None = None
+    for cand in (dest, dest.with_suffix(".jpg"), dest.with_suffix(".webp"), CACHE_DIR / f"{key}.png", CACHE_DIR / f"{key}.jpg"):
+        if cand.is_file() and cand.stat().st_size > 0:
+            written = cand
+            break
+    if written is None:
+        return None
+
+    try:
+        rel = written.relative_to(ASSETS_DIR).as_posix()
+    except ValueError:
+        rel = f"cache/{written.name}"
+    _record_hit(
+        key,
+        rel,
+        form=form,
+        caption=caption,
+        prompt=prompt,
+        source="generated",
+    )
+    out = cache_lookup(key)
+    if out:
+        out["cache"] = "miss_generated"
+    return out
 
 
 def warm_concept_background(concept: str, **kwargs: Any) -> None:
@@ -784,11 +846,18 @@ def assets_for_ai_turn(
     images_shown: set[str] | list[str] | None = None,
     turns_since_image: int | None = None,
     session_turns: int = 0,
+    require_relevant_to: str | None = None,
 ) -> tuple[list[dict[str, Any]], ImageDecision]:
     """Post-hoc image decision for AI-first path (no rules PlanCard agenda).
 
     Uses what the tutor *actually said* + open/blank/session facts — not a
     flashcard ladder. Returns (assets, decision).
+
+    require_relevant_to: when not None, HARD relevance gate — any decided
+    concept must be surface-present (concept_in_text) in that exchange text
+    or NO image is served. Callers pass it on comprehension_repair / meta
+    turns so the system can never serve SOME image when none is relevant
+    (incident 2026-07-28: hola image on a digo/dices grammar question).
     """
     models = [m for m in (tutor_models or []) if m]
     sig = set(signals or [])
@@ -849,6 +918,18 @@ def assets_for_ai_turn(
         turns_since_image=turns_since_image,
         session_turns=session_turns,
     )
+    if (
+        require_relevant_to is not None
+        and decision.want
+        and not concept_in_text(decision.concept, require_relevant_to)
+    ):
+        decision = ImageDecision(
+            False,
+            concept=decision.concept,
+            reason="skip_irrelevant_concept",
+            candidates=decision.candidates,
+            visual_score=decision.visual_score,
+        )
     assets = _resolve_decision_assets(decision, images_shown=images_shown)
     return assets, decision
 
@@ -882,6 +963,7 @@ def _resolve_decision_assets(
     images_shown: set[str] | list[str] | None = None,
 ) -> list[dict[str, Any]]:
     if not decision.want or not decision.concept:
+        # Pre-warm likely next concepts in background only
         for c in decision.candidates[:2]:
             if c not in (images_shown or set()) and not cache_lookup(c):
                 meta = CONCEPT_LEXICON.get(c) or {}
@@ -893,21 +975,21 @@ def _resolve_decision_assets(
                 )
         return []
 
-    hit = cache_lookup(decision.concept)
+    meta = CONCEPT_LEXICON.get(decision.concept) or {}
+    # Same-turn: cache hit or generate on miss (no "if we have one")
+    hit = ensure_asset(
+        decision.concept,
+        form=str(meta.get("form") or decision.concept),
+        caption=str(meta.get("caption") or ""),
+        prompt=str(meta.get("prompt") or ""),
+        generate=True,
+    )
     if hit:
         return [{
             **hit,
             "decision_reason": decision.reason,
             "visual_score": decision.visual_score,
         }]
-
-    meta = CONCEPT_LEXICON.get(decision.concept) or {}
-    warm_concept_background(
-        decision.concept,
-        form=meta.get("form") or decision.concept,
-        caption=meta.get("caption") or "",
-        prompt=meta.get("prompt") or "",
-    )
     return []
 
 

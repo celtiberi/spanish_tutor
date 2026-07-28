@@ -73,6 +73,62 @@ def today() -> str:
     return datetime.date.today().isoformat()
 
 
+# Retrieval-scheduler / introduce-ledger fields (Phase 1 pedagogy engine —
+# docs/build-plan-pedagogy-engine.md). Optional per-entry on lexicon /
+# grammar / skills. Introduction NEVER changes confidence/status (honesty
+# law) — enforced in tutor/retrieval_scheduler.py via a write allowlist.
+SCHEDULE_ENTRY_FIELDS = (
+    "introduced_at", "first_seen", "scaffold", "next_due", "interval_days",
+    "successive_successes",
+)
+
+
+def _normalize_schedule_entry(entry: dict) -> None:
+    """Coerce optional scheduler/ledger fields in place; absent stays absent.
+
+    Never invents fields on legacy entries and never touches ability fields
+    (confidence/status/solid_uses) — migration is transparent.
+    """
+    if "interval_days" in entry:
+        try:
+            entry["interval_days"] = max(1, int(entry["interval_days"]))
+        except (TypeError, ValueError):
+            entry["interval_days"] = 1
+    if "successive_successes" in entry:
+        try:
+            entry["successive_successes"] = max(
+                0, int(entry["successive_successes"])
+            )
+        except (TypeError, ValueError):
+            entry["successive_successes"] = 0
+    for k in ("introduced_at", "first_seen", "next_due"):
+        if k in entry and entry[k] is not None:
+            v = str(entry[k]).strip()[:10]
+            try:
+                datetime.date.fromisoformat(v)
+                entry[k] = v
+            except ValueError:
+                entry[k] = None
+    if "scaffold" in entry and entry["scaffold"] is not None:
+        entry["scaffold"] = str(entry["scaffold"])
+
+
+def normalize_schedule_fields(sheet: dict) -> dict:
+    """Sanitize scheduler/ledger fields across lexicon/grammar/skills.
+
+    Keys are used verbatim — multiword units like "hasta luego" are legal
+    lexicon keys and must never be split or re-cased here.
+    """
+    for section in ("lexicon", "grammar", "skills"):
+        block = sheet.get(section)
+        if not isinstance(block, dict):
+            continue
+        for entry in block.values():
+            if isinstance(entry, dict):
+                _normalize_schedule_entry(entry)
+    return sheet
+
+
 def now_iso() -> str:
     """Local wall-clock timestamp for last_seen / context (date + time)."""
     return datetime.datetime.now().astimezone().replace(microsecond=0).isoformat()
@@ -299,12 +355,17 @@ def is_session_scoped_energy(value: str | None) -> bool:
 def clear_session_scoped_affect(sheet: dict) -> dict:
     """Drop ephemeral time-pressure / session notes so they don't stick forever.
 
-    Call at the start of each new chat session. Durable skills/identity stay.
+    Call at the start of each new chat session. Durable skills stay; identity
+    is stripped (personal-data capture disabled 2026-07-28).
     """
     s = copy.deepcopy(sheet)
     aff = s.setdefault("affect", {})
     if is_session_scoped_energy(aff.get("energy")):
         aff["energy"] = "unknown"
+    # Boredom decays across sessions: a new chat is a fresh chance. One more
+    # complaint re-raises it; without decay "high" locks new-topic mode forever.
+    if aff.get("boredom_risk") == "high":
+        aff["boredom_risk"] = "medium"
     meta = aff.get("last_meta")
     if meta and _SESSION_META_TIME.search(str(meta)):
         aff["last_meta"] = None
@@ -314,6 +375,7 @@ def clear_session_scoped_affect(sheet: dict) -> dict:
     avoid = str(nb.get("avoid") or "").lower()
     if "limited time" in reason or "time_limited" in avoid or "few minute" in reason:
         s = recompute_next_best(s)
+    s = _preserve_identity(sheet, s)  # strips identity (capture disabled)
     s["updated_at"] = today()
     return s
 
@@ -377,6 +439,12 @@ def load_sheet(path: Path) -> dict:
         merged["error_patterns"] = {}
     merged["version"] = max(int(merged.get("version") or 1), 2)
     merged["framework"] = base["framework"]
+    # Defense in depth (personal-data capture disabled 2026-07-28): legacy
+    # sheet files on disk may still carry a name — strip on every load.
+    ident = merged.setdefault("identity", {})
+    ident["preferred_name"] = None
+    ident["engagement_notes"] = ""
+    merged = normalize_schedule_fields(merged)
     return recompute_next_best(merged)
 
 
@@ -454,48 +522,58 @@ def compute_progress_score(sheet: dict | None) -> dict:
     else:
         level = "Strong A1"
 
-    name = ((sheet.get("identity") or {}).get("preferred_name") or "").strip()
     return {
         "total": score,
         "level": level,
         "known": known,
         "emerging": emerging,
         "tracked": n,
-        "name": name or None,
+        # Personal-data capture disabled 2026-07-28: never emit a name.
+        "name": None,
         "label": f"{score}",
     }
 
 
-def format_sheet_for_prompt(sheet: dict, *, max_lex: int = 40) -> str:
-    """Compact JSON-ish summary for the tutor system context.
+def format_sheet_for_prompt(sheet: dict, *, max_lex: int | None = None) -> str:
+    """Full character sheet for the tutor model (testing: no silent slimming).
 
-    Always includes wall-clock `now` so last_seen dates are interpretable.
+    When TEACHER_CONTEXT_TRUNCATE is later enabled, callers may still clip the
+    string via config.clip_prompt — this function itself does not drop fields.
+    max_lex=None means entire lexicon.
     """
-    slim = {
-        "now": now_iso(),  # current local date+time for last_seen comparisons
-        "identity": sheet.get("identity"),
-        "skills": sheet.get("skills"),
-        "grammar": {
-            k: {kk: vv for kk, vv in v.items() if kk != "evidence"}
-            for k, v in (sheet.get("grammar") or {}).items()
-        },
-        "error_patterns": sheet.get("error_patterns") or {},
+    skills = sheet.get("skills") or {}
+    grammar = {
+        k: dict(v) if isinstance(v, dict) else v
+        for k, v in (sheet.get("grammar") or {}).items()
+    }
+    errors = {
+        k: dict(v) if isinstance(v, dict) else v
+        for k, v in (sheet.get("error_patterns") or {}).items()
+    }
+    lex = sheet.get("lexicon") or {}
+    if max_lex is not None and max_lex > 0:
+        lex = dict(list(lex.items())[:max_lex])
+
+    payload = {
+        "now": now_iso(),
+        # Personal-data capture disabled 2026-07-28: identity is omitted.
+        "next_best": sheet.get("next_best"),
         "active_error_focus": active_error_patterns(sheet),
+        "error_patterns": errors,
+        "skills": skills,
+        "grammar": grammar,
         "affect": sheet.get("affect"),
         "coverage": sheet.get("coverage"),
-        "next_best": sheet.get("next_best"),
-        "lexicon_sample": dict(
-            list((sheet.get("lexicon") or {}).items())[:max_lex]
-        ),
+        "receptive": sheet.get("receptive"),
+        "lexicon": lex,
+        "updated_at": sheet.get("updated_at"),
     }
-    return json.dumps(slim, ensure_ascii=False, indent=2)
+    return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
 def format_sheet_human(sheet: dict) -> str:
     lines = ["# Student character sheet", ""]
-    ident = sheet.get("identity") or {}
-    lines.append(f"**Name:** {ident.get('preferred_name') or '(unknown)'}")
-    lines.append(f"**Goals:** {', '.join(ident.get('goals') or []) or '(none)'}")
+    # Personal-data capture disabled 2026-07-28: no Name / Goals lines.
     lines.append(f"**Updated:** {sheet.get('updated_at')}")
     lines.append(f"**Now (context):** {now_iso()}")
     nb = sheet.get("next_best") or {}
@@ -571,7 +649,11 @@ def format_sheet_human(sheet: dict) -> str:
 
 
 def _bump_status(entry: dict, *, success: bool, amount: float = 0.15) -> dict:
-    """Heuristic status bump with per-turn caps and known-gate."""
+    """Heuristic status bump with per-call cap and known-gate.
+
+    The net per-turn ceiling is enforced in process_turn via
+    _cap_turn_confidence — stacked calls here may not exceed it.
+    """
     e = dict(entry)
     prev_c = float(e.get("confidence") or 0.0)
     if success:
@@ -602,6 +684,74 @@ def _bump_status(entry: dict, *, success: bool, amount: float = 0.15) -> dict:
         e["status"] = "emerging"
         e["confidence"] = min(float(e["confidence"]), 0.75)
     return e
+
+
+def _cap_turn_confidence(start: dict, staged: dict, final: dict) -> dict:
+    """Enforce a net per-turn confidence (and solid_uses) ceiling after stacking.
+
+    _bump_status caps a single call, but tool credit plus stacked observer
+    bumps double-count one utterance (empirically conf 0→0.5 and solid_uses
+    0→2). Final conf for a key may not exceed
+    max(start_c + MAX_CONF_UP_PER_TURN, staged_c). Final solid_uses may not
+    exceed max(start_uses + 1, staged_uses). After clipping conf, re-gate
+    status so 'known' cannot remain with conf < KNOWN_MIN_CONF or uses
+    < KNOWN_MIN_SOLID_USES.
+
+    staged is the sheet after tool/AI merge and before apply_rule_updates.
+    Observer-only paths pass start as staged (ceiling = start + cap only).
+    Note: the AI full-rewrite path has no +0.25 honesty clamp of its own —
+    staged values from it are preserved as-is (closing that is a separate
+    change; see docs/reviews-system-overview.md countersign 2026-07-26).
+    """
+    for section in ("skills", "grammar", "lexicon"):
+        fin = final.get(section)
+        if not isinstance(fin, dict):
+            continue
+        st = start.get(section) if isinstance(start.get(section), dict) else {}
+        stg = staged.get(section) if isinstance(staged.get(section), dict) else {}
+        for key, entry in fin.items():
+            if not isinstance(entry, dict):
+                continue
+            st_e = st.get(key) if isinstance(st.get(key), dict) else {}
+            stg_e = stg.get(key) if isinstance(stg.get(key), dict) else {}
+            start_c = float(st_e.get("confidence") or 0.0)
+            staged_c = float(stg_e.get("confidence") or 0.0)
+            try:
+                start_u = int(st_e.get("solid_uses") or 0)
+            except (TypeError, ValueError):
+                start_u = 0
+            try:
+                staged_u = int(stg_e.get("solid_uses") or 0)
+            except (TypeError, ValueError):
+                staged_u = 0
+
+            cur = None
+            if entry.get("confidence") is not None:
+                try:
+                    cur = float(entry["confidence"])
+                except (TypeError, ValueError):
+                    cur = None
+                if cur is not None:
+                    ceiling = max(start_c + MAX_CONF_UP_PER_TURN, staged_c)
+                    if cur > ceiling:
+                        entry["confidence"] = round(ceiling, 3)
+                        cur = float(entry["confidence"])
+
+            try:
+                cur_u = int(entry.get("solid_uses") or 0)
+            except (TypeError, ValueError):
+                cur_u = 0
+            u_ceiling = max(start_u + 1, staged_u)
+            if cur_u > u_ceiling:
+                entry["solid_uses"] = u_ceiling
+                cur_u = u_ceiling
+
+            # Re-gate known after any clip (conf and/or uses).
+            if entry.get("status") == "known":
+                conf_now = cur if cur is not None else float(entry.get("confidence") or 0.0)
+                if conf_now < KNOWN_MIN_CONF or cur_u < KNOWN_MIN_SOLID_USES:
+                    entry["status"] = "emerging"
+    return final
 
 
 def _clamp_skill_entry(prev: dict, incoming: dict) -> dict:
@@ -690,12 +840,12 @@ def _auto_coverage_from_evidence(sheet: dict, *, skill_ids=None, grammar_ids=Non
 
 
 def _preserve_identity(before: dict, after: dict) -> dict:
-    """Never drop preferred_name once known."""
+    """Personal-data capture disabled 2026-07-28: identity is stripped, never preserved."""
     s = after
-    prev = (before.get("identity") or {}).get("preferred_name")
-    cur = (s.get("identity") or {}).get("preferred_name")
-    if prev and (not cur or str(cur).strip().lower() in ("null", "none", "")):
-        s.setdefault("identity", {})["preferred_name"] = prev
+    ident = dict(s.get("identity") or {})
+    ident["preferred_name"] = None
+    ident["engagement_notes"] = ""
+    s["identity"] = ident
     return s
 
 
@@ -814,7 +964,7 @@ def note_error_pattern(
         ent["last_seen"] = now_iso()
         ex = list(ent.get("last_examples") or [])
         if example and example not in ex:
-            ex.append(example[:100])
+            ex.append(example[:100])  # truncation-ok: sheet storage example cap
         ent["last_examples"] = ex[-5:]
 
     c = int(ent.get("count") or 0)
@@ -932,8 +1082,21 @@ def active_error_patterns(
     return out
 
 
-def apply_rule_updates(sheet: dict, learner: str, tutor_visible: str = "") -> dict:
-    """Heuristic updates from one learner turn (no extra API call)."""
+def apply_rule_updates(
+    sheet: dict,
+    learner: str,
+    tutor_visible: str = "",
+    *,
+    preferred_name: str | None = None,
+    store_identity: bool = True,
+) -> dict:
+    """Heuristic ability updates from one learner turn (no extra API call).
+
+    Personal-data capture is disabled (2026-07-28): this observer is
+    ability-only and never writes identity. `store_identity` is accepted for
+    caller compatibility but ignored. `preferred_name` feeds pedagogy that
+    depends on knowing the name (IP-03 gating) — always None now.
+    """
     s = copy.deepcopy(sheet)
     text = learner or ""
     f = fold(text)
@@ -946,42 +1109,40 @@ def apply_rule_updates(sheet: dict, learner: str, tutor_visible: str = "") -> di
         r"same thing|too hard|hate this)\b",
         low,
     ):
-        aff["last_meta"] = text[:200]
+        aff["last_meta"] = text[:200]  # truncation-ok: affect note storage
         aff["boredom_risk"] = "high"
         aff["energy"] = "frustrated_or_bored"
+    elif re.search(
+        # Topic fatigue: complaints about repetition, not general frustration
+        r"\byou\s+always\s+(talk|ask|say)\b|"
+        r"\bsame\s+(topic|topics|questions?|stuff)\b|"
+        r"\bsiempre\s+(hablamos|hablando|preguntas)\b|"
+        r"\botra\s+vez\s+lo\s+mismo\b",
+        low,
+    ):
+        aff["last_meta"] = text[:200]  # truncation-ok: affect note storage
+        aff["boredom_risk"] = "high"
     elif re.search(
         r"\b(little time|only have|don'?t have (much|a lot of) time|"
         r"gotta go|have to go|in a hurry|in a rush|quick session|"
         r"limited time|solo tengo|un poco de tiempo|pequito tiemp)\b",
         low,
     ):
-        aff["last_meta"] = text[:200]
+        aff["last_meta"] = text[:200]  # truncation-ok: affect note storage
         aff["energy"] = "limited_time"
         # Do NOT treat time pressure as boredom
         if aff.get("boredom_risk") != "high":
             aff["boredom_risk"] = "low"
 
-    # Name capture
     skills = s.setdefault("skills", default_skills_block())
 
-    # Name capture — learners often approximate *me llamo*
-    name = None
-    for pat in (
-        r"\bme\s+llamo\s+(?:es\s+)?([A-Za-zÁÉÍÓÚáéíóúñÑ]+)",
-        r"\bme\s+llama\s+(?:es\s+)?([A-Za-zÁÉÍÓÚáéíóúñÑ]+)",  # common error
-        r"\bmy\s+name\s+is\s+([A-Za-zÁÉÍÓÚáéíóúñÑ]+)",
-        r"\bI(?:'m| am)\s+([A-Z][a-zÁÉÍÓÚáéíóúñÑ]{2,})\b",
-    ):
-        m = re.search(pat, text, re.I)
-        if m:
-            cand = m.group(1)
-            if cand.lower() not in {
-                "from", "the", "very", "fine", "good", "here", "just",
-            }:
-                name = cand
-                break
-    if name:
-        s.setdefault("identity", {})["preferred_name"] = name.capitalize()
+    # Name introduction — Spanish ability evidence ONLY (IP-03). English
+    # "my name is" is L1 communicative intent, not Spanish production
+    # (ACTFL: target-language performance only) — it earns no IP-03 credit.
+    # The name VALUE is never extracted or stored anywhere (personal-data
+    # capture disabled 2026-07-28): the old value-capture regex once made
+    # "I am searching for eggs" the learner's name.
+    if re.search(r"\bme\s+llam[oa]\b", low):
         skills["IP-03"] = _bump_status(
             skills.get("IP-03") or {}, success=True, amount=0.25)
         _touch_coverage(s, "introduce_self")
@@ -1035,7 +1196,10 @@ def apply_rule_updates(sheet: dict, learner: str, tutor_visible: str = "") -> di
             skills["IP-01"] = _bump_status(
                 skills.get("IP-01") or {}, success=True, amount=0.12)
 
-    if re.search(r"\b(soy|eres|es)\b", f):
+    # The "es" inside erroneous "me llamo/llama es" is the me_llamo_es error
+    # (tracked in error_patterns) — it must not earn ser credit.
+    f_ser = re.sub(r"\bme\s+llam[ao]\s+es\b", " ", f)
+    if re.search(r"\b(soy|eres|es)\b", f_ser):
         g["present_ser"] = _bump_status(
             g.get("present_ser") or {}, success=True, amount=0.12)
         skills["IP-07"] = _bump_status(skills.get("IP-07") or {}, success=True, amount=0.08)
@@ -1044,7 +1208,7 @@ def apply_rule_updates(sheet: dict, learner: str, tutor_visible: str = "") -> di
     # Recurring construction errors (yo está, me llamo es, …)
     s = apply_error_pattern_updates(s, learner)
 
-    s = recompute_next_best(s)
+    s = recompute_next_best(s, preferred_name=preferred_name)
     s["updated_at"] = today()
     return s
 
@@ -1053,8 +1217,10 @@ def sanitize_tool_delta(delta: dict | None) -> dict:
     """Keep only trusted top-level keys from a tool / model delta."""
     if not isinstance(delta, dict):
         return {}
+    # "identity" is intentionally NOT allowed — personal-data capture is
+    # disabled (2026-07-28); no tool/model delta may carry names or notes.
     allowed = {
-        "identity", "affect", "next_best", "lexicon", "skills", "grammar",
+        "affect", "next_best", "lexicon", "skills", "grammar",
         "coverage", "receptive", "error_patterns", "reason", "notes",
     }
     return {k: v for k, v in delta.items() if k in allowed}
@@ -1073,17 +1239,9 @@ def apply_delta(sheet: dict, delta: dict) -> dict:
     before = sheet
     s = copy.deepcopy(sheet)
 
-    if "identity" in delta and isinstance(delta["identity"], dict):
-        ident = {**s.get("identity", {}), **delta["identity"]}
-        prev_name = (s.get("identity") or {}).get("preferred_name")
-        new_name = ident.get("preferred_name")
-        if prev_name and (
-            new_name is None
-            or str(new_name).strip() == ""
-            or str(new_name).strip().lower() in ("null", "none")
-        ):
-            ident["preferred_name"] = prev_name
-        s["identity"] = ident
+    # Personal-data capture disabled 2026-07-28: never merge an "identity"
+    # key from any delta (sanitize already drops it; belt and braces).
+    delta.pop("identity", None)
 
     if "affect" in delta and isinstance(delta["affect"], dict):
         aff = {**s.get("affect", {}), **delta["affect"]}
@@ -1151,6 +1309,12 @@ def apply_delta(sheet: dict, delta: dict) -> dict:
                             "last_seen": today(),
                         }
                     continue
+                # Scheduler/ledger fields are CODE-owned (retrieval_scheduler):
+                # no tool/model delta may set due dates or introduce facts.
+                v = {
+                    kk: vv for kk, vv in v.items()
+                    if kk not in SCHEDULE_ENTRY_FIELDS
+                }
                 prev = base.get(k) or {}
                 if section in ("skills", "grammar"):
                     merged = _clamp_skill_entry(prev, v)
@@ -1206,7 +1370,7 @@ def apply_delta(sheet: dict, delta: dict) -> dict:
             ex = list(ent.get("last_examples") or [])
             for item in v.get("last_examples") or []:
                 if isinstance(item, str) and item.strip() and item not in ex:
-                    ex.append(item.strip()[:100])
+                    ex.append(item.strip()[:100])  # truncation-ok: sheet storage example cap
             ent["last_examples"] = ex[-5:]
             if cat:
                 ent["label"] = cat.get("label") or ent.get("label")
@@ -1236,13 +1400,14 @@ UPDATE_CHARACTER_SHEET_TOOL = {
     "name": "update_character_sheet",
     "description": (
         "Update your working model of this Spanish learner when you have NEW "
-        "evidence from the latest exchange (name, can-do use, scaffold need, "
+        "evidence from the latest exchange (can-do use, scaffold need, "
         "affect, error patterns, next stretch). Skip if nothing meaningful changed. "
         "Partial delta only — not the full sheet. Be conservative: prefer "
         "emerging/fragile over known; one good turn is not mastery. "
         "Limited time ≠ boredom (use energy=limited_time). "
         "For repeated construction errors (e.g. yo está), set error_patterns "
-        "examples. Always keep preferred_name once known. Student never sees this tool."
+        "examples. Do not record learner names or personal facts; ability "
+        "evidence only. Student never sees this tool."
     ),
     "input_schema": {
         "type": "object",
@@ -1250,13 +1415,6 @@ UPDATE_CHARACTER_SHEET_TOOL = {
             "reason": {
                 "type": "string",
                 "description": "One line: why this update (evidence-based).",
-            },
-            "identity": {
-                "type": "object",
-                "properties": {
-                    "preferred_name": {"type": "string"},
-                    "engagement_notes": {"type": "string"},
-                },
             },
             "error_patterns": {
                 "type": "object",
@@ -1370,9 +1528,16 @@ def extract_sheet_delta(reply: str) -> tuple[str, dict | None]:
     return visible, delta if isinstance(delta, dict) else None
 
 
-def recompute_next_best(sheet: dict) -> dict:
-    """Pick next can-do + CLT/TBLT activity from sheet (docs/spanish-can-dos-novice.md §7)."""
+def recompute_next_best(sheet: dict, *, preferred_name: str | None = None) -> dict:
+    """Pick next can-do + CLT/TBLT activity from sheet (docs/spanish-can-dos-novice.md §7).
+
+    `preferred_name` comes from the learner profile; legacy sheets that still
+    carry an identity block are read as fallback.
+    """
     s = copy.deepcopy(sheet)
+    known_name = (
+        preferred_name or (s.get("identity") or {}).get("preferred_name") or ""
+    ).strip()
     skills = s.get("skills") or {}
     grammar = s.get("grammar") or {}
     affect = s.get("affect") or {}
@@ -1418,6 +1583,11 @@ def recompute_next_best(sheet: dict) -> dict:
                 continue
             # Don't push IP-02 formal if informal greet still unknown
             if cid == "IP-02" and conf(skills, "IP-01") < 0.35:
+                continue
+            # Name exchange is blocked once we know their name (the open guard
+            # forbids «¿Cómo te llamas?») — pinning IP-03 as next_best made the
+            # agenda unadvanceable. Skip it and take the next weakest can-do.
+            if cid == "IP-03" and known_name and conf(skills, "IP-03") >= 0.4:
                 continue
             # Don't grind IP-01 after any real greeting evidence — open other can-dos
             if cid == "IP-01" and (
@@ -1514,16 +1684,35 @@ def recompute_next_best(sheet: dict) -> dict:
             )
         avoid = "ignore_repeated_form_error_and_only_chat"
 
+    # Headline: when form work is active, don't title the stretch as a different
+    # can-do (e.g. IP-03 names) — that made "Focus now" contradict the chat.
+    if form_focus and error_pattern:
+        ep_label = (ERROR_PATTERN_CATALOG.get(error_pattern) or {}).get("label") or error_pattern
+        statement = f"Form in talk: {ep_label}"
+        activity = "weave_form_in_conversation"
+        stretch = activity
+        related_can_do = can_do if can_do is not None else act.get("can_do")
+    else:
+        statement = (
+            CAN_DOS[can_do]["statement"]
+            if can_do in CAN_DOS
+            else act.get("description")
+        )
+        activity = act.get("activity") or stretch_key
+        stretch = act.get("activity") or stretch_key
+        related_can_do = can_do if can_do is not None else act.get("can_do")
+
     s["next_best"] = {
-        "can_do": can_do if can_do is not None else act.get("can_do"),
-        "stretch": act.get("activity") or stretch_key,
-        "activity": act.get("activity") or stretch_key,
-        "statement": CAN_DOS[can_do]["statement"] if can_do in CAN_DOS else act.get("description"),
+        "can_do": related_can_do,
+        "stretch": stretch,
+        "activity": activity,
+        "statement": statement,
         "avoid": avoid,
         "reason": reason,
         "method": "CLT/TBLT + CI + focus_on_form",
         "form_focus": form_focus,
         "error_pattern": error_pattern,
+        "primary": "form" if (form_focus and error_pattern) else "can_do",
         "teach_hint": (
             (ERROR_PATTERN_CATALOG.get(error_pattern) or {}).get("teach_hint")
             if error_pattern else None
@@ -1535,10 +1724,7 @@ def recompute_next_best(sheet: dict) -> dict:
 def summarize_sheet_changes(before: dict, after: dict) -> list[str]:
     """Short human notes for the console."""
     notes = []
-    bn = (before.get("identity") or {}).get("preferred_name")
-    an = (after.get("identity") or {}).get("preferred_name")
-    if an and an != bn:
-        notes.append(f"name={an}")
+    # Personal-data capture disabled 2026-07-28: never note a captured name.
     bumped = []
     for k, v in (after.get("skills") or {}).items():
         prev = (before.get("skills") or {}).get(k) or {}
@@ -1591,6 +1777,12 @@ def normalize_sheet(sheet: dict) -> dict:
             g[fid]["status"] = "unknown"
     merged["version"] = max(int(merged.get("version") or 2), 2)
     merged["framework"] = base["framework"]
+    # Defense in depth (personal-data capture disabled 2026-07-28): an AI
+    # rewrite may not (re)introduce identity data — strip on normalize.
+    ident = merged.setdefault("identity", {})
+    ident["preferred_name"] = None
+    ident["engagement_notes"] = ""
+    merged = normalize_schedule_fields(merged)
     merged["updated_at"] = today()
     # Prefer AI next_best if well-formed; else recompute
     nb = merged.get("next_best") or {}
@@ -1613,6 +1805,7 @@ def process_turn(
     *,
     tool_delta: dict | None = None,
     revised_sheet: dict | None = None,
+    profile: dict | None = None,
 ) -> tuple[dict, str, list[str]]:
     """Apply post-turn sheet maintenance.
 
@@ -1621,10 +1814,17 @@ def process_turn(
       2. `revised_sheet` — legacy full AI rewrite (optional)
       3. rules + optional inline <sheet_delta> (backup)
 
+    `profile` is accepted for caller compatibility but IGNORED — personal-data
+    capture is disabled (2026-07-28); the sheet stays ability-only.
     Returns (sheet, visible_tutor_text, change_notes).
     """
     visible, inline_delta = extract_sheet_delta(tutor_reply)
     before = copy.deepcopy(sheet)
+
+    # Personal-data capture is disabled (2026-07-28): `profile` is accepted
+    # for caller compatibility but never read or written. The sheet stays
+    # ability-only regardless.
+    _rule_kwargs = {"preferred_name": None, "store_identity": False}
 
     if tool_delta:
         s = apply_delta(sheet, tool_delta)
@@ -1643,23 +1843,29 @@ def process_turn(
             notes.append(f"why={reason.strip()[:80]}")
         # Hard observer always runs (PR3): can-do/lexicon/error evidence is
         # code-owned — never depend only on tool compliance.
-        s = apply_rule_updates(s, learner, visible)
+        staged = copy.deepcopy(s)
+        s = apply_rule_updates(s, learner, visible, **_rule_kwargs)
+        s = _cap_turn_confidence(before, staged, s)
         notes.append("hard_observer")
     elif revised_sheet is not None:
         s = normalize_sheet(revised_sheet)
         s = _preserve_identity(sheet, s)
         notes = ["ai_update"]
-        s = apply_rule_updates(s, learner, visible)
+        staged = copy.deepcopy(s)
+        s = apply_rule_updates(s, learner, visible, **_rule_kwargs)
+        s = _cap_turn_confidence(before, staged, s)
         notes.append("hard_observer")
     else:
         # Backup: rules + optional inline delta (no second model call)
-        s = apply_rule_updates(sheet, learner, visible)
+        s = apply_rule_updates(sheet, learner, visible, **_rule_kwargs)
         notes = ["rules_backup", "hard_observer"]
         if inline_delta:
             s = apply_delta(s, inline_delta)
             notes.append("inline_delta")
+        # Cap after all staged work so inline cannot exceed the turn ceiling.
+        s = _cap_turn_confidence(before, before, s)
         s = update_scaffold_flag(s, learner)
-        s = recompute_next_best(s)
+        s = recompute_next_best(s, preferred_name=None)
         s = _preserve_identity(sheet, s)
     # Surface hot error patterns in console notes
     for ep in active_error_patterns(s):

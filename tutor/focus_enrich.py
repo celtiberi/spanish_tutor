@@ -38,6 +38,9 @@ Schema:
   ]
 }
 extra_rows max 4; omit if static paradigm is enough.
+If turn_morph_target is set, code already picked the form in focus: extra_rows
+must be natural A1 example cells for THAT lemma only (present tense), never a
+different verb or an untaught tense.
 """
 
 
@@ -103,6 +106,16 @@ def _call_focus_model(
             for b in (base.get("morphology") or [])
             for p in (b.get("paradigm") or [])[:6]
         ],
+        # Code-chosen turn form (if any) — LLM only decorates it.
+        "turn_morph_target": next(
+            (
+                {"lemma": b.get("lemma"), "label": b.get("label"),
+                 "engaged_by": b.get("engaged_by")}
+                for b in (base.get("morphology") or [])
+                if str(b.get("id") or "").startswith("turn:")
+            ),
+            None,
+        ),
     }
     user = (
         "SHEET SLICE:\n"
@@ -210,7 +223,19 @@ def enrich_focus_panel(
 
     Returns (panel, meta) where meta has source, usage, error.
     """
-    base = build_focus_panel(sheet)
+    # mode_decision optional: enricher usually runs after a turn; caller may
+    # pass via sheet["_last_mode_decision"] without changing the public API.
+    mode_decision = None
+    if isinstance(sheet, dict):
+        mode_decision = sheet.get("_last_mode_decision")
+    # Code decides WHICH form this turn engages (dice→decir, "I am
+    # making"→hacer, form error). Stashing on the shared decision dict makes
+    # every later sheet_public repaint show the same block for this turn.
+    if isinstance(mode_decision, dict) and (learner or "").strip():
+        from .turn_morph import stash_turn_morph
+
+        stash_turn_morph(mode_decision, learner)
+    base = build_focus_panel(sheet, mode_decision=mode_decision)
     meta: dict[str, Any] = {
         "source": "static",
         "model": None,

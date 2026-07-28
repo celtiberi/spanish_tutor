@@ -28,6 +28,25 @@ def load_pack(pack_dir: Path) -> str:
     return "\n\n---\n\n".join(parts)
 
 
+def pack_topic_titles(pack_dir: Path) -> list[str]:
+    """Unit topic titles from the pack.md Units table (| n | file | Topic |…).
+
+    Feeds mode instructions so "change topic" suggestions come from the
+    course pack, not a hardcoded noun list in code.
+    """
+    manifest = pack_dir / "pack.md"
+    if not manifest.exists():
+        return []
+    topics: list[str] = []
+    for line in manifest.read_text().splitlines():
+        m = re.match(r"^\|\s*\d+\s*\|\s*`[^`]+`\s*\|\s*([^|]+)\|", line)
+        if m:
+            t = m.group(1).replace("*", "").strip()
+            if t:
+                topics.append(t)
+    return topics
+
+
 def load_pack_planner_index(pack_dir: Path) -> str:
     """Compact curriculum index for the *controller planner* only.
 

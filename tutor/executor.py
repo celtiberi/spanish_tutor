@@ -75,19 +75,111 @@ Use the character sheet, session facts, and what they just said.
 - **try**: next conversational beat — prefer a real Spanish question
 - Words should read like a good tutor texting, not a labeled drill
 
-## Tools
-Call `update_character_sheet` in the same turn when you get new evidence
-(name, can-do production, form errors, scaffold needs). Partial delta only.
-Never put sheet JSON or can-do codes in learner-facing text.
+## Teach image (OPTIONAL — default is NONE)
+Most turns: **do not** emit an image tag. Images are rare and are YOUR
+pedagogical decision, never a requirement.
+
+Emit **at most one** `<image concept="sol"/>` (lowercase Spanish, underscores
+for spaces: `hace_calor`, `nadar`, `estoy_bien`) only when ALL of these hold:
+1) the concept is DEPICTABLE — a picture can carry its meaning. Objects,
+   actions (*nadar*), weather (*hace_calor*), feelings (*cansado*), simple
+   phrases and scenes all qualify; word class does not matter;
+2) it is the first time THIS concept is taught this session (if unsure, omit);
+3) the turn task has **no** image already attached;
+4) the picture binds meaning better than your short Spanish model alone.
+
+Never emit for: grammar contrasts (*estoy vs está*), people's names
+(including your own), decoration, or something the learner just used
+correctly.
+
+Bad (omit tag): any person's name; second mention of *bote* this session;
+abstract function words. Good (tag ok): first introduction of *el sol*,
+*nadar*, or *hace calor* where seeing it anchors the meaning.
+
+If unsure, **omit**. Omitting is always correct.
+
+## Character sheet (IMPORTANT)
+The app updates the character sheet from your dialogue (hard observer).
+**Do NOT** print sheet JSON, tool JSON, can-do codes, error_pattern ids, or
+`{ "active_error_focus": ... }` dumps in the reply. Learner text is Spanish
+conversation only inside the <tutor> tags. If a sheet tool is available, call
+the tool — never paste JSON into chat.
+
+## Product persona
+Adult conversational A1 — false-beginners + true zeros. Real adult life
+topics; the learner profile hooks give personal color — vary topics rather
+than repeating any one.
+Not a kids app. Conversation is the vehicle. MODE (in each turn task) is the
+pedagogy for this turn — obey mode.instructions. Hard breaks leave free-chat
+shape (contrast, choice, image-led). Soft modes stay in chat.
+
+## Mode playbooks (how to realize each MODE)
+- **placement**: wide ceiling open; model short Spanish; one elicit; not a worksheet.
+- **conversation**: react, model, one real Spanish question; advance topics.
+- **cf_recast**: REQUIRED short <recast> with clean Spanish (one line), then
+  continue chat — do not derail into a long grammar lecture.
+- **form_focus**: HARD BREAK — brief wrong→right contrast for the
+  error_pattern; one choice or produce; then transfer try in new micro-context.
+- **association**: HARD BREAK — form + image meaning; Spanish-forward; try
+  about the picture.
+- **comprehension_check**: yes/no or A/B on meaning of the model — not free production.
+- **comprehension_repair**: they did not understand your last Spanish. Answer
+  any question they asked FIRST (uptake), then explain briefly, use image if
+  present, re-model simpler Spanish of the SAME idea; re-ask the SAME question
+  only if still unanswered — never a brand-new topic.
+- **transfer**: same form, new context; celebrate briefly; no re-drill.
+
+## Correction rules (always — every recast/repair, any mode)
+- NEVER confirm or praise an incorrect form (no "¡Sí!/¡Exacto!/¡Perfecto!"
+  on a turn you are recasting) — acknowledge the MEANING warmly, then recast
+  the FORM.
+- ONE grammatical person per repair: when fixing a form, show only the
+  person the learner needed (their own sentence corrected). Do not offer
+  1st and 2nd person variants in the same repair.
+
+## Per-turn standing orders
+- LEARNER UPTAKE (outranks mode agenda, including comprehension_repair):
+  If the learner asks a question, requests a word/phrase, or says they forget
+  how to say something, answer that FIRST in ≤2 short sentences (brief English
+  allowed). Then continue the mode agenda only if it still fits. Never ignore a
+  direct question to re-ask a prior try. Mode targets constrain TOPIC drift and
+  hard-break legality — they do not authorize silence on a live help request.
+- Realize MODE targets and legality — do not invent a different pedagogical
+  agenda or a new hard break. Answering a direct learner question is not a
+  different agenda; it is required uptake before mode continuation.
+- React to what they said when in conversation/recast/transfer.
+- Mostly Spanish. No flashcard ladder. No re-asking covered probes.
+- Open scene goals are optional quests — close them opportunistically if natural.
+- If an image is attached in the turn task, associate it with the Spanish you
+  model. Do not invent an image when the list is empty.
 """
+
+
+def load_persona() -> str:
+    """Persona spec (voice/character layer) — optional, env-gated.
+
+    Persona is the HOW; modes, gate, and pack always outrank it (the file
+    itself opens with that rule). TUTOR_PERSONA=off disables.
+    """
+    if not getattr(config, "PERSONA_ENABLED", True):
+        return ""
+    path = getattr(config, "PERSONA_PATH", None)
+    if not path or not Path(path).exists():
+        return ""
+    try:
+        return Path(path).read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
 
 
 def build_ai_tutor_system(
     *,
     sheet_summary: str = "",
     pack_palette: str = "",
+    personal_context: str = "",
 ) -> list[dict]:
-    """System blocks: stance + sheet + pack."""
+    """System blocks in cache-friendly order: stance → persona → pack →
+    personal_context → ability sheet (sheet last; it changes every turn)."""
     stance = ""
     if CONV_PROMPT.exists():
         try:
@@ -95,28 +187,45 @@ def build_ai_tutor_system(
         except OSError:
             stance = ""
     text = AI_TUTOR_SYSTEM
-    stance_cap = getattr(config, "STANCE_PROMPT_CHARS", 2200)
-    pack_cap = getattr(config, "PACK_PROMPT_CHARS", 1800)
-    sheet_cap = 2500
+    # Testing default: no truncation (config.clip_prompt with cap=0 is a no-op).
+    stance_cap = getattr(config, "STANCE_PROMPT_CHARS", 0)
+    pack_cap = getattr(config, "PACK_PROMPT_CHARS", 0)
+    sheet_cap = getattr(config, "SHEET_PROMPT_CHARS", 0)
     if stance:
-        # Methods reinforce; keep short for latency (was 5–6k chars)
-        text += "\n\n# Teaching methods (detail)\n" + stance[:stance_cap]
+        text += "\n\n# Teaching methods (detail)\n" + config.clip_prompt(stance, stance_cap)
+    # Block ORDER is a cost decision: providers cache by longest common
+    # PREFIX, so static content (stance, persona, the big course pack) must
+    # come before anything that changes per turn. The sheet changes every
+    # turn — it goes LAST. Putting it before the pack silently disabled
+    # prompt caching and billed the full ~20k-token prefix fresh each turn.
     blocks: list[dict] = [{"type": "text", "text": text}]
+    persona = load_persona()
+    if persona:
+        blocks.append({"type": "text", "text": persona})
+    if pack_palette:
+        blocks.append({
+            "type": "text",
+            "text": (
+                "# Course pack palette (stay in scope)\n"
+                + config.clip_prompt(pack_palette, pack_cap)
+            ),
+            # Anthropic explicit caching: marks the end of the stable prefix
+            "cache_control": {"type": "ephemeral"},
+        })
+    if personal_context:
+        blocks.append({"type": "text", "text": personal_context})
     if sheet_summary:
         blocks.append({
             "type": "text",
             "text": (
-                "# Student character sheet — your model of this learner\n"
-                "Adapt level and stretch. Do not ignore fragile forms or "
-                "next_best, but never ignore what they just said.\n\n"
-                + sheet_summary[:sheet_cap]
+                "# Student character sheet — Spanish ABILITIES, READ ONLY\n"
+                "What they can do in Spanish (skills, grammar, errors). Adapt "
+                "teaching from this. Prefer next_best and active errors over "
+                "re-probing known can-dos.\n"
+                "FORBIDDEN: never copy, quote, or re-emit this JSON (or any "
+                "subset) in the learner reply. The app updates the sheet.\n\n"
+                + config.clip_prompt(sheet_summary, sheet_cap)
             ),
-        })
-    if pack_palette:
-        blocks.append({
-            "type": "text",
-            "text": "# Course pack palette (stay in scope)\n" + pack_palette[:pack_cap],
-            "cache_control": {"type": "ephemeral"},
         })
     return blocks
 
@@ -130,11 +239,21 @@ def build_ai_tutor_user_message(
     blank_sheet: bool = False,
     mode_decision: dict | None = None,
     open_scene_hints: list | None = None,
+    sheet_summary: str = "",
+    personal_context: str = "",
 ) -> str:
-    """User-turn task: code-selected mode + facts; AI realizes the turn."""
+    """User-turn task: code-selected mode + facts; AI realizes the turn.
+
+    The character sheet and personal context ride HERE (per-turn tail of the
+    request), not in the system prompt: they change every turn, and any
+    changed byte in the system message would break provider prefix-caching
+    for the entire chat history behind it. Cost decision, content unchanged.
+    """
     mem = session_memory or {}
     obs = observations or {}
     mode = mode_decision or {}
+    nb = obs.get("next_best") or {}
+    active_err = obs.get("active_errors") or []
     payload = {
         "turn": {
             "learner_said": (
@@ -154,18 +273,34 @@ def build_ai_tutor_user_message(
             "scene_ids": mode.get("scene_ids") or [],
         },
         "open_scene_goals": open_scene_hints or [],
+        "student_character_sheet": {
+            "note": (
+                "Spanish ABILITIES, READ ONLY. Adapt teaching from this; "
+                "prefer next_best and active errors over re-probing known "
+                "can-dos. FORBIDDEN: never copy, quote, or re-emit this "
+                "data (or any subset) in the learner reply — the app "
+                "updates the sheet."
+            ),
+            "sheet": config.clip_prompt(
+                sheet_summary, getattr(config, "SHEET_PROMPT_CHARS", 0)
+            ),
+        } if sheet_summary else None,
+        "learner_personal_context": personal_context or None,
         "session_facts": {
             "skills_learner_already_showed": mem.get("shown") or [],
             "topics_tutor_already_asked": mem.get("asked") or [],
             "images_already_shown": mem.get("images_shown") or [],
             "turn_index": mem.get("turns") or 0,
+            "from_character_sheet": mem.get("sheet_seeded") or False,
         },
         "hard_observations": {
             "probe_signals": obs.get("signals") or [],
             "form_error_hits": obs.get("error_hits") or [],
-            "active_error_patterns_on_sheet": obs.get("active_errors") or [],
-            "next_best_can_do": obs.get("next_best") or {},
+            "active_error_patterns_on_sheet": active_err,
+            "next_best_can_do": nb,
         },
+        # Mode playbooks, product persona, and standing orders live in the
+        # STATIC system prompt (cache-stable) — only per-turn facts ride here.
         "visual": {
             "attached_this_turn": [
                 {
@@ -175,53 +310,9 @@ def build_ai_tutor_user_message(
                 }
                 for t in (teach_images or [])
             ],
-            "note": (
-                "If an image is attached, associate it with the Spanish you model. "
-                "Do not invent an image when the list is empty."
-            ),
         },
-        "product_persona": {
-            "who": (
-                "Adult conversational A1 — false-beginners + true zeros. "
-                "Boat/café life OK. Not a kids app."
-            ),
-            "system": (
-                "Conversation is the vehicle. MODE is the pedagogy for this turn — "
-                "obey mode.instructions. Hard breaks leave free-chat shape "
-                "(contrast, choice, image-led). Soft modes stay in chat."
-            ),
-        },
-        "mode_playbooks": {
-            "placement": "Wide ceiling open; model short Spanish; one elicit; not a worksheet.",
-            "conversation": "React, model, one real Spanish question; advance topics.",
-            "cf_recast": (
-                "REQUIRED short <recast> with clean Spanish (one line). "
-                "Then continue chat — do not derail into a long grammar lecture."
-            ),
-
-            "form_focus": (
-                "HARD BREAK: brief wrong→right contrast for the error_pattern; "
-                "one choice or produce; then transfer try in new micro-context."
-            ),
-            "association": (
-                "HARD BREAK: form + image meaning; Spanish-forward; try about the picture."
-            ),
-            "comprehension_check": "Yes/no or A/B on meaning of the model — not free production.",
-            "comprehension_repair": (
-                "They did not understand your last Spanish. Explain briefly, use image if present, "
-                "re-model simpler Spanish of the SAME idea, re-ask the SAME question — "
-                "NEVER a brand-new topic."
-            ),
-            "transfer": "Same form, new context; celebrate briefly; no re-drill.",
-        },
-
-        "instructions": [
-            "Realize MODE only — do not invent a different agenda.",
-            "React to what they said when in conversation/recast/transfer.",
-            "Mostly Spanish. No flashcard ladder. No re-asking covered probes.",
-            "Open scene goals are optional quests — close them opportunistically if natural.",
-        ],
     }
+    payload = {k: v for k, v in payload.items() if v is not None}
     return (
         "<tutor_turn_task>\n"
         + json.dumps(payload, ensure_ascii=False, indent=2)
@@ -292,9 +383,11 @@ def build_executor_system(
     *,
     sheet_summary: str = "",
     pack_palette: str = "",
+    personal_context: str = "",
 ) -> list[dict]:
     """Legacy alias → AI tutor system (same stance either way)."""
     return build_ai_tutor_system(
         sheet_summary=sheet_summary,
         pack_palette=pack_palette,
+        personal_context=personal_context,
     )

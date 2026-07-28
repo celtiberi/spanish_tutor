@@ -25,6 +25,28 @@
   "transfer": {
     "elicit": "¿Y tu amigo en el bote — cómo está?"
   },
+  "primary_exit": {
+    "description": "Info-gap task: the learner meets the captain and must find out the captain's name and how he is today by asking in Spanish (Unit 1 formulas). Greet first. The task is not done until the learner has obtained both pieces by asking.",
+    "slots": [
+      {
+        "id": "greet",
+        "evidence_any": ["hola", "buenos días", "buenos dias", "buenas tardes", "buenas noches"]
+      },
+      {
+        "id": "captain_name",
+        "evidence_any": ["cómo te llamas", "como te llamas", "cómo se llama", "como se llama"]
+      },
+      {
+        "id": "captain_estado",
+        "evidence_any": ["cómo estás", "como estas", "cómo está", "como esta"]
+      }
+    ]
+  },
+  "tutor_private_info": {
+    "captain_name": "Me llamo Andrés.",
+    "captain_estado": "Estoy muy bien, gracias."
+  },
+  "learner_must_obtain": ["captain_name", "captain_estado"],
   "scope": { "pack": "spanish_a1" },
   "spacing": { "resurface_after_days": [1, 3, 7] }
 }

@@ -19,7 +19,8 @@ class TestFocusPanel(unittest.TestCase):
         labels = " ".join(b.get("label", "") for b in blocks).lower()
         self.assertIn("gust", labels)
 
-    def test_build_focus_panel(self):
+    def test_build_focus_panel_sheet_arc(self):
+        """Without mode_decision: live title is generic; sheet arc keeps can-do."""
         s = default_sheet()
         s["next_best"] = {
             "can_do": "IP-05",
@@ -33,14 +34,42 @@ class TestFocusPanel(unittest.TestCase):
         s["identity"]["preferred_name"] = "Patrick"
         panel = build_focus_panel(s)
         self.assertEqual(panel["focus"]["can_do"], "IP-05")
-        self.assertIn("end a short exchange", panel["focus"]["title"].lower())
-        self.assertEqual(panel["focus"]["activity"], "close_exchange_naturally")
-        self.assertEqual(panel["focus"]["learner_name"], "Patrick")
+        self.assertIn("end a short exchange", (panel["focus"].get("sheet_title") or "").lower())
+        # Personal-data capture disabled 2026-07-28: even a sheet carrying a
+        # residual name must never emit it to the UI focus panel.
+        self.assertIsNone(panel["focus"]["learner_name"])
         self.assertTrue(panel["morphology"])
         forms = " ".join(
             p["form"] for b in panel["morphology"] for p in b.get("paradigm") or []
         )
         self.assertIn("Adiós", forms)
+
+    def test_live_mode_overrides_stale_can_do_title(self):
+        """Mode runtime is primary — do not show IP-03 names during transfer/estoy."""
+        s = default_sheet()
+        s["next_best"] = {
+            "can_do": "IP-03",
+            "activity": "introduce_in_conversation",
+            "statement": "I can say my name and ask another person's name.",
+            "form_focus": "present_estar_person",
+            "error_pattern": "estar_yo_estoy_vs_esta",
+            "reason": "form focus | weakest IP-03",
+        }
+        md = {
+            "mode": "transfer",
+            "reason": "success_transfer",
+            "hard_break": False,
+            "targets": {"form_id": "estar_yo_estoy_vs_esta", "transfer": True},
+            "instructions": "Same form, NEW micro-context.",
+        }
+        panel = build_focus_panel(s, mode_decision=md)
+        f = panel["focus"]
+        self.assertTrue(f["live"])
+        self.assertEqual(f["mode"], "transfer")
+        self.assertIn("transfer", f["title"].lower())
+        self.assertNotIn("name", f["title"].lower())
+        morph_labels = " ".join(b.get("label", "") for b in panel["morphology"]).lower()
+        self.assertIn("estar", morph_labels)
 
     def test_sheet_public_has_focus_and_morphology(self):
         """Regression: sheet_public must not crash (broke web rail)."""

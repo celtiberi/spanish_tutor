@@ -422,54 +422,101 @@ def morphology_blocks_for_can_do(can_do_id: str | None) -> list[dict]:
     return blocks
 
 
-def build_focus_panel(sheet: dict) -> dict:
-    """Right-rail teaching focus + morphology from character sheet next_best."""
+_MODE_TITLES = {
+    "placement": "Placement — feel out level",
+    "conversation": "Conversation",
+    "cf_recast": "Recast — short fix, keep chat",
+    "form_focus": "Form focus (hard break)",
+    "association": "Association — form ↔ meaning",
+    "comprehension_check": "Comprehension check",
+    "comprehension_repair": "Comprehension repair — same idea",
+    "transfer": "Transfer — same form, new context",
+}
+
+
+def _live_focus_from_mode(mode_decision: dict | None) -> dict:
+    """What the tutor is actually doing *this turn* (mode runtime)."""
+    md = mode_decision if isinstance(mode_decision, dict) else {}
+    mode = (md.get("mode") or "").strip() or "conversation"
+    targets = md.get("targets") if isinstance(md.get("targets"), dict) else {}
+    reason = (md.get("reason") or "").strip()
+    instructions = (md.get("instructions") or "").strip()
+    title = _MODE_TITLES.get(mode, mode.replace("_", " ").title())
+
+    # Sharpen title from targets
+    if mode == "association":
+        concept = targets.get("concept") or targets.get("form") or md.get("image_concept")
+        if concept:
+            title = f"Associate · {targets.get('form') or concept}"
+    elif mode in ("form_focus", "cf_recast"):
+        pid = targets.get("error_pattern") or targets.get("form_id") or targets.get("label")
+        if pid:
+            title = f"{'Form focus' if mode == 'form_focus' else 'Recast'} · {pid}"
+    elif mode == "transfer":
+        fid = targets.get("form_id") or targets.get("error_pattern")
+        title = f"Transfer · {fid}" if fid else title
+    elif mode == "comprehension_repair":
+        title = "Repair — re-ask same question"
+
+    # One-line "do" for the rail (not the full mode essay)
+    do = reason.replace("_", " ") if reason else mode
+    if mode == "transfer":
+        do = "Same form in a new micro-context"
+    elif mode == "conversation" and "known_open" in reason:
+        do = "Open from sheet — advance, don't re-probe"
+    elif mode == "association":
+        do = f"Bind meaning with image · {targets.get('form') or targets.get('concept') or 'concept'}"
+    elif mode == "cf_recast":
+        do = "Short recast + continue chat"
+    elif mode == "form_focus":
+        do = "Contrast wrong→right; produce once; exit to transfer"
+    elif mode == "comprehension_repair":
+        do = "Explain + simpler model; same try (no new topic)"
+
+    why = instructions
+    if len(why) > 280:
+        why = why[:277] + "…"
+
+    return {
+        "mode": mode,
+        "mode_reason": reason,
+        "title": title,
+        "activity": do,
+        "why": why or reason or "—",
+        "hard_break": bool(md.get("hard_break")),
+        "targets": targets,
+        "image_concept": md.get("image_concept"),
+    }
+
+
+def morphology_blocks_for_form(form_id: str | None) -> list[dict]:
+    """Morphology cards for a grammar form id (e.g. present_estar_person)."""
+    if not form_id or form_id not in MORPHOLOGY_BY_FORM:
+        return []
+    b = dict(MORPHOLOGY_BY_FORM[form_id])
+    b["id"] = f"form:{form_id}"
+    b["form_id"] = form_id
+    return [b]
+
+
+def build_focus_panel(
+    sheet: dict,
+    mode_decision: dict | None = None,
+) -> dict:
+    """Right-rail: **this-turn mode** (primary) + sheet arc (secondary).
+
+    After the mode runtime, the tutor does *not* follow next_best as a script.
+    Showing only sheet next_best (e.g. IP-03 names while chatting boat/estoy)
+    is misleading — so the pill/title are live mode; sheet stretch is secondary.
+    """
     nb = sheet.get("next_best") or {}
     can_do = nb.get("can_do")
     skill = (sheet.get("skills") or {}).get(can_do) or {} if can_do else {}
     meta = CAN_DOS.get(can_do) or {}
-    statement = (
-        nb.get("statement")
-        or skill.get("statement")
-        or meta.get("statement")
-        or "Open conversation — notice what they can do."
-    )
     rec = sheet.get("receptive") or {}
     aff = sheet.get("affect") or {}
-    morph = morphology_blocks_for_can_do(can_do if isinstance(can_do, str) else None)
+    live = _live_focus_from_mode(mode_decision)
 
-    # Attach learner status on related grammar forms
-    grammar = sheet.get("grammar") or {}
-    for block in morph:
-        fid = block.get("form_id")
-        if fid and fid in grammar:
-            g = grammar[fid]
-            block["learner"] = {
-                "status": g.get("status"),
-                "confidence": g.get("confidence"),
-            }
-        if can_do and can_do in (sheet.get("skills") or {}):
-            block.setdefault("can_do_status", {
-                "id": can_do,
-                "status": skill.get("status"),
-                "confidence": skill.get("confidence"),
-            })
-
-    # Related lexicon sample (emerging/known lemmas)
-    lex_items = []
-    for lemma, meta_l in list((sheet.get("lexicon") or {}).items())[:12]:
-        if not isinstance(meta_l, dict):
-            continue
-        if float(meta_l.get("confidence") or 0) >= 0.1 or meta_l.get("status") not in (
-            None, "unknown",
-        ):
-            lex_items.append({
-                "form": lemma.replace("_", " "),
-                "status": meta_l.get("status"),
-                "confidence": meta_l.get("confidence"),
-            })
-
-    # Recurring errors for focus card
     from .character_sheet import active_error_patterns
 
     active_errs = active_error_patterns(sheet)
@@ -484,21 +531,98 @@ def build_focus_panel(sheet: dict) -> dict:
             "examples": top.get("last_examples") or [],
         }
 
+    # Morphology: form in play this turn / on sheet — not a stale can-do paradigm
+    targets = live.get("targets") or {}
+    form_id = targets.get("form_id") or nb.get("form_focus")
+    if form_id and form_id not in MORPHOLOGY_BY_FORM:
+        # error_pattern ids are not form inventory keys
+        form_id = nb.get("form_focus")
+    morph = morphology_blocks_for_form(
+        form_id if form_id in MORPHOLOGY_BY_FORM else None
+    )
+    if not morph and nb.get("form_focus") in MORPHOLOGY_BY_FORM:
+        morph = morphology_blocks_for_form(nb.get("form_focus"))
+    if not morph:
+        morph = morphology_blocks_for_can_do(can_do if isinstance(can_do, str) else None)
+
+    # Turn-engaged form wins (incident 2026-07-28: card never updated on
+    # dice / "I am making" meta questions). turn_morph stashes the block on
+    # the live mode-decision dict; it dies with the next turn's decision.
+    turn_block = None
+    if isinstance(mode_decision, dict):
+        tm = mode_decision.get("_turn_morph")
+        if isinstance(tm, dict) and tm.get("paradigm"):
+            turn_block = dict(tm)
+    if turn_block:
+        rest = [
+            b for b in morph
+            if b.get("id") != turn_block.get("id")
+            and (
+                not turn_block.get("form_id")
+                or b.get("form_id") != turn_block.get("form_id")
+            )
+        ]
+        morph = [turn_block] + rest[:1]
+
+    grammar = sheet.get("grammar") or {}
+    for block in morph:
+        fid = block.get("form_id")
+        if fid and fid in grammar:
+            g = grammar[fid]
+            block["learner"] = {
+                "status": g.get("status"),
+                "confidence": g.get("confidence"),
+            }
+
+    lex_items = []
+    for lemma, meta_l in list((sheet.get("lexicon") or {}).items())[:12]:
+        if not isinstance(meta_l, dict):
+            continue
+        if float(meta_l.get("confidence") or 0) >= 0.1 or meta_l.get("status") not in (
+            None, "unknown",
+        ):
+            lex_items.append({
+                "form": lemma.replace("_", " "),
+                "status": meta_l.get("status"),
+                "confidence": meta_l.get("confidence"),
+            })
+
+    # Sheet arc (background) — may disagree with this turn; show separately
+    sheet_statement = (
+        nb.get("statement")
+        or skill.get("statement")
+        or meta.get("statement")
+        or ""
+    )
+    primary_is_form = bool(nb.get("form_focus") or nb.get("error_pattern") or err_summary)
+
     return {
         "focus": {
+            # Live (mode runtime) — what the tutor is doing now
+            "live": bool(mode_decision),
+            "mode": live.get("mode"),
+            "mode_reason": live.get("mode_reason"),
+            "hard_break": live.get("hard_break"),
+            "title": live.get("title") or "Conversation",
+            "activity": live.get("activity") or "chat",
+            "why": live.get("why") or "—",
+            "image_concept": live.get("image_concept"),
+            # Sheet stretch (secondary)
             "can_do": can_do,
-            "title": statement,
-            "activity": nb.get("activity") or nb.get("stretch") or "open chat",
+            "sheet_title": sheet_statement,
+            "sheet_activity": nb.get("activity") or nb.get("stretch"),
+            "sheet_reason": nb.get("reason"),
+            "primary_is_form": primary_is_form,
             "avoid": nb.get("avoid"),
-            "reason": nb.get("reason"),
+            "reason": live.get("why") or nb.get("reason"),
             "method": nb.get("method") or "CLT/TBLT + CI + focus_on_form",
             "skill_status": skill.get("status") or "unknown",
             "skill_confidence": skill.get("confidence") or 0.0,
             "scaffold": bool(rec.get("needs_english_scaffold", True)),
             "energy": aff.get("energy"),
-            "learner_name": (sheet.get("identity") or {}).get("preferred_name"),
+            # Personal-data capture disabled 2026-07-28: the UI never gets a name.
+            "learner_name": None,
             "band": meta.get("band") or skill.get("band"),
-            "mode": meta.get("mode") or skill.get("mode"),
             "error_pattern": nb.get("error_pattern") or (
                 err_summary["id"] if err_summary else None
             ),

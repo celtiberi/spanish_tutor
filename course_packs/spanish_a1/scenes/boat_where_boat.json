@@ -25,6 +25,24 @@
   "transfer": {
     "elicit": "¿El café está aquí o el bote está en el río?"
   },
+  "primary_exit": {
+    "description": "Info-gap task: the learner must find out WHERE the boat is (¿Dónde está…? — estar for location, Unit 4) and where the captain is FROM (¿De dónde es/eres…? — ser + de, Units 3/6). The task is not done until both are obtained by asking in Spanish.",
+    "slots": [
+      {
+        "id": "boat_location",
+        "evidence_any": ["dónde está", "donde esta", "dónde estás", "donde estas"]
+      },
+      {
+        "id": "captain_origin",
+        "evidence_any": ["de dónde es", "de donde es", "de dónde eres", "de donde eres"]
+      }
+    ]
+  },
+  "tutor_private_info": {
+    "boat_location": "El bote está en el río.",
+    "captain_origin": "Soy de Estados Unidos."
+  },
+  "learner_must_obtain": ["boat_location", "captain_origin"],
   "scope": { "pack": "spanish_a1" },
   "spacing": { "resurface_after_days": [1, 3, 7] }
 }

@@ -16,6 +16,8 @@ class TestSelectMode(unittest.TestCase):
         d = select_mode(default_sheet(), is_open=True, observations={"blank_sheet": True, "signals": []})
         self.assertEqual(d.mode, Mode.PLACEMENT)
         self.assertTrue(d.hard_break)
+        # Placement's hola image belongs to the true session-open turn only
+        self.assertEqual(d.image_concept, "hola")
 
     def test_bote_triggers_association_image(self):
         sheet = default_sheet()
@@ -124,6 +126,9 @@ class TestSelectMode(unittest.TestCase):
         note_error_pattern(sheet, "estar_yo_estoy_vs_esta", "yo está bien", resolved=False)
         state = ModeSessionState()
         state.turns_since_hard_break = 5
+        # New contract (2026-07-28): streak breaks need session-recent errors
+        state.note_error_hits(["estar_yo_estoy_vs_esta"])
+        state.tick()
         d = select_mode(
             sheet,
             learner="todo bien",
@@ -227,6 +232,178 @@ class TestScenes(unittest.TestCase):
         self.assertFalse(evaluate_exit_predicate(sheet, "skill:IP-06:min_conf=0.35"))
         sheet["skills"]["IP-06"] = {"status": "emerging", "confidence": 0.5}
         self.assertTrue(evaluate_exit_predicate(sheet, "skill:IP-06:min_conf=0.35"))
+
+
+class TestFormFocusResolve(unittest.TestCase):
+    def test_correct_use_suppresses_form_focus(self):
+        """Correct production of the hot form must not hard-break on it."""
+        sheet = default_sheet()
+        sheet["skills"]["IP-01"] = {"status": "emerging", "confidence": 0.4}
+        note_error_pattern(sheet, "estar_yo_estoy_vs_esta", "yo está", resolved=False)
+        note_error_pattern(sheet, "estar_yo_estoy_vs_esta", "yo está bien", resolved=False)
+        d = select_mode(
+            sheet,
+            learner="Estoy bien.",
+            observations={"blank_sheet": False, "signals": ["estoy", "spanish_ok"]},
+            mode_state=ModeSessionState(),
+        )
+        self.assertNotEqual(d.mode, Mode.FORM_FOCUS)
+
+    def test_form_focus_still_fires_without_resolve(self):
+        sheet = default_sheet()
+        sheet["skills"]["IP-01"] = {"status": "emerging", "confidence": 0.4}
+        note_error_pattern(sheet, "estar_yo_estoy_vs_esta", "yo está", resolved=False)
+        note_error_pattern(sheet, "estar_yo_estoy_vs_esta", "yo está bien", resolved=False)
+        state = ModeSessionState()
+        state.note_error_hits(["estar_yo_estoy_vs_esta"])  # session-recent
+        state.tick()
+        d = select_mode(
+            sheet,
+            learner="Todo bien, gracias.",
+            observations={"blank_sheet": False, "signals": []},
+            mode_state=state,
+        )
+        self.assertEqual(d.mode, Mode.FORM_FOCUS)
+
+
+class TestComprehensionRepair(unittest.TestCase):
+    def _memory(self):
+        return {
+            "last_tutor_try": "¿Cómo estás hoy?",
+            "last_tutor_model": "Estoy bien.",
+            "last_concepts": [],
+        }
+
+    def test_no_entiendo_triggers_repair_same_topic(self):
+        sheet = default_sheet()
+        sheet["skills"]["IP-01"] = {"status": "emerging", "confidence": 0.4}
+        d = select_mode(
+            sheet,
+            learner="no entiendo",
+            observations={"blank_sheet": False, "signals": []},
+            mode_state=ModeSessionState(),
+            session_memory=self._memory(),
+        )
+        self.assertEqual(d.mode, Mode.COMPREHENSION_REPAIR)
+        self.assertTrue(d.hard_break)
+        self.assertTrue(d.targets.get("require_same_topic"))
+        self.assertTrue(d.targets.get("forbid_new_topic"))
+        self.assertEqual(d.targets.get("last_try"), "¿Cómo estás hoy?")
+
+    def test_repair_bypasses_hard_break_budget(self):
+        """Repair must fire even right after another hard break."""
+        sheet = default_sheet()
+        sheet["skills"]["IP-01"] = {"status": "emerging", "confidence": 0.4}
+        state = ModeSessionState()
+        state.hard_breaks_this_session = 1
+        state.turns_since_hard_break = 0
+        d = select_mode(
+            sheet,
+            learner="no entiendo",
+            observations={"blank_sheet": False, "signals": []},
+            mode_state=state,
+            session_memory=self._memory(),
+        )
+        self.assertEqual(d.mode, Mode.COMPREHENSION_REPAIR)
+
+    def test_no_repair_without_prior_tutor_turn(self):
+        sheet = default_sheet()
+        sheet["skills"]["IP-01"] = {"status": "emerging", "confidence": 0.4}
+        d = select_mode(
+            sheet,
+            learner="no entiendo",
+            observations={"blank_sheet": False, "signals": []},
+            mode_state=ModeSessionState(),
+            session_memory={},
+        )
+        self.assertNotEqual(d.mode, Mode.COMPREHENSION_REPAIR)
+
+
+class TestRepairImageRelevance(unittest.TestCase):
+    """Incident 2026-07-28: a dice/digo grammar question got the previous
+    turn's «hola» repair-target image. Images on repair/meta turns must be
+    surface-relevant to the current exchange or absent entirely (r5)."""
+
+    # Verbatim learner turn 3 from logs/sessions/20260728-103617-conversational-web
+    INCIDENT_DICE_DIGO = (
+        "digo and dices.. can I get a breakdown on what these mean and how "
+        'to use them? I know its around "say" and dice I think is "you say".. '
+        "I just need some help"
+    )
+
+    def _turn3_memory(self):
+        return {
+            "last_tutor_try": "Si digo «¡**Hola**!», ¿qué dices tú?",
+            "last_tutor_model": (
+                "**Hola** significa hello (sounds alike). ¡**Hola**, Patrick!"
+            ),
+            "last_concepts": ["hola"],
+            "await_comprehension": True,
+        }
+
+    def _sheet(self):
+        sheet = default_sheet()
+        sheet["skills"]["IP-01"] = {"status": "emerging", "confidence": 0.4}
+        return sheet
+
+    def test_meta_grammar_question_no_irrelevant_image_incident_20260728(self):
+        """Regression anchor: the exact incident turn must attach NO image."""
+        d = select_mode(
+            self._sheet(),
+            learner=self.INCIDENT_DICE_DIGO,
+            observations={
+                "blank_sheet": False,
+                "signals": ["english_only", "meta_comprehension"],
+            },
+            images_shown=set(),
+            mode_state=ModeSessionState(),
+            session_memory=self._turn3_memory(),
+        )
+        self.assertEqual(d.mode, Mode.COMPREHENSION_REPAIR)
+        self.assertIsNone(d.image_concept)
+
+    def test_what_does_x_mean_uses_learner_relevance(self):
+        """'what does digo mean?' is a meta question about digo — the stale
+        hola repair target must not ride along."""
+        d = select_mode(
+            self._sheet(),
+            learner="what does digo mean?",
+            observations={"blank_sheet": False, "signals": ["english_only"]},
+            images_shown=set(),
+            mode_state=ModeSessionState(),
+            session_memory=self._turn3_memory(),
+        )
+        self.assertEqual(d.mode, Mode.COMPREHENSION_REPAIR)
+        self.assertIsNone(d.image_concept)
+
+    def test_meta_question_about_concept_keeps_its_image(self):
+        """Don't over-suppress: asking about «hola» itself keeps the image."""
+        d = select_mode(
+            self._sheet(),
+            learner='is "hola" hello or goodbye? I forget',
+            observations={
+                "blank_sheet": False,
+                "signals": ["english_only", "meta_comprehension"],
+            },
+            images_shown=set(),
+            mode_state=ModeSessionState(),
+            session_memory=self._turn3_memory(),
+        )
+        self.assertEqual(d.mode, Mode.COMPREHENSION_REPAIR)
+        self.assertEqual(d.image_concept, "hola")
+
+    def test_true_noncomprehension_keeps_repair_target_image(self):
+        """«no entiendo» re-teaches the prior concept — dual-coding image stays."""
+        d = select_mode(
+            self._sheet(),
+            learner="no entiendo",
+            observations={"blank_sheet": False, "signals": []},
+            images_shown=set(),
+            mode_state=ModeSessionState(),
+            session_memory=self._turn3_memory(),
+        )
+        self.assertEqual(d.mode, Mode.COMPREHENSION_REPAIR)
+        self.assertEqual(d.image_concept, "hola")
 
 
 if __name__ == "__main__":

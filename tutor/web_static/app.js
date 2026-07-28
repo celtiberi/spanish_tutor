@@ -12,6 +12,8 @@ const els = {
   sendBtn: $("sendBtn"),
   micBtn: $("micBtn"),
   speakToggle: $("speakToggle"),
+  ttsRateSlider: $("ttsRateSlider"),
+  ttsRateLabel: $("ttsRateLabel"),
   sheetToggle: $("sheetToggle"),
   sheetOverlay: $("sheetOverlay"),
   sheetClose: $("sheetClose"),
@@ -26,11 +28,17 @@ const els = {
   focusTitle: $("focusTitle"),
   focusMeta: $("focusMeta"),
   scoreBoard: $("scoreBoard"),
-  scoreValue: $("scoreValue"),
+  countDurable: $("countDurable"),
+  countKnown: $("countKnown"),
+  countEmerging: $("countEmerging"),
   scoreDelta: $("scoreDelta"),
-  scoreBar: $("scoreBar"),
-  scoreLevel: $("scoreLevel"),
-  scoreSkills: $("scoreSkills"),
+  journeyCard: $("journeyCard"),
+  journeyToggle: $("journeyToggle"),
+  journeyBody: $("journeyBody"),
+  journeyFoot: $("journeyFoot"),
+  costBoard: $("costBoard"),
+  costValue: $("costValue"),
+  costBreakdown: $("costBreakdown"),
 
   morphPill: $("morphPill"),
   morphBody: $("morphBody"),
@@ -229,17 +237,29 @@ function renderFocus(sheet) {
   const f = sheet?.focus || {};
   const nb = sheet?.next_best || {};
   const src = sheet?.focus_source || "static";
-  els.focusPill.textContent = f.can_do || nb.can_do || "open";
-  els.focusPill.classList.toggle("warn", f.skill_status === "fragile");
+  // Primary: this-turn mode (what the tutor is actually doing)
+  const mode = f.mode || sheet?.parts?.mode || "—";
+  els.focusPill.textContent = mode;
+  els.focusPill.classList.toggle("warn", !!f.hard_break || f.skill_status === "fragile");
   els.focusTitle.textContent =
-    f.title || nb.statement || "Open conversation — notice abilities";
+    f.title || nb.statement || "Conversation";
 
-  const why = f.blurb || f.reason_ai || f.reason || nb.reason || "—";
+  const why = f.blurb || f.reason_ai || f.why || f.reason || "—";
   const rows = [
-    ["Do", f.activity || nb.activity || nb.stretch || "chat"],
+    ["This turn", f.activity || mode || "chat"],
     ["Why", why],
-    ["Avoid", f.avoid || nb.avoid || "—", "avoid"],
   ];
+  // Sheet longer arc — only if different from this-turn title
+  const sheetArc = f.sheet_title || nb.statement || "";
+  if (sheetArc && sheetArc !== f.title) {
+    rows.push([
+      "Sheet arc",
+      `${f.can_do || nb.can_do || ""} · ${sheetArc}`.replace(/^ · /, ""),
+    ]);
+  }
+  if (f.avoid || nb.avoid) {
+    rows.push(["Avoid", f.avoid || nb.avoid || "—", "avoid"]);
+  }
   if (f.watch) rows.push(["Watch", f.watch, "avoid"]);
   if (f.error_focus) {
     rows.push([
@@ -261,6 +281,9 @@ function renderFocus(sheet) {
 
   const chips = [];
   if (f.learner_name) chips.push(`<span class="chip hot">${esc(f.learner_name)}</span>`);
+  if (f.hard_break) {
+    chips.push(`<span class="chip" style="color:var(--warn);border-color:#6b5420">hard break</span>`);
+  }
   if (f.error_focus) {
     chips.push(
       `<span class="chip" style="color:var(--warn);border-color:#6b5420">err×${esc(
@@ -268,27 +291,25 @@ function renderFocus(sheet) {
       )}</span>`
     );
   }
+  if (f.form_focus) {
+    chips.push(`<span class="chip on">${esc(f.form_focus)}</span>`);
+  }
   if (f.can_do || nb.can_do) {
     chips.push(
-      `<span class="chip on">${esc(f.skill_status || "unknown")} · ${pct(
-        f.skill_confidence
+      `<span class="chip">${esc(f.can_do || nb.can_do)} · ${esc(
+        f.skill_status || "unknown"
       )}</span>`
     );
   }
-  if (f.band) chips.push(`<span class="chip">${esc(f.band)}</span>`);
   chips.push(
     f.scaffold
       ? `<span class="chip on">EN+ES scaffold</span>`
       : `<span class="chip">more Spanish OK</span>`
   );
-  if (f.energy && f.energy !== "unknown") {
-    chips.push(`<span class="chip">${esc(f.energy)}</span>`);
-  }
-  // Source: cheap focus model vs static templates
-  const srcLabel = String(src).startsWith("focus_model")
-    ? "rail: grok"
-    : src === "static_fallback"
-      ? "rail: static*"
+  const srcLabel = f.live
+    ? "live mode"
+    : String(src).startsWith("focus_model")
+      ? "rail: grok"
       : "rail: static";
   chips.push(`<span class="chip" title="${esc(src)}">${esc(srcLabel)}</span>`);
   els.focusMeta.innerHTML += `<div class="status-bar">${chips.join("")}</div>`;
@@ -361,47 +382,74 @@ function renderMorphology(sheet) {
   els.morphBody.innerHTML = html;
 }
 
-/** Last rendered progress total — used to show +Δ when score advances. */
-let lastScoreTotal = null;
+/** Last rendered durable count — used to show +Δ when it advances. */
+let lastDurableCount = null;
 let scoreFlashTimer = null;
+/** Latest /api/progress payload (journey rail + countable header). */
+let lastProgress = null;
 
-function renderScore(sheet) {
-  if (!els.scoreBoard || !els.scoreValue) return;
-  const sc = sheet?.score || {};
-  let total = Number(sc.total);
-  if (!Number.isFinite(total)) {
-    // Client fallback if API older
-    const skills = sheet?.skills || {};
-    const ids = [
-      "IP-01", "IP-02", "IP-03", "IP-04", "IP-05", "IP-06", "IP-07", "IP-08",
-      "IT-01", "IT-02", "PR-01",
-    ];
-    let sum = 0;
-    for (const id of ids) {
-      sum += Number(skills[id]?.confidence || 0);
+function renderCost(sheet) {
+  if (!els.costBoard || !els.costValue) return;
+  const c = sheet?.session_cost;
+  if (!c) return;
+  const total = Number(c.total_usd || 0);
+  els.costValue.textContent = `$${total.toFixed(total < 0.1 ? 4 : 2)}`;
+  const cats = c.by_category || {};
+  const parts = Object.entries(cats)
+    .sort((a, b) => (b[1]?.usd || 0) - (a[1]?.usd || 0))
+    .map(([k, v]) => `${k} $${Number(v?.usd || 0).toFixed(4)}`);
+  if (els.costBreakdown) {
+    const today = Number(c.today_usd || 0);
+    els.costBreakdown.textContent = parts.length
+      ? parts.join(" · ")
+      : "no API calls yet";
+    els.costBoard.title =
+      `API spend this chat session.\n` +
+      (parts.length ? parts.join("\n") + "\n" : "") +
+      (c.unpriced_models?.length
+        ? `UNPRICED models (add to tutor/costs.py): ${c.unpriced_models.join(", ")}\n`
+        : "") +
+      `All processes today (ledger): $${today.toFixed(4)}`;
+  }
+}
+
+/** Countable-header fallback when /api/progress hasn't answered yet:
+ * strict sheet bands only (status known / emerging; interval_days >= 14). */
+function countsFromSheet(sheet) {
+  let known = 0;
+  let emerging = 0;
+  for (const v of Object.values(sheet?.skills || {})) {
+    const st = String(v?.status || "");
+    if (st === "known") known += 1;
+    else if (st === "emerging") emerging += 1;
+  }
+  let durable = 0;
+  for (const sec of ["lexicon", "grammar"]) {
+    for (const v of Object.values(sheet?.[sec] || {})) {
+      if (Number(v?.interval_days || 0) >= 14) durable += 1;
     }
-    total = Math.round((sum / ids.length) * 100);
   }
-  total = Math.max(0, Math.min(100, Math.round(total)));
-  const level = sc.level || "Progress";
-  const known = Number(sc.known || 0);
-  const emerging = Number(sc.emerging || 0);
+  return { durable, known, emerging };
+}
 
-  const prev = lastScoreTotal;
-  els.scoreValue.textContent = String(total);
-  if (els.scoreBar) els.scoreBar.style.width = `${total}%`;
-  if (els.scoreLevel) els.scoreLevel.textContent = level;
-  if (els.scoreSkills) {
-    els.scoreSkills.textContent =
-      emerging > 0
-        ? `${known} known · ${emerging} emerging`
-        : `${known} known`;
-  }
+/** Countable header (design-progression-view, amended (e)4): durable-so-far
+ * N · can-dos known M · emerging K. The abstract 0-100 score stays in the
+ * payload for compat but is no longer the display. */
+function renderScore(sheet) {
+  if (!els.scoreBoard || !els.countDurable) return;
+  const counts = lastProgress?.counts || countsFromSheet(sheet || {});
+  const durable = Number(counts.durable || 0);
+  const known = Number(counts.known || 0);
+  const emerging = Number(counts.emerging || 0);
+
+  const prev = lastDurableCount;
+  els.countDurable.textContent = String(durable);
+  if (els.countKnown) els.countKnown.textContent = `can-dos known ${known}`;
+  if (els.countEmerging) els.countEmerging.textContent = `emerging ${emerging}`;
 
   if (els.scoreDelta) {
-    if (prev !== null && total > prev) {
-      const d = total - prev;
-      els.scoreDelta.textContent = `+${d}`;
+    if (prev !== null && durable > prev) {
+      els.scoreDelta.textContent = `+${durable - prev}`;
       els.scoreDelta.classList.remove("hidden");
       els.scoreBoard.classList.add("score-up");
       if (scoreFlashTimer) clearTimeout(scoreFlashTimer);
@@ -409,13 +457,137 @@ function renderScore(sheet) {
         els.scoreDelta.classList.add("hidden");
         els.scoreBoard.classList.remove("score-up");
       }, 2800);
-    } else if (prev !== null && total < prev) {
+    } else if (prev !== null && durable < prev) {
       // reset learner etc. — no flash
       els.scoreDelta.classList.add("hidden");
       els.scoreBoard.classList.remove("score-up");
     }
   }
-  lastScoreTotal = total;
+  lastDurableCount = durable;
+}
+
+// ——— Journey rail (left): evidence-backed milestone nodes, session clusters ———
+// Honesty law (PEDAGOGY §3 + amended design): nodes render ONLY ledger events;
+// no streak chrome, no XP; mastery copy only at the known band; downgraded
+// nodes carry a quiet "needs re-check" badge instead of silent permanence.
+
+const JOURNEY_KINDS = {
+  planted: { icon: "🌱", label: "planted" },
+  taking_root: { icon: "🌿", label: "taking root" },
+  rooted: { icon: "🌳", label: "rooted — durable so far" },
+  regression: { icon: "↺", label: "reset — will re-check" },
+  error_recovered: { icon: "✔", label: "clean streak" },
+  can_do_emerging: { icon: "☆", label: "emerging" },
+  can_do_known: { icon: "★", label: "known" },
+  task_complete: { icon: "⚑", label: "task done" },
+};
+
+// Amended (c) first-session copy: durability milestones are multi-day BY
+// DESIGN; same-day seeds/tasks still show, and this copy sets the honest
+// expectation instead of an empty-looking rail.
+const JOURNEY_EMPTY_COPY =
+  "Seeds plant today. Sprouts (3-day recall) and trees (2-week hold) " +
+  "appear when you come back — that gap is how memory sticks.";
+
+function journeySummaryLine(summary) {
+  const orderedKinds = [
+    "planted", "taking_root", "rooted", "error_recovered",
+    "can_do_emerging", "can_do_known", "task_complete", "regression",
+  ];
+  const bits = [];
+  for (const k of orderedKinds) {
+    const n = Number(summary?.[k] || 0);
+    if (!n) continue;
+    const meta = JOURNEY_KINDS[k] || { label: k };
+    bits.push(k === "task_complete" && n === 1 ? "task done" : `${n} ${meta.label}`);
+  }
+  return bits.join(" · ");
+}
+
+function renderJourney(progress) {
+  if (!els.journeyBody) return;
+  const clusters = progress?.clusters || [];
+  if (progress?.empty || !clusters.length) {
+    els.journeyBody.innerHTML =
+      `<p class="j-empty">${esc(JOURNEY_EMPTY_COPY)}</p>`;
+  } else {
+    const html = clusters
+      .map((c) => {
+        const isCurrent =
+          progress?.session_id && c.session_id === progress.session_id;
+        const dateChip =
+          `<header class="j-date">${esc(c.date || "")}` +
+          (isCurrent ? `<span class="j-now">this session</span>` : "") +
+          `</header>`;
+        const nodes = (c.events || [])
+          .map((ev) => {
+            const meta = JOURNEY_KINDS[ev.kind] || { icon: "•", label: ev.kind };
+            const cls =
+              `j-node ${ev.polarity === "down" ? "down" : "up"}` +
+              (ev.needs_recheck ? " recheck" : "");
+            const badge = ev.needs_recheck
+              ? `<span class="j-badge" title="The live sheet no longer holds this band — it will be re-checked in conversation">needs re-check</span>`
+              : "";
+            return (
+              `<li class="${cls}" title="${esc(ev.detail || "")}">` +
+              `<span class="j-icon" aria-hidden="true">${meta.icon}</span>` +
+              `<span class="j-label"><strong>${esc(ev.key)}</strong>` +
+              ` <span class="j-kind">${esc(meta.label)}</span>${badge}</span>` +
+              `</li>`
+            );
+          })
+          .join("");
+        const sum = journeySummaryLine(c.summary);
+        const quiet =
+          isCurrent && !(c.events || []).length
+            ? `<p class="j-sum">quiet so far — seeds today, sprouts on return</p>`
+            : "";
+        return (
+          `<section class="j-cluster${isCurrent ? " current" : ""}">` +
+          dateChip +
+          `<ul class="j-nodes">${nodes}</ul>` +
+          (sum ? `<p class="j-sum">${esc(sum)}</p>` : quiet) +
+          `</section>`
+        );
+      })
+      .join("");
+    els.journeyBody.innerHTML = html;
+  }
+  if (els.journeyFoot) {
+    const due = Number(progress?.due_soon || 0);
+    // Informational only (amended (e)3) — never a failure badge.
+    els.journeyFoot.textContent = due > 0 ? `Due soon: ${due}` : "Nothing due right now";
+  }
+}
+
+async function refreshProgress() {
+  try {
+    const p = await api("/api/progress");
+    lastProgress = p;
+    renderJourney(p);
+    renderScore(null); // header counts from the fresh payload
+  } catch (_) {
+    /* rail is telemetry display — never break the chat over it */
+  }
+}
+
+function syncJourneyToggle() {
+  if (!els.journeyCard || !els.journeyToggle) return;
+  const collapsed = els.journeyCard.classList.contains("collapsed");
+  els.journeyToggle.textContent = collapsed ? "Show" : "Hide";
+  els.journeyToggle.setAttribute("aria-expanded", String(!collapsed));
+}
+
+function initJourney() {
+  if (!els.journeyCard || !els.journeyToggle) return;
+  if (window.matchMedia && window.matchMedia("(max-width: 1100px)").matches) {
+    els.journeyCard.classList.add("collapsed");
+  }
+  syncJourneyToggle();
+  els.journeyToggle.addEventListener("click", () => {
+    els.journeyCard.classList.toggle("collapsed");
+    syncJourneyToggle();
+  });
 }
 
 function renderSheet(sheet) {
@@ -446,6 +618,11 @@ function renderSheet(sheet) {
     console.error("renderScore", e);
   }
   try {
+    renderCost(sheet);
+  } catch (e) {
+    console.error("renderCost", e);
+  }
+  try {
     renderFocus(sheet);
   } catch (e) {
     console.error("renderFocus", e);
@@ -473,12 +650,29 @@ function renderSheet(sheet) {
   }
 }
 
+/** Keep refs so Chrome does not GC utterance mid-speech / drop audio. */
 let currentAudio = null;
+let currentUtterance = null;
+let ttsKeepAlive = null;
+/** Server Gemini TTS is the AI teach voice; health may flip this off. */
+let serverTtsAvailable = true;
+/**
+ * Interruption token: every stopSpeech() bumps this so any in-flight speak()
+ * loop exits instead of playing stale segments (or worse, re-speaking an
+ * interrupted server segment with the OS voice via the failure fallback).
+ */
+let speakGeneration = 0;
 
 function stopSpeech() {
+  speakGeneration += 1;
+  if (ttsKeepAlive) {
+    clearInterval(ttsKeepAlive);
+    ttsKeepAlive = null;
+  }
   try {
     window.speechSynthesis?.cancel();
   } catch (_) {}
+  currentUtterance = null;
   if (currentAudio) {
     try {
       currentAudio.pause();
@@ -488,95 +682,331 @@ function stopSpeech() {
   }
 }
 
-function speakBrowser(text) {
-  if (!window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "es-ES";
-  u.rate = 0.95;
-  const voices = speechSynthesis.getVoices();
-  const es =
+function pickSpanishVoice() {
+  const voices = speechSynthesis.getVoices() || [];
+  return (
     voices.find(
       (v) =>
         v.lang &&
         v.lang.startsWith("es") &&
-        /google|premium|enhanced|neural|natural/i.test(v.name)
-    ) || voices.find((v) => v.lang && v.lang.startsWith("es"));
-  if (es) u.voice = es;
-  speechSynthesis.speak(u);
+        /google|premium|enhanced|neural|natural|samantha|monica|jorge|paulina|juan/i.test(
+          v.name
+        )
+    ) ||
+    voices.find((v) => v.lang && v.lang.startsWith("es")) ||
+    null
+  );
+}
+
+/** Server default rate from /api/health; fallback when no user choice yet. */
+let ttsDefaultRate = 1.0;
+let ttsModelTryGapMs = 400;
+
+const LS_TTS_RATE = "ttsRate"; // user Voice slider value, "0.7".."1.2"
+const LS_TTS_SLOWER_LEGACY = "ttsSlower"; // pre-slider checkbox; migrated once
+
+function clampRate(r) {
+  const n = Number(r);
+  if (!Number.isFinite(n)) return ttsDefaultRate;
+  return Math.max(0.7, Math.min(1.2, n));
+}
+
+/** One-time migration: legacy "Slower" checkbox ("1") seeds the slider at 0.8. */
+function migrateLegacyTtsSlower() {
+  const legacy = localStorage.getItem(LS_TTS_SLOWER_LEGACY);
+  if (legacy === null) return;
+  if (legacy === "1" && localStorage.getItem(LS_TTS_RATE) === null) {
+    localStorage.setItem(LS_TTS_RATE, "0.8");
+  }
+  localStorage.removeItem(LS_TTS_SLOWER_LEGACY);
+}
+
+/** Effective rate: the user's Voice slider (localStorage), clamped 0.7–1.2. */
+function effectiveTtsRate() {
+  const stored = localStorage.getItem(LS_TTS_RATE);
+  return clampRate(stored === null ? ttsDefaultRate : stored);
+}
+
+function ttsRateLabelText(rate) {
+  const r = clampRate(rate);
+  const x = r.toFixed(2).replace(/(\.\d)0$/, "$1"); // 1 → "1.0", 0.95 stays
+  return r <= 0.8 ? `Voice ${x}× (slow)` : `Voice ${x}×`;
+}
+
+function syncTtsRateUi() {
+  if (!els.ttsRateSlider) return;
+  const r = effectiveTtsRate();
+  els.ttsRateSlider.value = String(r);
+  if (els.ttsRateLabel) {
+    els.ttsRateLabel.textContent = ttsRateLabelText(r);
+  }
+}
+
+function wireTtsRateSlider() {
+  if (!els.ttsRateSlider) return;
+  migrateLegacyTtsSlower();
+  syncTtsRateUi();
+  els.ttsRateSlider.addEventListener("input", () => {
+    localStorage.setItem(
+      LS_TTS_RATE,
+      String(clampRate(els.ttsRateSlider.value))
+    );
+    syncTtsRateUi();
+  });
+}
+
+function sleepMs(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
- * Prefer short speech: model + try (skip long English explains).
+ * Browser speech for one segment; resolves when the utterance ends/errors.
+ * Must retain utterance on a global — Chrome GCs it and speech dies silently.
  */
-function speechTextFromParts(parts, fallback) {
+function speakBrowserSegment(text, rate) {
+  return new Promise((resolve) => {
+    if (!window.speechSynthesis) {
+      console.warn("speechSynthesis unavailable");
+      resolve();
+      return;
+    }
+    const u = new SpeechSynthesisUtterance(text);
+    currentUtterance = u;
+    u.lang = "es-ES";
+    u.rate = clampRate(rate);
+    const es = pickSpanishVoice();
+    if (es) {
+      u.voice = es;
+      if (es.lang) u.lang = es.lang;
+    }
+    const done = () => {
+      if (currentUtterance === u) currentUtterance = null;
+      if (ttsKeepAlive) {
+        clearInterval(ttsKeepAlive);
+        ttsKeepAlive = null;
+      }
+      resolve();
+    };
+    u.onend = done;
+    u.onerror = (ev) => {
+      console.warn("browser TTS error:", ev?.error || ev);
+      done();
+    };
+    speechSynthesis.speak(u);
+    // Chrome desktop sometimes freezes speech after ~15s without pause/resume
+    ttsKeepAlive = setInterval(() => {
+      try {
+        if (!speechSynthesis.speaking) {
+          clearInterval(ttsKeepAlive);
+          ttsKeepAlive = null;
+          return;
+        }
+        speechSynthesis.pause();
+        speechSynthesis.resume();
+      } catch (_) {}
+    }, 12000);
+  });
+}
+
+/** @deprecated single-shot name kept for any stray callers */
+function speakBrowser(text) {
+  return speakBrowserSegment(text, effectiveTtsRate());
+}
+
+/**
+ * Build speech segments for part-aware playback.
+ * When both model and try exist → two segments with a pedagogical gap.
+ * All other cases → one segment (prefer short speech; skip long explains).
+ */
+function speechSegmentsFromParts(parts, fallback) {
   if (parts && typeof parts === "object") {
+    const model = (parts.model || "").trim();
+    const tryP = (parts.try || "").trim();
+    if (model && tryP) {
+      return [
+        { kind: "model", text: model.slice(0, 600) },
+        { kind: "try", text: tryP.slice(0, 600) },
+      ];
+    }
     const core = [parts.model, parts.try, parts.recast]
       .map((s) => (s || "").trim())
       .filter(Boolean);
-    if (core.length) return core.join(". ").slice(0, 600);
+    if (core.length) {
+      return [{ kind: "core", text: core.join(". ").slice(0, 600) }];
+    }
     const soft = [parts.acknowledge, parts.model, parts.try]
       .map((s) => (s || "").trim())
       .filter(Boolean);
-    if (soft.length) return soft.join(". ").slice(0, 600);
+    if (soft.length) {
+      return [{ kind: "soft", text: soft.join(". ").slice(0, 600) }];
+    }
   }
-  return (fallback || "").trim().slice(0, 600);
+  const fb = (fallback || "").trim().slice(0, 600);
+  return fb ? [{ kind: "fallback", text: fb }] : [];
+}
+
+/** Legacy single-blob helper; kept for debug callers. */
+function speechTextFromParts(parts, fallback) {
+  return speechSegmentsFromParts(parts, fallback)
+    .map((s) => s.text)
+    .join(". ");
+}
+
+function preferServerTts() {
+  // Opt out of AI voice: localStorage ttsPreferBrowser=1
+  if (localStorage.getItem("ttsPreferBrowser") === "1") return false;
+  // Explicit force server
+  if (
+    window.__TTS_SERVER__ === true ||
+    localStorage.getItem("ttsPreferServer") === "1"
+  ) {
+    return true;
+  }
+  // Default: use Gemini teach voice when server reports TTS enabled
+  if (window.__TTS_SERVER__ === false) return false;
+  return serverTtsAvailable;
 }
 
 /**
- * Instant voice: browser TTS by default (no extra network RTT).
- * Server Gemini TTS only if localStorage ttsPreferServer=1 or window.__TTS_SERVER__.
+ * Play one server WAV segment; playbackRate applies the exact rate
+ * (Gemini has no numeric rate API field).
+ * `isStale` re-checks AFTER the synthesis fetch resolves: TTS takes seconds,
+ * and audio requested before an interruption must never start playing late
+ * on top of the next reply's voice.
  */
-async function speak(text, parts) {
-  if (!els.speakToggle.checked) return;
-  const t = speechTextFromParts(parts, text);
-  if (!t) return;
-  stopSpeech();
-
-  const preferServer =
-    window.__TTS_SERVER__ === true ||
-    localStorage.getItem("ttsPreferServer") === "1";
-
-  if (!preferServer) {
-    speakBrowser(t);
-    return;
+async function playServerSegment(text, rate, isStale) {
+  const res = await fetch("/api/audio/speak", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, rate: clampRate(rate) }),
+  });
+  if (isStale?.()) return;
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const detail =
+      typeof err.detail === "string"
+        ? err.detail
+        : err.detail
+          ? JSON.stringify(err.detail)
+          : res.statusText;
+    throw new Error(detail || res.statusText);
   }
-
-  try {
-    const res = await fetch("/api/audio/speak", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: t }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      const detail =
-        typeof err.detail === "string"
-          ? err.detail
-          : err.detail
-            ? JSON.stringify(err.detail)
-            : res.statusText;
-      throw new Error(detail || res.statusText);
-    }
-    const blob = await res.blob();
-    if (!blob || blob.size < 64) throw new Error("empty TTS audio");
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    currentAudio = audio;
+  const blob = await res.blob();
+  if (isStale?.()) return;
+  if (!blob || blob.size < 64) throw new Error("empty TTS audio");
+  const url = URL.createObjectURL(blob);
+  const audio = new Audio(url);
+  currentAudio = audio;
+  audio.playbackRate = clampRate(rate);
+  await new Promise((resolve, reject) => {
     audio.onended = () => {
       URL.revokeObjectURL(url);
       if (currentAudio === audio) currentAudio = null;
+      resolve();
     };
     audio.onerror = () => {
       URL.revokeObjectURL(url);
-      speakBrowser(t);
+      if (currentAudio === audio) currentAudio = null;
+      reject(new Error("audio element error"));
     };
-    await audio.play();
-  } catch (e) {
-    console.warn("server TTS failed, browser fallback:", e);
-    speakBrowser(t);
+    audio.play().catch((playErr) => {
+      // Autoplay blocked (e.g. first greeting before any click) → reject
+      URL.revokeObjectURL(url);
+      if (currentAudio === audio) currentAudio = null;
+      reject(playErr);
+    });
+  });
+}
+
+/**
+ * AI teach voice = server Gemini TTS (good Spanish). Browser is fallback only.
+ * ONE voice block: the whole on-screen reply in a single TTS call — no
+ * part-splitting, no mid-reply pauses (learner feedback 2026-07-28).
+ * Force browser: localStorage.setItem("ttsPreferBrowser","1")
+ */
+/**
+ * Voice block = ONLY the teaching core (recast + model + try) in ONE
+ * continuous read. Acknowledge/explain/continue stay on screen: the card is
+ * for reading, the voice is for the Spanish that matters — and a short block
+ * synthesizes seconds faster.
+ */
+function voiceBlockFromParts(parts, fallback) {
+  if (parts && parts.structured) {
+    const bits = [parts.recast, parts.model, parts.try]
+      .map((s) => (s || "").trim())
+      .filter(Boolean);
+    if (bits.length) return bits.join(" ");
   }
+  return (fallback || "").trim() || speechTextFromParts(parts, "");
+}
+
+async function speak(text, parts) {
+  if (!els.speakToggle?.checked) return;
+  const block = voiceBlockFromParts(parts, text);
+  if (!block) return;
+  stopSpeech();
+  // Claim the generation AFTER stopSpeech's bump; any later stopSpeech()
+  // (send, new turn, reset, reload race) makes this call exit silently —
+  // including audio whose synthesis fetch resolves AFTER the interruption.
+  const gen = speakGeneration;
+  const interrupted = () => gen !== speakGeneration;
+
+  const rate = effectiveTtsRate();
+  if (!preferServerTts()) {
+    await speakBrowserSegment(block, rate);
+    return;
+  }
+  try {
+    await playServerSegment(block, rate, interrupted);
+  } catch (err) {
+    // Interruption (stopSpeech clears audio.src → onerror) is NOT a TTS
+    // failure — never re-speak an interrupted reply with the OS voice.
+    if (interrupted()) return;
+    console.warn("server TTS failed, browser fallback:", err);
+    await speakBrowserSegment(block, rate);
+  }
+}
+
+async function initTtsPolicy() {
+  try {
+    const h = await fetch("/api/health", { credentials: "same-origin" }).then(
+      (r) => r.json()
+    );
+    serverTtsAvailable = !!(h?.tts && h.tts.enabled !== false);
+    const stampEl = document.getElementById("buildStamp");
+    if (stampEl && h?.version) {
+      stampEl.textContent = `v${h.version}`;
+      if (h.stale_code) {
+        stampEl.textContent = `v${h.version} → disk v${h.disk_version} (RESTART)`;
+        stampEl.classList.add("stale");
+      }
+    }
+    if (h?.stale_code) {
+      // Server process is older than the code on disk — fixes are NOT live
+      // (July-26 process silently ignored two days of work, 2026-07-28)
+      els.statusLine.textContent =
+        "⚠ Server is running OLD code — restart the server to load fixes";
+      els.statusLine.style.color = "#e5484d";
+    }
+    if (Number(h?.chat_max_chars) > 0) {
+      // Composer cap mirrors the API's ChatIn max_length (server is authority)
+      els.input.maxLength = Number(h.chat_max_chars);
+    }
+    if (h?.tts?.voice) {
+      window.__TTS_VOICE__ = h.tts.voice;
+    }
+    if (h?.tts?.rate != null) {
+      ttsDefaultRate = clampRate(h.tts.rate);
+    }
+    if (h?.tts?.model_try_gap_ms != null) {
+      ttsModelTryGapMs = Math.max(0, Number(h.tts.model_try_gap_ms) || 400);
+    }
+  } catch (_) {
+    // Keep default true; speak() will fall back on failure
+    serverTtsAvailable = true;
+  }
+  wireTtsRateSlider();
 }
 
 function updateComposerControls() {
@@ -648,7 +1078,11 @@ async function api(path, opts = {}) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.detail || data.error || res.statusText || "Request failed");
+    const err = new Error(
+      data.detail || data.error || res.statusText || "Request failed"
+    );
+    err.status = res.status;
+    throw err;
   }
   return data;
 }
@@ -720,6 +1154,7 @@ async function startSession() {
     renderSheet(data.sheet);
     lastFocusVersion = data.sheet?.focus_version ?? null;
     scheduleRailRefresh();
+    refreshProgress();
     els.statusLine.textContent = `Model ${data.model || "tutor"} · new chat`;
     if (data.reply) speak(data.reply, data.parts);
   } catch (e) {
@@ -750,6 +1185,10 @@ async function sendMessage(text, inputMode = "text", opts = {}) {
   }
   // If mic still open, kill it without a second send
   forceStopMicOnly();
+  // User responded — cancel the previous reply's voice NOW, including audio
+  // whose TTS synthesis hasn't returned yet (it must never play late over
+  // the next reply's voice).
+  stopSpeech();
 
   addBubble("you", text, { inputMode });
   els.input.value = "";
@@ -769,12 +1208,25 @@ async function sendMessage(text, inputMode = "text", opts = {}) {
     renderSheet(data.sheet); // score + static rail immediately
     lastFocusVersion = data.sheet?.focus_version ?? lastFocusVersion;
     scheduleRailRefresh(); // focus LLM finishes async → pull updated rail
+    refreshProgress(); // journey rail: nodes appear as milestones fire
     // Start voice ASAP (browser TTS); don't block UI on server TTS RTT
     speak(data.reply, data.parts);
     setMicStatus("idle", micIdleHint);
     return true;
   } catch (e) {
     typing.remove();
+    // Server restart wipes in-memory sessions → /api/chat 404s. Recover with
+    // a fresh session automatically instead of a dead error bubble.
+    if (e.status === 404 && /session/i.test(e.message || "")) {
+      addBubble(
+        "system",
+        "Session was lost (server restarted) — starting a fresh chat. " +
+          "Please resend your last message."
+      );
+      endTurn();
+      await startSession();
+      return false;
+    }
     addBubble("system", `Error: ${e.message}`);
     setMicStatus("error", `Error: ${e.message}`);
     return false;
@@ -1425,8 +1877,9 @@ els.newChat.addEventListener("click", async () => {
     showMessages(data.messages);
     setNotes(data.notes);
     renderSheet(data.sheet);
+    refreshProgress();
     setMicStatus("idle", "New chat — same learner sheet");
-    speak(data.reply);
+    speak(data.reply, data.parts);
   } catch (e) {
     addBubble("system", e.message);
   } finally {
@@ -1467,6 +1920,7 @@ async function hardResetLearner() {
       )
     );
     renderSheet(data.sheet);
+    refreshProgress();
     els.statusLine.textContent = data.fresh_learner
       ? `Fresh learner · model ${data.model || "tutor"}`
       : `Model ${data.model || "tutor"} · character sheet live`;
@@ -1477,7 +1931,7 @@ async function hardResetLearner() {
         ? "Hard reset complete: blank character sheet + new session."
         : "Reset ran but server did not confirm fresh_learner — check sheet."
     );
-    speak(data.reply);
+    speak(data.reply, data.parts);
   } catch (e) {
     addBubble("system", `Reset failed: ${e.message}`);
   } finally {
@@ -1495,4 +1949,6 @@ if (window.speechSynthesis) {
 }
 
 initSpeech();
-startSession();
+// Discover server Gemini TTS, then open session (opening line uses AI voice)
+initJourney();
+initTtsPolicy().finally(() => startSession());

@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Block commits that reintroduce silent teacher-context truncation.
+# Install once:  git config core.hooksPath .githooks
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$ROOT"
+
+if [[ "${SKIP_TRUNCATION_CHECK:-}" =~ ^(1|true|yes|on)$ ]]; then
+  echo "pre-commit: SKIP_TRUNCATION_CHECK set — skipping truncation scan"
+  exit 0
+fi
+
+PY=""
+if [[ -x "$ROOT/.venv/bin/python" ]]; then
+  PY="$ROOT/.venv/bin/python"
+elif command -v python3 >/dev/null 2>&1; then
+  PY="python3"
+else
+  PY="python"
+fi
+
+exec "$PY" "$ROOT/scripts/check_teacher_truncation.py" --staged

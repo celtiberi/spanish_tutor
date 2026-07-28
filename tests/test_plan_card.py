@@ -12,6 +12,7 @@ from tutor.teach_assets import (
     assets_for_ai_turn,
     assets_for_plan,
     cache_lookup,
+    concept_in_text,
     decide_teach_image,
     extract_concept_candidates,
 )
@@ -52,10 +53,32 @@ class TestAiTutorContext(unittest.TestCase):
         self.assertIn("session_facts", msg)
         self.assertIn("hard_observations", msg)
         self.assertIn("mode", msg)
-        self.assertIn("Realize MODE only", msg)
         # Must not ship a scripted next-card ladder
         self.assertNotIn("chat_ask_name", msg)
         self.assertNotIn("origin_to_gusta", msg)
+        # Standing orders moved to the STATIC system prompt (cache-stable);
+        # the per-turn task carries only facts.
+        from tutor.executor import AI_TUTOR_SYSTEM
+
+        self.assertIn("Realize MODE targets and legality", AI_TUTOR_SYSTEM)
+        self.assertIn("LEARNER UPTAKE", AI_TUTOR_SYSTEM)
+        self.assertIn("Mode playbooks", AI_TUTOR_SYSTEM)
+
+    def test_correction_rules_in_system_prompt(self):
+        # Amended §2.5 (blind-grade defect #3, 2026-07-28): prompt-level
+        # correction rules — never confirm an incorrect form; one
+        # grammatical person per repair.
+        from tutor.executor import AI_TUTOR_SYSTEM
+
+        self.assertIn(
+            "NEVER confirm or praise an incorrect form", AI_TUTOR_SYSTEM
+        )
+        self.assertIn("¡Sí!/¡Exacto!/¡Perfecto!", AI_TUTOR_SYSTEM)
+        self.assertIn("ONE grammatical person per repair", AI_TUTOR_SYSTEM)
+        self.assertIn(
+            "1st and 2nd person variants in the same repair",
+            AI_TUTOR_SYSTEM,
+        )
 
 
 class TestRulesPlannerOptional(unittest.TestCase):
@@ -232,6 +255,67 @@ class TestImageDecision(unittest.TestCase):
         self.assertEqual(card.move, "recast_retry")
         d = decide_teach_image(card, images_shown=set(), session_turns=2, turns_since_image=5)
         self.assertFalse(d.want)
+
+
+class TestFallbackRelevanceGate(unittest.TestCase):
+    """Incident 2026-07-28: the comprehension_repair fallback must never
+    serve a concept absent from the current exchange (dice/digo grammar
+    question got a «hola» image). No relevant concept → NO image."""
+
+    def test_gate_blocks_concept_not_in_exchange(self):
+        exchange = (
+            "digo and dices.. what do these mean and how do I use them?"
+        )
+        imgs, d = assets_for_ai_turn(
+            is_open=False,
+            tutor_models=["**Hola** significa hello."],
+            learner=exchange,
+            require_relevant_to=exchange,
+            images_shown=set(),
+            session_turns=3,
+            turns_since_image=3,
+        )
+        self.assertFalse(d.want)
+        self.assertFalse(imgs)
+        self.assertEqual(d.reason, "skip_irrelevant_concept")
+
+    def test_gate_allows_concept_present_in_exchange(self):
+        exchange = "what does hola mean?"
+        imgs, d = assets_for_ai_turn(
+            is_open=False,
+            tutor_models=["**Hola** significa hello."],
+            learner=exchange,
+            require_relevant_to=exchange,
+            images_shown=set(),
+            session_turns=3,
+            turns_since_image=3,
+        )
+        self.assertTrue(d.want)
+        self.assertTrue(imgs)
+        self.assertEqual(imgs[0]["concept"], "hola")
+
+    def test_no_gate_when_not_required(self):
+        # Non-repair callers pass require_relevant_to=None → behavior unchanged
+        imgs, d = assets_for_ai_turn(
+            is_open=False,
+            tutor_models=["**Hola** significa hello."],
+            learner="ok",
+            images_shown=set(),
+            session_turns=3,
+            turns_since_image=3,
+        )
+        self.assertTrue(d.want)
+        self.assertEqual(d.concept, "hola")
+
+    def test_concept_in_text_surface_matching(self):
+        self.assertTrue(concept_in_text("hola", 'what does "hola" mean?'))
+        self.assertTrue(concept_in_text("hola", "is it hello or goodbye?"))
+        self.assertTrue(concept_in_text("bote", "I saw a barco on the water"))
+        self.assertFalse(concept_in_text("hola", "digo and dices.. help me"))
+        # 'hi' inside 'think' must not match (boundary-safe)
+        self.assertFalse(concept_in_text("hola", "I think so"))
+        self.assertFalse(concept_in_text("hola", ""))
+        self.assertFalse(concept_in_text(None, "hola"))
 
 
 if __name__ == "__main__":

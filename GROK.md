@@ -9,3 +9,7 @@ Your standing roles here:
 - **Plan countersigns:** research plans and design changes come to you item-by-item — COUNTERSIGN/AMEND (exact replacement)/REJECT with reasons.
 
 Conventions: absolute dates; append-ready output; the review trail lives in docs/ — rounds append, never rewrite prior authors' text.
+
+**Teacher context:** no silent truncation of sheet/pack/stance/history fed to the tutor model while testing. See `docs/teacher-context-no-truncate.md`. Commit gate: `scripts/check_teacher_truncation.py` via `.githooks/pre-commit`.
+
+**System map:** `docs/system-overview.md` (architecture, pedagogy, modes, sheet, gate, ops).

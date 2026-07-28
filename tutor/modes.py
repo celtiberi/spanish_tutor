@@ -59,6 +59,12 @@ class ModeDecision:
         return d
 
 
+# A sheet-streak form_focus hard break needs the error to be RECENT (this
+# session, within K learner turns) — stale counts must not hijack clean turns
+# (Grok countersign 2026-07-28, Lyster & Ranta-style feedback-at-source).
+K_STREAK_RECENCY = 4
+
+
 @dataclass
 class ModeSessionState:
     """Session-scoped mode runtime (not the character sheet)."""
@@ -72,14 +78,47 @@ class ModeSessionState:
     scene_modeled: set[str] = field(default_factory=set)  # scene ids that got first model
     last_mode: str | None = None
     last_resolved_form: str | None = None  # form just resolved → transfer next
+    # Error patterns resolved at least once THIS session (close-phase summary)
+    resolved_this_session: list[str] = field(default_factory=list)
+    # Error recency for streak hard breaks (session-local turn distance)
+    learner_turn_index: int = 0
+    last_error_hit_turn: dict[str, int] = field(default_factory=dict)
+    # §2.1a content-uptake budget (BINDING, 2026-07-28): ≤1 content-uptake
+    # deferral per 3 teaching turns, never consecutive — the ≥3-turn gap
+    # enforces both clauses with one field.
+    content_uptake_last_turn: int = -999
 
     def tick(self) -> None:
         self.turns_since_hard_break = min(self.turns_since_hard_break + 1, 999)
+        self.learner_turn_index += 1
         cooled = {}
         for k, v in self.form_focus_cooldown.items():
             if v > 1:
                 cooled[k] = v - 1
         self.form_focus_cooldown = cooled
+
+    def note_error_hits(self, hit_ids) -> None:
+        for pid in hit_ids or []:
+            if pid:
+                self.last_error_hit_turn[str(pid)] = self.learner_turn_index
+
+    def error_recent(self, pid: str, *, k: int = K_STREAK_RECENCY) -> bool:
+        last = self.last_error_hit_turn.get(str(pid))
+        if last is None:
+            return False
+        return (self.learner_turn_index - last) <= k
+
+    def note_resolved(self, pattern_ids) -> None:
+        for pid in pattern_ids or []:
+            if pid and str(pid) not in self.resolved_this_session:
+                self.resolved_this_session.append(str(pid))
+
+    def content_uptake_allowed(self) -> bool:
+        """§2.1a budget check (rate + no-consecutive in one gap test)."""
+        return (self.learner_turn_index - self.content_uptake_last_turn) >= 3
+
+    def note_content_uptake(self) -> None:
+        self.content_uptake_last_turn = self.learner_turn_index
 
     def note_hard_break(self, mode: Mode) -> None:
         self.hard_breaks_this_session += 1
@@ -100,7 +139,109 @@ class ModeSessionState:
             "scene_modeled": sorted(self.scene_modeled),
             "last_mode": self.last_mode,
             "last_resolved_form": self.last_resolved_form,
+            "resolved_this_session": list(self.resolved_this_session),
+            "content_uptake_last_turn": self.content_uptake_last_turn,
         }
+
+
+# Session-phase layer (Phase 2, tutor/session_phases.py): reasons that FREEZE
+# the phase clock — guard turns and comprehension repair never consume phase
+# budget (r6 §4.2 rule 1). conv_session uses this to compute tick(consumed).
+PHASE_FREEZE_REASONS = frozenset({
+    "time_pressure_inline_recast",
+    "time_pressure_chat",
+    "learner_topic_request",
+    "learner_help_request",
+    "boredom_new_topic",
+    "grammar_question_inline",
+    "meta_comprehension_stay_on_topic",
+    "blank_open_placement",  # placement open happens before the plan engages
+})
+
+
+def _phase_prefix(activity_hint: str | None, mem: dict) -> str:
+    """Instruction prefix for the session-phase activity hint.
+
+    Applied ONLY on the default CONVERSATION fallthrough and the known-open
+    block — guards ignore the hint entirely, and intervention decisions
+    (cf_recast/form_focus/association/transfer) ride WITHIN phases unmodified.
+    "free" (and unknown hints) keep current behavior: no prefix.
+    """
+    if activity_hint == "retrieval":
+        return (
+            "SESSION PHASE: RETRIEVAL — this turn's priority is the DUE "
+            "RE-ENCOUNTERS block below; weave one due item into a natural "
+            "exchange before anything new."
+        )
+    if activity_hint == "new_input":
+        try:
+            remaining = int(mem.get("intro_budget_remaining"))
+        except (TypeError, ValueError):
+            remaining = None
+        if remaining is None:
+            budget_note = "introduce budget unknown — assume at most 1"
+        elif remaining <= 0:
+            budget_note = (
+                "introduce budget EXHAUSTED (0 left) — introduce NOTHING "
+                "new; recycle already-introduced items model-heavy"
+            )
+        else:
+            budget_note = f"introduce budget: {remaining} left this session"
+        return (
+            "SESSION PHASE: NEW INPUT — introduce at most ONE new pack-legal "
+            f"item this turn IF the session introduce budget allows "
+            f"({budget_note}); model-heavy, keep the try simple (a yes/no or "
+            "A/B comprehension check is acceptable instead of free "
+            "production). If an INTRODUCE block follows, it is THE new item "
+            "— follow it exactly."
+        )
+    if activity_hint == "task":
+        return (
+            "SESSION PHASE: TASK — drive toward ONE concrete conversational "
+            "goal from the open scenes/pack topics and finish it; no topic "
+            "drift until done."
+        )
+    if activity_hint == "close":
+        # PEDAGOGY §1.2 Close phase (USER-ratified 2026-07-28).
+        return (
+            "SESSION PHASE: CLOSE — end the session now: (1) ONE short "
+            "English line naming what they practiced this session (use the "
+            "session summary data provided); (2) a real Spanish farewell "
+            "exchange using a farewell they have met (hasta luego / adiós "
+            "per the sheet ledger); no new items, no corrections unless the "
+            "farewell itself fails."
+        )
+    return ""
+
+
+def _topic_suggestion_line(pack_topics: list[str] | None) -> str:
+    """Course-pack topic palette for change-topic instructions (never hardcoded)."""
+    topics = [t for t in (pack_topics or []) if t]
+    if not topics:
+        return " Pick any fresh everyday topic inside the course-pack scope."
+    return " Fresh-topic palette from the course pack: " + "; ".join(topics) + "."
+
+
+def _fallback_association_concept(
+    sheet: dict,
+    images_shown: set[str] | None = None,
+) -> str:
+    """Least-confident unshown concrete noun from the learner's own lexicon.
+
+    Replaces the old hardcoded 'bote' default that dragged every stuck-English
+    moment back to the boat.
+    """
+    shown = set(images_shown or [])
+    lex = sheet.get("lexicon") or {}
+    best: tuple[float, str] | None = None
+    for noun in ("cafe", "comida", "musica", "rio", "bote"):
+        if noun in shown:
+            continue
+        entry = lex.get(noun) or {}
+        conf = float(entry.get("confidence") or 0) if isinstance(entry, dict) else 0.0
+        if best is None or conf < best[0]:
+            best = (conf, noun)
+    return best[1] if best else "cafe"
 
 
 def _affect_energy(sheet: dict) -> str:
@@ -168,10 +309,12 @@ def _noun_from_text(
     *,
     images_shown: set[str] | None = None,
 ) -> str | None:
-    """First session mention of a concrete noun → associate (even if lexicon knows it)."""
+    """First session mention of a concrete noun → associate (generate image if needed)."""
+    from .observe import word_present
+
     low = (text or "").lower()
     shown = set(images_shown or [])
-    # longer needles first
+    # Known pairs first (longer needles first). Any concept can be generated.
     pairs = [
         ("río dulce", "rio"),
         ("rio dulce", "rio"),
@@ -182,16 +325,22 @@ def _noun_from_text(
         ("música", "musica"),
         ("musica", "musica"),
         ("comida", "comida"),
+        ("edificios", "edificio"),
+        ("edificio", "edificio"),
+        ("casa", "casa"),
+        ("playa", "playa"),
+        ("perro", "perro"),
+        ("gato", "gato"),
+        ("agua", "agua"),
+        ("sol", "sol"),
         ("río", "rio"),
         ("rio", "rio"),
-        ("edificio", "bote"),  # no edificio asset — skip via allowlist below
+        ("calor", "calor"),
+        ("frío", "frio"),
+        ("frio", "frio"),
     ]
-    allow = {"cafe", "bote", "musica", "comida", "rio"}
     for needle, concept in pairs:
-        if concept not in allow:
-            continue
-        if needle in low:
-            # Associate first time this session even if lexicon confidence is high
+        if word_present(needle, low):
             if concept not in shown:
                 return concept
             entry = (sheet.get("lexicon") or {}).get(concept) or {}
@@ -259,10 +408,16 @@ def select_mode(
     open_scenes: list[dict] | None = None,
     images_shown: set[str] | list[str] | None = None,
     session_memory: dict | None = None,
+    pack_topics: list[str] | None = None,
+    profile: dict | None = None,  # accepted for compat; personal data unused
+    activity_hint: str | None = None,  # session-phase layer; guards ignore it
 ) -> ModeDecision:
     """Deterministic mode selection — first matching guard wins.
 
     See docs/teaching-system.md § Break-from-conversation policy.
+    activity_hint (tutor/session_phases.py) flavors ONLY the known-open block
+    and the default CONVERSATION fallthrough; every guard and intervention
+    branch ignores it (frozen guard chain has absolute priority).
     """
     obs = observations or {}
     mem = session_memory or {}
@@ -281,6 +436,7 @@ def select_mode(
     last_model = (mem.get("last_tutor_model") or "").strip()
     last_concepts = list(mem.get("last_concepts") or [])
     await_comp = bool(mem.get("await_comprehension"))
+    topic_line = _topic_suggestion_line(pack_topics)
 
     # 0) Time pressure — no hard break
     if energy == "limited_time":
@@ -298,12 +454,58 @@ def select_mode(
             instructions="Keep it short; one Spanish question; no drills.",
         )
 
+    # 0b) Learner steered the lesson (new topic / activity request) — honor it
+    #     in THIS reply. English is how novices make this request; it must
+    #     never be routed to comprehension repair or deferred with "first
+    #     answer my question".
+    if not is_open and "topic_request" in signals:
+        nb = sheet.get("next_best") or {}
+        return ModeDecision(
+            Mode.CONVERSATION,
+            reason="learner_topic_request",
+            hard_break=False,
+            targets={
+                "honor_request": True,
+                "form_focus": nb.get("form_focus"),
+                "error_pattern": nb.get("error_pattern"),
+            },
+            instructions=(
+                "They asked to change the topic or activity — do it NOW, in "
+                "this reply. Re-read their message for what they want and "
+                "build the turn around it. Do not finish your previous "
+                "question first and do not return to earlier topics."
+                + topic_line
+                + " Keep weaving any active form focus into the NEW topic."
+            ),
+        )
+
+    # 0c) Learner asked how to say a word/phrase — answer it, always. This
+    #     outranks comprehension repair: a help request is uptake to honor,
+    #     not evidence of non-understanding (Grok round-1 F, 2026-07-28).
+    if not is_open and "help_request" in signals:
+        return ModeDecision(
+            Mode.CONVERSATION,
+            reason="learner_help_request",
+            hard_break=False,
+            targets={"honor_request": True, "answer_language_question": True},
+            instructions=(
+                "They asked how to say a word/phrase. FIRST give the Spanish form "
+                "(+ brief English gloss). Model one short example. Then one try that "
+                "elicits THAT form in the live context. Do not re-ask an unrelated "
+                "prior greeting/try."
+            ),
+        )
+
     # 1) Boredom — new topic chat, never drill
     if _boredom_high(sheet) and "meta_comprehension" not in signals:
         return ModeDecision(
             Mode.CONVERSATION,
             reason="boredom_new_topic",
-            instructions="Change topic (boat, café, music, food). No drills. Fun adult chat.",
+            instructions=(
+                "Change to a FRESH topic they have not done this session — "
+                "no drills, fun adult chat."
+                + topic_line
+            ),
         )
 
     # 1b) Comprehension repair — they didn't understand OUR Spanish
@@ -318,18 +520,73 @@ def select_mode(
         )
         and (last_try or last_model)
     ):
-        img = None
-        for c in last_concepts:
-            if c and c not in shown_imgs:
-                img = c
-                break
-        if not img and last_concepts:
-            img = last_concepts[0]
-        # Prefer image for dual-coding even if already shown once
-        if not img:
-            img = _noun_from_text(
-                f"{last_try} {last_model} {learner}", sheet, images_shown=set()
+        # They understood enough to ANSWER in their OWN Spanish while asking
+        # about the language (por vs para, what is "son") — that is a grammar
+        # question, not failed comprehension. Answer it; don't re-ask the try.
+        # Quoted tutor Spanish and literal "no entiendo" are stripped first:
+        # echoing our words or saying they don't understand is evidence of
+        # NON-comprehension, not of production.
+        import re as _re
+
+        from .observe import probe_signals as _probe, strip_quoted as _strip
+
+        own_text = _re.sub(
+            r"\bno\s+(?:lo\s+)?entiendo\b", " ", _strip(learner or ""),
+            flags=_re.I,
+        )
+        own_sig = _probe(own_text)
+        if "meta_comprehension" in signals and "spanish_ok" in own_sig:
+            return ModeDecision(
+                Mode.CONVERSATION,
+                reason="grammar_question_inline",
+                hard_break=False,
+                targets={"answer_language_question": True},
+                instructions=(
+                    "They answered you AND asked about the language "
+                    "(grammar/word meaning). FIRST answer their language "
+                    "question clearly — brief English is fine here. THEN "
+                    "react to the content of their answer and continue the "
+                    "same conversation with one new try. Do NOT re-ask the "
+                    "question they already answered."
+                ),
             )
+        # Incident 2026-07-28 (hola image on a digo/dices grammar question):
+        # when the learner wrote a substantive turn (meta/grammar question,
+        # partial answer), THIS turn teaches what they asked about — the
+        # prior repair target is image-relevant only if their own message
+        # actually contains it (code-owned surface check, no LLM). Nothing
+        # relevant → NO image: an absent image beats a wrong one (r5).
+        # Only a true non-comprehension turn («no entiendo» / pure echo of
+        # tutor Spanish) keeps the repair-target image, because there the
+        # prior concept IS the content being re-taught (dual-coding).
+        from .teach_assets import concept_in_text
+
+        # Strict: «no entiendo» / "don't understand" / pure echo only.
+        # NOT the "what does X mean" pattern — that is a meta question
+        # about X and must pass the learner-text relevance check instead.
+        noncomp_only = not own_text.strip() or bool(_re.search(
+            r"\bno\s+(?:lo\s+)?entiendo\b|\bno\s+comprendo\b"
+            r"|(?:don'?t|do\s+not|dont)\s+understand\b",
+            learner or "", _re.I,
+        ))
+        if noncomp_only:
+            img = None
+            for c in last_concepts:
+                if c and c not in shown_imgs:
+                    img = c
+                    break
+            if not img and last_concepts:
+                img = last_concepts[0]
+            # Prefer image for dual-coding even if already shown once
+            if not img:
+                img = _noun_from_text(
+                    f"{last_try} {last_model} {learner}", sheet, images_shown=set()
+                )
+        else:
+            img = next(
+                (c for c in last_concepts if c and concept_in_text(c, learner)),
+                None,
+            ) or _noun_from_text(learner, sheet, images_shown=set())
         simple_try = _simplify_try(last_try) or last_try
         return ModeDecision(
             Mode.COMPREHENSION_REPAIR,
@@ -345,15 +602,22 @@ def select_mode(
                 "forbid_new_topic": True,
             },
             instructions=(
-                "COMPREHENSION REPAIR — they did not understand your previous Spanish.\n"
-                "1) Brief English or ultra-simple Spanish: what the KEY phrase means "
-                f"(from: {last_model[:120]!r} / try: {last_try[:120]!r}).\n"
+                "COMPREHENSION REPAIR — prior Spanish may not have landed; stay on the "
+                "SAME communicative intent (no new topic / new can-do).\n"
+                "0) UPTAKE FIRST: if this learner turn contains any question or help "
+                "request (word, phrase, grammar, 'how do I say…', 'I always forget…'), "
+                "answer it briefly FIRST. That is not a topic jump.\n"
+                "1) Brief English or ultra-simple Spanish: what the KEY phrase meant "
+                f"(from: {last_model!r} / try: {last_try!r}).\n"
                 "2) If an image is attached, use it to bind the noun/meaning.\n"
                 "3) <model> the same idea in SIMPLER Spanish (shorter, high-frequency words).\n"
-                f"4) <try> MUST re-ask the SAME communicative intent, e.g. {simple_try!r} "
-                "— NOT a brand-new topic or new can-do. "
-                "Do NOT jump to '¿Te gusta…?' or a different question unless that WAS the last try.\n"
-                "5) Keep the turn short. Stay on this micro-goal until they answer the idea."
+                f"4) <try> re-ask the SAME communicative intent (e.g. {simple_try!r}) ONLY "
+                "if they still have not shown understanding of that intent and did not "
+                "already answer it. If they only asked a language question while producing "
+                "their own Spanish content, do NOT re-ask the old try — continue from "
+                "their content.\n"
+                "5) Keep the turn short. forbid_new_topic = no new scene/topic; questions "
+                "about language are allowed and required."
             ),
         )
 
@@ -368,21 +632,84 @@ def select_mode(
                 "Wide-ceiling placement: short clear Spanish they can copy, but room for "
                 "a stronger learner to show multi-skill Spanish. Not a Hola worksheet."
             ),
-            scene_ids=[s.get("id") for s in open_scenes if s.get("id")][:3],
+            scene_ids=[s.get("id") for s in open_scenes if s.get("id")],
         )
     if is_open and not blank:
+        # Open from sheet abilities ONLY. Personal-data capture is disabled
+        # (2026-07-28): no stored name, no personal hooks, no care rules.
+        nb = sheet.get("next_best") or obs.get("next_best") or {}
+        skills = sheet.get("skills") or {}
+
+        def _conf(cid: str) -> float:
+            sk = skills.get(cid) if isinstance(skills.get(cid), dict) else {}
+            try:
+                return float(sk.get("confidence") or 0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        shown = set(mem.get("shown") or [])
+        lines = [
+            "KNOWN LEARNER open — use the character sheet.",
+            "We do NOT store the learner's name — greet warmly WITHOUT any "
+            "name; never invent or guess one."
+            " Warm SIMPLE A1 Spanish only; no intermediate idioms.",
+        ]
+        if _boredom_high(sheet):
+            lines.append(
+                "Sheet shows topic fatigue — open on something FRESH."
+                + topic_line
+            )
+        # Skip re-probing can-dos they already own
+        if _conf("IP-04") >= 0.55 or "estoy" in shown:
+            lines.append(
+                "IP-04 / how-are-you is already solid — brief Hola is enough; "
+                "do NOT make «¿Cómo estás?» the main try."
+            )
+        if _conf("IP-03") >= 0.4 or "name" in shown:
+            lines.append(
+                "They can already introduce themselves — do NOT ask "
+                "«¿Cómo te llamas?» again."
+            )
+        if nb.get("can_do") or nb.get("activity") or nb.get("statement"):
+            lines.append(
+                "Steer the try toward sheet next_best: "
+                f"{nb.get('can_do') or ''} / {nb.get('activity') or nb.get('stretch') or ''} — "
+                f"{nb.get('statement') or nb.get('reason') or ''}."
+            )
+        if nb.get("error_pattern") or nb.get("form_focus") or nb.get("teach_hint"):
+            lines.append(
+                "Lightly weave form focus from sheet: "
+                f"{nb.get('error_pattern') or nb.get('form_focus') or ''} — "
+                f"{nb.get('teach_hint') or ''}"
+            )
+        elif obs.get("active_errors"):
+            top = (obs.get("active_errors") or [{}])[0]
+            if isinstance(top, dict) and top.get("id"):
+                lines.append(
+                    f"Active error on sheet: {top.get('id')} — recast/weave if natural."
+                )
+        lines.append(
+            "One clear try that advances the sheet agenda — "
+            "not a zero-placement greeting ladder."
+        )
+        phase_prefix = _phase_prefix(activity_hint, mem)
+        if phase_prefix:
+            lines.insert(0, phase_prefix)
         return ModeDecision(
             Mode.CONVERSATION,
-            reason="known_open_simple",
+            reason="known_open_from_sheet",
             hard_break=False,
             image_concept=None,
-            scene_ids=[s.get("id") for s in open_scenes if s.get("id")][:3],
-            instructions=(
-                "Known learner open: warm but SIMPLE A1 Spanish only. "
-                "Prefer «¡Hola! ¿Cómo estás?» / short *estoy* models. "
-                "Avoid idioms like «qué gusto saludarte» or «cómo van las cosas» "
-                "until they show they can handle them. One clear try."
-            ),
+            scene_ids=[s.get("id") for s in open_scenes if s.get("id")],
+            targets={
+                "next_best": {
+                    "can_do": nb.get("can_do"),
+                    "activity": nb.get("activity") or nb.get("stretch"),
+                    "error_pattern": nb.get("error_pattern"),
+                },
+                "preferred_name": None,
+            },
+            instructions=" ".join(lines),
         )
 
     # 3) Form errors FIRST — short correction must not be skipped for association
@@ -390,8 +717,33 @@ def select_mode(
     top = _top_active_error(sheet)
     if top and int(top.get("count") or 0) >= 2:
         pid = top["id"]
-        if pid not in state.form_focus_cooldown and can_hard:
+        # A correct use this turn resolves the pattern — never hard-break on a
+        # form the learner just produced right; transfer/conversation handles it.
+        if (
+            pid not in resolves
+            and pid not in state.form_focus_cooldown
+            and can_hard
+            and (pid in hit_ids or state.error_recent(pid))
+        ):
+            # Recency gate: no hard break on a stale count alone — the error
+            # must have occurred this turn or within the last K learner turns.
             cat = ERROR_PATTERN_CATALOG.get(pid) or {}
+            fresh_hit = pid in hit_ids
+            base_instr = (
+                f"Hard break pedagogical grammar for {pid}. Show short contrast "
+                f"(wrong vs right). One choice or produce correct form. Then exit to transfer."
+            )
+            if not fresh_hit:
+                # Streak fired from the SHEET, not from this message. Correcting
+                # a clean turn reads as scolding for a mistake they didn't make
+                # (2026-07-27: re-corrected 'llama' on a turn about travel).
+                base_instr += (
+                    " IMPORTANT: their CURRENT message did NOT contain this "
+                    "error — do NOT correct or 're-correct' them now. First "
+                    "respond to what they actually said, then frame the form "
+                    "work as quick practice of a tricky form (playful, "
+                    "'¿te acuerdas?'), never as fixing their message."
+                )
             return ModeDecision(
                 Mode.FORM_FOCUS,
                 reason=f"error_streak:{pid}",
@@ -403,24 +755,22 @@ def select_mode(
                     "label": top.get("label") or pid,
                     "good_models": _good_models(pid),
                     "contrast": _contrast_for(pid),
+                    "fresh_hit": fresh_hit,
                 },
-                instructions=(
-                    f"Hard break pedagogical grammar for {pid}. Show short contrast "
-                    f"(wrong vs right). One choice or produce correct form. Then exit to transfer."
-                ),
+                instructions=base_instr,
             )
 
     # Soft recast: any clear form hit this turn — keep chat moving after a short correction
     if hits:
         pid = hits[0][0]
-        noun = _noun_from_text(learner, sheet, images_shown=shown_imgs)
         good = _good_models(pid)
         contrast = _contrast_for(pid)
         return ModeDecision(
             Mode.CF_RECAST,
             reason=f"single_error:{pid}",
             hard_break=False,
-            image_concept=noun,  # optional dual-code; recast still required
+            # No auto-picked image: dual-coding on a recast is the TUTOR's
+            # call now (<image concept="…"/>), not a noun-scanner's
             targets={
                 "error_pattern": pid,
                 "snippet": hits[0][1],
@@ -446,7 +796,9 @@ def select_mode(
         learner and re_search_no_entiendo(learner)
     )
     if can_hard and (eng_streak >= 2 or no_entiendo) and "spanish_ok" not in signals:
-        concept = _noun_from_text(learner, sheet, images_shown=shown_imgs) or "bote"
+        concept = _noun_from_text(learner, sheet, images_shown=shown_imgs) or (
+            _fallback_association_concept(sheet, shown_imgs)
+        )
         return ModeDecision(
             Mode.ASSOCIATION,
             reason="english_stuck_association",
@@ -473,7 +825,7 @@ def select_mode(
                 "They just used the form well. Same form, NEW micro-context "
                 "(different place/person/topic). Do not re-drill."
             ),
-            scene_ids=[s.get("id") for s in open_scenes if s.get("id")][:2],
+            scene_ids=[s.get("id") for s in open_scenes if s.get("id")],
         )
 
     # 6) Concrete noun first-time this session → association (+ image)
@@ -528,6 +880,13 @@ def select_mode(
 
     # 8) Default conversation (next_best is a weak guide only)
     nb = (sheet.get("next_best") or {})
+    default_instr = (
+        "Real Spanish conversation. React to them first. One elicit. Teach with model+try. "
+        "No re-asking covered probes. next_best is optional if the live topic is richer."
+    )
+    phase_prefix = _phase_prefix(activity_hint, mem)
+    if phase_prefix:
+        default_instr = phase_prefix + "\n" + default_instr
     return ModeDecision(
         Mode.CONVERSATION,
         reason="default_conversation",
@@ -537,11 +896,8 @@ def select_mode(
             "next_best": nb.get("statement") or nb.get("activity"),
             "next_best_is_optional": True,
         },
-        scene_ids=[s.get("id") for s in open_scenes if s.get("id")][:3],
-        instructions=(
-            "Real Spanish conversation. React to them first. One elicit. Teach with model+try. "
-            "No re-asking covered probes. next_best is optional if the live topic is richer."
-        ),
+        scene_ids=[s.get("id") for s in open_scenes if s.get("id")],
+        instructions=default_instr,
     )
 
 
@@ -581,10 +937,19 @@ def _form_for_concept(concept: str) -> str:
         "musica": "la música",
         "comida": "la comida",
         "rio": "el río",
+        "edificio": "el edificio",
+        "casa": "la casa",
+        "playa": "la playa",
+        "perro": "el perro",
+        "gato": "el gato",
+        "agua": "el agua",
+        "sol": "el sol",
+        "calor": "el calor",
+        "frio": "el frío",
         "hola": "Hola",
         "estoy_bien": "Estoy bien",
         "me_llamo": "Me llamo…",
-    }.get(concept, concept)
+    }.get(concept or "", concept or "")
 
 
 def _good_models(pid: str) -> list[str]:

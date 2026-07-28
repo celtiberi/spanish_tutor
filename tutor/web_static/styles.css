@@ -26,7 +26,7 @@ body {
 }
 
 .app {
-  max-width: 1100px;
+  max-width: 1340px;
   margin: 0 auto;
   min-height: 100%;
   display: flex;
@@ -53,6 +53,14 @@ body {
   font-size: 0.85rem;
 }
 h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
+.build-stamp {
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--muted);
+  vertical-align: middle;
+  margin-left: 0.35rem;
+}
+.build-stamp.stale { color: #e5484d; font-weight: 700; }
 .sub { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.8rem; }
 .header-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 
@@ -72,6 +80,16 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
   border-color: var(--ok);
   box-shadow: 0 0 0 1px rgba(127, 217, 154, 0.35), 0 0 18px rgba(127, 217, 154, 0.15);
 }
+/* Session API cost (tracked per provider call) */
+.cost-board {
+  flex: 0 1 170px;
+  min-width: 130px;
+  margin: 0 0.5rem;
+  padding: 0.45rem 0.75rem 0.5rem;
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(253, 186, 61, 0.12), rgba(253, 92, 61, 0.08));
+  border: 1px solid var(--border);
+}
 .score-main {
   display: flex;
   align-items: baseline;
@@ -90,6 +108,10 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
   font-variant-numeric: tabular-nums;
   line-height: 1;
   color: var(--text);
+}
+.score-unit {
+  font-size: 0.72rem;
+  color: var(--muted);
 }
 .score-delta {
   font-size: 0.85rem;
@@ -128,18 +150,136 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
   color: var(--muted); font-size: 0.85rem; cursor: pointer; user-select: none;
 }
 .toggle input { accent-color: var(--accent); }
+/* Voice-speed slider: slider first so the thumb never shifts as the label
+   text changes width while dragging. */
+.voice-rate input[type="range"] { width: 88px; }
+.voice-rate span { min-width: 6.4rem; white-space: nowrap; }
 
 .main {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr minmax(280px, 340px);
+  /* Left journey rail · chat · right focus rail */
+  grid-template-columns: minmax(200px, 250px) 1fr minmax(280px, 340px);
   gap: 0.75rem;
   min-height: 0;
   margin-top: 0.75rem;
   align-items: start;
 }
+@media (max-width: 1100px) {
+  .main { grid-template-columns: 1fr minmax(280px, 340px); }
+  .journey { grid-column: 1 / -1; position: static; max-height: none; }
+}
 @media (max-width: 900px) {
   .main { grid-template-columns: 1fr; }
+}
+
+/* Journey rail (left): session-clustered milestone nodes on a vertical line.
+   Honest by construction: nodes are ledger events only; no XP, no streak
+   chrome (docs/design-progression-view.md, as amended). */
+.journey {
+  position: sticky;
+  top: 0.5rem;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
+.journey-head h2 { margin: 0; }
+.journey-toggle { font-size: 0.72rem; padding: 0.2rem 0.55rem; }
+.journey-card.collapsed .journey-body,
+.journey-card.collapsed .journey-foot { display: none; }
+.j-empty {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin: 0.2rem 0 0;
+}
+.j-cluster + .j-cluster {
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+  border-top: 1px dashed var(--border);
+}
+.j-date {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.j-now {
+  font-weight: 650;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--tutor);
+  background: #243b55;
+  border: 1px solid #2d4660;
+  border-radius: 999px;
+  padding: 0 0.45rem;
+  font-size: 0.66rem;
+}
+.j-nodes {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  position: relative;
+}
+/* The connecting line — the user's balls-and-lines path metaphor */
+.j-nodes::before {
+  content: "";
+  position: absolute;
+  left: 0.72rem;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  width: 2px;
+  background: var(--border);
+}
+.j-node {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.26rem 0;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  cursor: default;
+}
+.j-icon {
+  flex: 0 0 1.5rem;
+  width: 1.5rem;
+  text-align: center;
+  z-index: 1;
+  background: var(--bg-elev);
+  border-radius: 50%;
+  font-size: 0.85rem;
+}
+.j-label { color: var(--text); min-width: 0; overflow-wrap: anywhere; }
+.j-label strong { font-weight: 650; }
+.j-kind { color: var(--muted); font-size: 0.72rem; }
+.j-node.down .j-label strong,
+.j-node.down .j-kind { color: var(--warn); }
+/* Quiet badge — informational, never celebration chrome */
+.j-badge {
+  display: inline-block;
+  margin-left: 0.35rem;
+  font-size: 0.62rem;
+  color: var(--warn);
+  border: 1px solid #6b5420;
+  border-radius: 999px;
+  padding: 0 0.4rem;
+  white-space: nowrap;
+}
+.j-sum {
+  margin: 0.35rem 0 0 2rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+.journey-foot {
+  margin-top: 0.65rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.74rem;
 }
 
 /* Right rail: focus + morphology cards */

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Spanish tutor</title>
-  <link rel="stylesheet" href="/static/styles.css?v=20260726d" />
+  <link rel="stylesheet" href="/static/styles.css?v=20260728c" />
 </head>
 <body>
   <div class="app">
@@ -12,29 +12,43 @@
       <div class="brand">
         <span class="logo">ES</span>
         <div>
-          <h1>Spanish tutor</h1>
+          <h1>Spanish tutor <span class="build-stamp" id="buildStamp" title="Server code version (auto: newest code file when the server started)"></span></h1>
           <p class="sub" id="statusLine">Starting…</p>
         </div>
       </div>
-      <div class="score-board" id="scoreBoard" title="Progress from your character sheet" aria-live="polite">
+      <!-- Countable progress (design-progression-view, amended (e)4):
+           durable words (14-day hold) · can-dos known · emerging.
+           The abstract 0-100 score stays in the API payload for compat. -->
+      <div class="score-board" id="scoreBoard" title="Countable progress: words holding at the 2-week recall check, and can-do bands from your sheet" aria-live="polite">
         <div class="score-main">
-          <span class="score-label">Progress</span>
-          <span class="score-value" id="scoreValue">0</span>
+          <span class="score-label">Durable</span>
+          <span class="score-value" id="countDurable">0</span>
+          <span class="score-unit">words</span>
           <span class="score-delta hidden" id="scoreDelta"></span>
         </div>
-        <div class="score-bar-wrap" aria-hidden="true">
-          <div class="score-bar" id="scoreBar" style="width:0%"></div>
+        <div class="score-meta">
+          <span id="countKnown">can-dos known 0</span>
+          <span class="score-sep">·</span>
+          <span id="countEmerging">emerging 0</span>
+        </div>
+      </div>
+      <div class="cost-board" id="costBoard" title="API spend this chat session" aria-live="polite">
+        <div class="score-main">
+          <span class="score-label">Cost</span>
+          <span class="score-value" id="costValue">$0.00</span>
         </div>
         <div class="score-meta">
-          <span id="scoreLevel">Just starting</span>
-          <span class="score-sep">·</span>
-          <span id="scoreSkills">0 known</span>
+          <span id="costBreakdown">—</span>
         </div>
       </div>
       <div class="header-actions">
-        <label class="toggle" title="Read tutor replies aloud (browser TTS)">
+        <label class="toggle" title="Read tutor replies aloud (Gemini AI voice; browser fallback)">
           <input type="checkbox" id="speakToggle" checked />
           <span>Speak replies</span>
+        </label>
+        <label class="toggle voice-rate" title="Voice speed: 1.0× is normal; 0.8× and below adds a deliberately slow speaking style.">
+          <input type="range" id="ttsRateSlider" min="0.7" max="1.2" step="0.05" value="1.0" />
+          <span id="ttsRateLabel">Voice 1.0×</span>
         </label>
         <button type="button" class="btn ghost" id="sheetToggle" title="Full character sheet">Full sheet</button>
         <button type="button" class="btn ghost" id="newChat" title="New chat (keep learner sheet)">New chat</button>
@@ -43,6 +57,22 @@
     </header>
 
     <main class="main">
+      <!-- Journey rail (left): session-clustered, evidence-backed milestone
+           nodes. Session clusters are date containers, never achievements;
+           no streak chrome (design-progression-view, amended (c)). -->
+      <aside class="journey" id="journeyRail" aria-label="Progress journey">
+        <article class="card journey-card" id="journeyCard">
+          <header class="card-head journey-head">
+            <h2>Journey</h2>
+            <button type="button" class="btn ghost journey-toggle" id="journeyToggle" aria-expanded="true" title="Show or hide the journey rail">Hide</button>
+          </header>
+          <div id="journeyBody" class="journey-body">
+            <p class="muted j-empty">Milestones will appear here as they are earned.</p>
+          </div>
+          <footer class="journey-foot" id="journeyFoot"></footer>
+        </article>
+      </aside>
+
       <section class="chat-panel">
         <div id="messages" class="messages" aria-live="polite"></div>
         <div id="notes" class="notes hidden"></div>
@@ -58,6 +88,7 @@
           <textarea
             id="input"
             rows="1"
+            maxlength="12000"
             placeholder="Type… or click mic, talk, click again"
             autocomplete="off"
           ></textarea>
@@ -69,7 +100,7 @@
       <aside class="rail" id="rail">
         <article class="card focus-card" id="focusCard">
           <header class="card-head">
-            <h2>Focus now</h2>
+            <h2>This turn</h2>
             <span class="pill" id="focusPill">—</span>
           </header>
           <p class="focus-title" id="focusTitle">Loading…</p>
@@ -105,6 +136,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=20260726d"></script>
+  <script src="/static/app.js?v=20260728g"></script>
 </body>
 </html>

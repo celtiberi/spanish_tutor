@@ -390,6 +390,7 @@ def transcribe_gemini(
     else:
         text = _clean_transcript(text)
 
+    umeta = data.get("usageMetadata") or {}
     meta: dict[str, Any] = {
         "provider": "gemini",
         "model": model,
@@ -397,6 +398,10 @@ def transcribe_gemini(
         "bytes": len(audio_bytes),
         "chars": len(text),
         "has_speech": bool(text),
+        "usage": {
+            "input_tokens": int(umeta.get("promptTokenCount") or 0),
+            "output_tokens": int(umeta.get("candidatesTokenCount") or 0),
+        },
     }
     for k, v in stats.items():
         if isinstance(v, float):

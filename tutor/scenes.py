@@ -1,6 +1,13 @@
 """Scene open goals — quest log, not linear scripts.
 
 See docs/teaching-system.md. exit_predicate is a sheet query.
+
+ConvergentTaskRuntime fields (r6 Rank-4, docs/pedagogy-research-r6-practice-mix.md
+§5): scenes MAY additionally carry `primary_exit` (single machine-checkable exit
+with evidence slots), `tutor_private_info` (info-gap values the tutor holds and
+must not volunteer), and `learner_must_obtain` (slot ids the learner fills by
+asking in Spanish). Optional and backward-compatible — legacy scenes without
+them keep working. Runtime lives in tutor/task_runtime.py.
 """
 
 from __future__ import annotations
@@ -12,6 +19,87 @@ from typing import Any
 from . import config
 
 SCENES_DIR_NAME = "scenes"
+
+# Optional ConvergentTaskRuntime fields (r6 Rank-4) — schema-checked on load.
+TASK_FIELDS = ("primary_exit", "tutor_private_info", "learner_must_obtain")
+
+
+def validate_scene(scene: dict) -> list[str]:
+    """Schema-check the optional ConvergentTaskRuntime fields.
+
+    Legacy fields are untouched. Returns human-readable errors; every error
+    names the scene id and the offending field. Empty list = valid.
+    """
+    sid = str(scene.get("id") or "<no-id>")
+    errs: list[str] = []
+    pe = scene.get("primary_exit")
+    if pe is None:
+        for f in ("tutor_private_info", "learner_must_obtain"):
+            if f in scene:
+                errs.append(f"scene {sid}: {f} present without primary_exit")
+        return errs
+    if not isinstance(pe, dict):
+        return [f"scene {sid}: primary_exit must be an object"]
+    desc = pe.get("description")
+    if not (isinstance(desc, str) and desc.strip()):
+        errs.append(f"scene {sid}: primary_exit.description must be a non-empty string")
+    slots = pe.get("slots")
+    slot_ids: list[str] = []
+    if not (isinstance(slots, list) and slots):
+        errs.append(f"scene {sid}: primary_exit.slots must be a non-empty list")
+    else:
+        for i, slot in enumerate(slots):
+            if not isinstance(slot, dict):
+                errs.append(f"scene {sid}: primary_exit.slots[{i}] must be an object")
+                continue
+            slot_id = slot.get("id")
+            if not (isinstance(slot_id, str) and slot_id.strip()):
+                errs.append(f"scene {sid}: primary_exit.slots[{i}].id must be a non-empty string")
+            elif slot_id in slot_ids:
+                errs.append(f"scene {sid}: primary_exit.slots[{i}].id duplicates '{slot_id}'")
+            else:
+                slot_ids.append(slot_id)
+            ev = slot.get("evidence_any")
+            if not (
+                isinstance(ev, list)
+                and ev
+                and all(isinstance(e, str) and e.strip() for e in ev)
+            ):
+                errs.append(
+                    f"scene {sid}: primary_exit.slots[{i}].evidence_any "
+                    "must be a non-empty list of non-empty strings"
+                )
+    tpi = scene.get("tutor_private_info")
+    if tpi is not None:
+        if not isinstance(tpi, dict):
+            errs.append(f"scene {sid}: tutor_private_info must be an object")
+            tpi = None
+        else:
+            for k, v in tpi.items():
+                if k not in slot_ids:
+                    errs.append(
+                        f"scene {sid}: tutor_private_info key '{k}' is not a primary_exit slot id"
+                    )
+                if not (isinstance(v, str) and v.strip()):
+                    errs.append(
+                        f"scene {sid}: tutor_private_info['{k}'] must be a non-empty string"
+                    )
+    lmo = scene.get("learner_must_obtain")
+    if lmo is not None:
+        if not (isinstance(lmo, list) and all(isinstance(x, str) for x in lmo)):
+            errs.append(f"scene {sid}: learner_must_obtain must be a list of slot-id strings")
+        else:
+            for x in lmo:
+                if x not in slot_ids:
+                    errs.append(
+                        f"scene {sid}: learner_must_obtain id '{x}' is not a primary_exit slot id"
+                    )
+                elif not (isinstance(tpi, dict) and x in tpi):
+                    errs.append(
+                        f"scene {sid}: learner_must_obtain id '{x}' has no "
+                        "tutor_private_info value (the info-gap needs one)"
+                    )
+    return errs
 
 
 def scenes_dir_for_pack(pack_dir: Path | None = None) -> Path:
@@ -30,6 +118,14 @@ def load_scenes(pack_dir: Path | None = None) -> list[dict[str, Any]]:
             data = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(data, dict) and data.get("id"):
                 data["_path"] = str(path)
+                task_errors = validate_scene(data)
+                if task_errors:
+                    # Scene still loads (legacy behavior) but a half-valid
+                    # task schema never reaches the runtime: strip the task
+                    # fields and surface the named errors for callers/tests.
+                    data["_task_errors"] = task_errors
+                    for f in TASK_FIELDS:
+                        data.pop(f, None)
                 out.append(data)
         except (json.JSONDecodeError, OSError):
             continue
@@ -88,9 +184,12 @@ def open_scenes_for_sheet(
     sheet: dict,
     pack_dir: Path | None = None,
     *,
-    max_open: int = 3,
+    max_open: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Scenes whose exit_predicate is not yet satisfied (open goals)."""
+    """Scenes whose exit_predicate is not yet satisfied (open goals).
+
+    max_open=None/0 → all open scenes (testing default). Positive int caps list.
+    """
     scenes = load_scenes(pack_dir)
     open_list: list[dict[str, Any]] = []
     for sc in scenes:
@@ -99,13 +198,13 @@ def open_scenes_for_sheet(
         if evaluate_exit_predicate(sheet, pred):
             continue
         open_list.append(sc)
-        if len(open_list) >= max_open:
+        if max_open and max_open > 0 and len(open_list) >= max_open:
             break
     return open_list
 
 
 def scene_hints_for_prompt(scenes: list[dict]) -> list[dict]:
-    """Compact scene hints for the AI (not full scripts)."""
+    """Scene hints for the AI teacher — full fields, no silent clipping."""
     out = []
     for sc in scenes:
         goal = sc.get("goal") or {}
@@ -115,10 +214,17 @@ def scene_hints_for_prompt(scenes: list[dict]) -> list[dict]:
             "id": sc.get("id"),
             "can_do": goal.get("can_do"),
             "target_forms": goal.get("target_forms"),
-            "model_lines": (inp.get("model_lines") or [])[:4],
+            "model_lines": list(inp.get("model_lines") or []),
             "image_concept": inp.get("image_concept"),
             "elicit": prod.get("elicit"),
             "transfer": (sc.get("transfer") or {}).get("elicit"),
             "notice_errors": (sc.get("notice") or {}).get("error_patterns"),
+            "goal": goal,
+            "title": sc.get("title") or sc.get("name"),
+            # ConvergentTaskRuntime fields (r6 Rank-4) — teacher-facing;
+            # tutor_private_info is private from the LEARNER, not the teacher.
+            "primary_exit": sc.get("primary_exit"),
+            "tutor_private_info": sc.get("tutor_private_info"),
+            "learner_must_obtain": sc.get("learner_must_obtain"),
         })
     return out

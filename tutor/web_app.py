@@ -41,12 +41,44 @@ STATIC_DIR = Path(__file__).resolve().parent / "web_static"
 COOKIE = "ml_teacher_sid"
 SESSION_TTL_SEC = 60 * 60 * 8  # 8h
 
+# Stale-process detection: a long-lived `python -m tutor.web_app` keeps OLD
+# code no matter what lands on disk (2026-07-28 incident: a July-26 process
+# silently ignored two days of fixes). /api/health compares disk mtimes to
+# process start so the UI can tell the operator to restart.
+_PROC_STARTED = time.time()
+
+
+def _newest_code_mtime() -> float:
+    newest = 0.0
+    root = Path(__file__).resolve().parent
+    for p in list(root.glob("*.py")) + list((root / "web_static").glob("*")):
+        try:
+            newest = max(newest, p.stat().st_mtime)
+        except OSError:
+            continue
+    return newest
+
+
+def _stamp(mtime: float) -> str:
+    return time.strftime("%Y%m%d-%H%M%S", time.localtime(mtime)) if mtime else "?"
+
+
+# Version of the code THIS process runs = newest file at import. Auto-derived
+# (manual version bumps rot — see the ?v= incident). Shown in the web header.
+CODE_VERSION = _stamp(_newest_code_mtime())
+
 _lock = threading.Lock()
 _sessions: dict[str, dict[str, Any]] = {}
 
 
+# Single source of truth for learner-message length: API validation and the
+# web composer's maxlength (served via /api/health). Abuse protection only,
+# never a composition limit (~2000 words).
+CHAT_MAX_CHARS = 12000
+
+
 class ChatIn(BaseModel):
-    message: str = Field(..., min_length=1, max_length=4000)
+    message: str = Field(..., min_length=1, max_length=CHAT_MAX_CHARS)
     input_mode: str = Field(default="text", pattern="^(text|speech)$")
 
 
@@ -57,11 +89,18 @@ class StartIn(BaseModel):
 
 
 class ResetIn(BaseModel):
+    # Spanish progress (ability sheet) and personal data (learner profile)
+    # have separate lifecycles: reset one without losing the other.
     reset_sheet: bool = False
+    clear_personal: bool = False
 
 
 class SpeakIn(BaseModel):
     text: str = Field(..., min_length=1, max_length=8000)
+    # Optional playback-rate hint (0.7–1.2). Defaults to config.TTS_RATE.
+    # Gemini has no numeric rate API field; drives the slow-style prefix
+    # (only at rate <= 0.8) + response header.
+    rate: float | None = Field(default=None, ge=0.7, le=1.2)
 
 
 def _purge_stale() -> None:
@@ -111,6 +150,14 @@ def _require(sid: str | None) -> tuple[str, ConversationalSession, dict]:
 
 def create_app() -> FastAPI:
     config.load_env()
+    # Teach images: generate-on-miss via Gemini when key is present
+    try:
+        from .image_gen import install_teach_image_generator
+
+        install_teach_image_generator()
+    except Exception as e:
+        print(f"teach image generator not installed: {type(e).__name__}: {e}", flush=True)
+
     app = FastAPI(title="ml_teacher conversational", version="0.2.0")
 
     if STATIC_DIR.is_dir():
@@ -143,16 +190,39 @@ def create_app() -> FastAPI:
             teach_cache = cache_stats()
         except Exception as e:
             teach_cache = {"error": f"{type(e).__name__}: {e}"}
+        try:
+            from .image_gen import image_gen_enabled, image_model
+
+            teach_cache["generate_enabled"] = image_gen_enabled()
+            teach_cache["image_model"] = image_model()
+        except Exception:
+            pass
+        newest = _newest_code_mtime()
         return {
             "ok": True,
             "model": config.MODEL,
             "teacher_mode": getattr(config, "TEACHER_MODE", "planned"),
             "teach_image_cache": teach_cache,
             "pack": config.DEFAULT_PACK_DIR.name,
+            "chat_max_chars": CHAT_MAX_CHARS,
+            "process_started": _PROC_STARTED,
+            "code_newest_mtime": newest,
+            # Running version vs what's on disk right now
+            "version": CODE_VERSION,
+            "disk_version": _stamp(newest),
+            # True = files on disk are newer than this process: RESTART needed
+            "stale_code": bool(newest > _PROC_STARTED + 1.0),
             "tts": {
                 "enabled": tts_mod.tts_enabled(),
                 "model": tts_mod.tts_model(),
                 "voice": tts_mod.tts_voice(),
+                # rate = server default (now 1.0); slower_rate kept for
+                # compat readers — the client Voice slider owns the speed.
+                "rate": float(getattr(config, "TTS_RATE", 1.0)),
+                "slower_rate": float(getattr(config, "TTS_SLOWER_RATE", 0.8)),
+                "model_try_gap_ms": int(getattr(config, "TTS_MODEL_TRY_GAP_MS", 400)),
+                # Gemini TTS path has no numeric speakingRate (client playbackRate)
+                "api_numeric_rate": False,
             },
             "stt": {
                 "enabled": stt_mod.stt_enabled(),
@@ -165,11 +235,31 @@ def create_app() -> FastAPI:
             },
         }
 
+    def _session_costs(request: Request):
+        """Cost tracker for the caller's session; ledger-only fallback if none."""
+        sid = request.cookies.get(COOKIE)
+        if sid and sid in _sessions:
+            sess = _sessions[sid].get("session")
+            if sess is not None and getattr(sess, "costs", None) is not None:
+                return sess.costs
+        from .costs import SessionCostTracker
+
+        return SessionCostTracker(source="web-nosession")
+
     @app.post("/api/audio/speak")
-    def audio_speak(body: SpeakIn):
-        """Neural TTS (Gemini). Returns audio/wav bytes."""
+    def audio_speak(body: SpeakIn, request: Request):
+        """Neural TTS (Gemini). Returns audio/wav bytes.
+
+        Optional body.rate (0.7–1.2) drives a short slow-style prefix only
+        when rate <= 0.8. API gap: Gemini generateContent TTS has no numeric
+        speakingRate; clients also set HTMLAudioElement.playbackRate.
+        """
+        rate = body.rate
+        if rate is None:
+            rate = float(getattr(config, "TTS_RATE", 1.0))
+        rate = max(0.7, min(1.2, float(rate)))
         try:
-            audio, mime, meta = tts_mod.synthesize(body.text)
+            audio, mime, meta = tts_mod.synthesize(body.text, rate=rate)
         except Exception as e:
             print(f"TTS failed: {type(e).__name__}: {e}", flush=True)
             raise HTTPException(
@@ -178,8 +268,16 @@ def create_app() -> FastAPI:
             ) from e
         print(
             f"TTS ok model={meta.get('model')} voice={meta.get('voice')} "
+            f"rate={meta.get('rate')} style_slow={meta.get('style_slow')} "
             f"bytes={len(audio)} chars={meta.get('chars')}",
             flush=True,
+        )
+        u = meta.get("usage") or {}
+        _session_costs(request).add_llm(
+            "tts",
+            str(meta.get("model") or ""),
+            input_tokens=u.get("input_tokens", 0),
+            output_tokens=u.get("output_tokens", 0),
         )
         return PlainResponse(
             content=audio,
@@ -188,12 +286,15 @@ def create_app() -> FastAPI:
                 "X-TTS-Provider": str(meta.get("provider") or ""),
                 "X-TTS-Voice": str(meta.get("voice") or ""),
                 "X-TTS-Model": str(meta.get("model") or ""),
+                "X-TTS-Rate": str(meta.get("rate") if meta.get("rate") is not None else rate),
+                "X-TTS-Api-Numeric-Rate": "0",
                 "Cache-Control": "no-store",
             },
         )
 
     @app.post("/api/audio/transcribe")
     async def audio_transcribe(
+        request: Request,
         file: UploadFile = File(...),
     ):
         """Server STT (Gemini audio understanding). Avoids Chrome Web Speech network errors."""
@@ -223,6 +324,13 @@ def create_app() -> FastAPI:
             f"STT bytes={len(raw)} mime={mime} empty={not bool(text)} "
             f"text={text!r} meta={meta}",
             flush=True,
+        )
+        u = meta.get("usage") or {}
+        _session_costs(request).add_llm(
+            "stt",
+            str(meta.get("model") or ""),
+            input_tokens=u.get("input_tokens", 0),
+            output_tokens=u.get("output_tokens", 0),
         )
         return {
             "text": text,
@@ -381,6 +489,19 @@ def create_app() -> FastAPI:
         _, session, _ = _require(sid)
         return session.sheet_public()
 
+    @app.get("/api/progress")
+    def get_progress(request: Request):
+        """Journey rail: session-clustered milestone events + live-state join
+        + countable header (docs/design-progression-view.md, as amended)."""
+        sid = request.cookies.get(COOKIE)
+        _, session, _ = _require(sid)
+        from .progress_ledger import build_progress_payload
+
+        return build_progress_payload(
+            session.sheet,
+            session_id=getattr(session, "progress_session_id", ""),
+        )
+
     @app.post("/api/session/reset")
     def reset(body: ResetIn, request: Request, response: Response):
         sid = request.cookies.get(COOKIE)
@@ -418,6 +539,8 @@ def create_app() -> FastAPI:
         sid, session = _get_or_create(None)
         if body.reset_sheet:
             session.reset_sheet()
+        if body.clear_personal:
+            session.reset_profile()
         turn = session.open_session()
         if turn.error:
             raise HTTPException(status_code=502, detail=turn.error)
@@ -433,6 +556,7 @@ def create_app() -> FastAPI:
             "sheet": sheet_pub,
             "session_id": sid,
             "sheet_reset": body.reset_sheet,
+            "personal_cleared": body.clear_personal,
             "fresh_learner": bool(body.reset_sheet),
         }
 

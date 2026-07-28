@@ -71,7 +71,11 @@ class TestSheetCore(unittest.TestCase):
         )
         visible, delta = extract_sheet_delta(raw)
         self.assertEqual(visible, "¡Hola!")
+        # Parser passes the block through …
         self.assertEqual(delta["identity"]["preferred_name"], "Sam")
+        # … but applying it can never store a name (capture disabled).
+        s = apply_delta(default_sheet(), delta)
+        self.assertIsNone((s.get("identity") or {}).get("preferred_name"))
 
     def test_process_turn_tool_delta(self):
         base = default_sheet()
@@ -93,7 +97,8 @@ class TestSheetCore(unittest.TestCase):
             tool_delta=delta,
         )
         self.assertEqual(vis, "¡Mucho gusto, Patrick!")
-        self.assertEqual(s["identity"]["preferred_name"], "Patrick")
+        # Personal-data capture disabled: the tool identity delta is dropped.
+        self.assertIsNone((s.get("identity") or {}).get("preferred_name"))
         # harness caps +0.25/turn from 0
         self.assertAlmostEqual(s["skills"]["IP-03"]["confidence"], 0.25)
         self.assertTrue(s["receptive"]["needs_english_scaffold"])
@@ -112,7 +117,8 @@ class TestSheetCore(unittest.TestCase):
             revised_sheet=revised,
         )
         self.assertEqual(vis, "Nice to meet you.")
-        self.assertEqual(s["identity"]["preferred_name"], "Alex")
+        # Personal-data capture disabled: AI rewrite identity is stripped.
+        self.assertIsNone((s.get("identity") or {}).get("preferred_name"))
         self.assertEqual(s["skills"]["IP-03"]["confidence"], 0.5)
         self.assertIn("ai_update", notes)
 
@@ -120,8 +126,47 @@ class TestSheetCore(unittest.TestCase):
         raw = "Nice.\n<sheet_delta>{\"identity\": {\"preferred_name\": \"Sam\"}}</sheet_delta>"
         s, vis, notes = process_turn(default_sheet(), "Me llamo Sam", raw)
         self.assertEqual(vis, "Nice.")
-        self.assertEqual(s["identity"]["preferred_name"], "Sam")
+        # Personal-data capture disabled: inline sheet_delta identity dropped.
+        self.assertIsNone((s.get("identity") or {}).get("preferred_name"))
         self.assertIn("rules_backup", notes)
+
+    def test_cap_tool_plus_observer_single_use(self):
+        """One utterance may not double-count: conf capped, one solid use."""
+        base = default_sheet()
+        delta = {
+            "reason": "said name",
+            "skills": {"IP-03": {"status": "emerging", "confidence": 0.4}},
+        }
+        s, _vis, _notes = process_turn(
+            base, "Me llama es Patrick", "¡Mucho gusto!", tool_delta=delta,
+        )
+        self.assertAlmostEqual(s["skills"]["IP-03"]["confidence"], 0.25)
+        self.assertEqual(s["skills"]["IP-03"]["solid_uses"], 1)
+
+    def test_erroneous_me_llama_es_earns_no_ser_credit(self):
+        """The 'es' in 'me llama es' is the error, not ser evidence."""
+        s, _vis, _notes = process_turn(
+            default_sheet(), "Me llama es Patrick", "¡Mucho gusto!")
+        self.assertEqual(
+            float((s["skills"].get("IP-07") or {}).get("confidence") or 0), 0.0)
+
+    def test_correct_soy_still_earns_ser_credit(self):
+        s, _vis, _notes = process_turn(
+            default_sheet(), "Yo soy Patrick", "¡Mucho gusto!")
+        self.assertGreater(
+            float((s["skills"].get("IP-07") or {}).get("confidence") or 0), 0.0)
+
+    def test_cap_stacked_bumps_cannot_reach_known(self):
+        """Stacked success bumps: conf <= start+0.25; known re-gated below gate."""
+        base = default_sheet()
+        base["skills"]["IP-03"] = {
+            "status": "emerging", "confidence": 0.5, "solid_uses": 1,
+        }
+        s, _vis, _notes = process_turn(base, "Me llamo Alex", "¡Mucho gusto!")
+        entry = s["skills"]["IP-03"]
+        self.assertLessEqual(entry["confidence"], 0.75)
+        self.assertLessEqual(entry["solid_uses"], 2)
+        self.assertNotEqual(entry["status"], "known")
 
     def test_apply_delta_receptive_and_sanitize(self):
         dirty = {
@@ -132,8 +177,10 @@ class TestSheetCore(unittest.TestCase):
         }
         clean = sanitize_tool_delta(dirty)
         self.assertNotIn("evil_key", clean)
+        # Personal-data capture disabled: identity is not a trusted key.
+        self.assertNotIn("identity", clean)
         s = apply_delta(default_sheet(), dirty)
-        self.assertEqual(s["identity"]["preferred_name"], "Pat")
+        self.assertIsNone((s.get("identity") or {}).get("preferred_name"))
         self.assertFalse(s["receptive"]["needs_english_scaffold"])
         self.assertEqual(s["skills"]["IP-01"]["status"], "emerging")
         # per-turn cap: 0 → at most +0.25
@@ -156,20 +203,20 @@ class TestSheetCore(unittest.TestCase):
         self.assertEqual(s["skills"]["IP-02"]["status"], "known")
         self.assertGreaterEqual(s["skills"]["IP-02"]["confidence"], 0.8)
 
-    def test_preserve_preferred_name(self):
+    def test_identity_stripped_never_preserved(self):
+        # Personal-data capture disabled 2026-07-28: _preserve_identity is
+        # now a STRIPPER — a pre-existing name is removed, never restored.
         base = default_sheet()
         base["identity"]["preferred_name"] = "Patrick"
         s = apply_delta(
             base,
             {
-                "identity": {"preferred_name": None, "engagement_notes": "x"},
+                "identity": {"preferred_name": "NewName", "engagement_notes": "x"},
                 "skills": {"IP-04": {"confidence": 0.3, "status": "emerging"}},
             },
         )
-        self.assertEqual(s["identity"]["preferred_name"], "Patrick")
-        # empty string also rejected
-        s2 = apply_delta(base, {"identity": {"preferred_name": ""}})
-        self.assertEqual(s2["identity"]["preferred_name"], "Patrick")
+        self.assertIsNone(s["identity"]["preferred_name"])
+        self.assertEqual(s["identity"].get("engagement_notes") or "", "")
 
     def test_limited_time_not_boredom(self):
         s = apply_rule_updates(
@@ -199,7 +246,8 @@ class TestSheetCore(unittest.TestCase):
         cleared = clear_session_scoped_affect(s)
         self.assertEqual(cleared["affect"]["energy"], "unknown")
         self.assertIsNone(cleared["affect"]["last_meta"])
-        self.assertEqual(cleared["identity"]["preferred_name"], "Patrick")
+        # Personal-data capture disabled: session open strips any residual name.
+        self.assertIsNone(cleared["identity"]["preferred_name"])
         # limited-time reason should be gone after recompute
         self.assertNotIn(
             "limited time",
@@ -246,6 +294,10 @@ class TestSheetCore(unittest.TestCase):
         self.assertEqual(t["name"], "update_character_sheet")
         self.assertIn("input_schema", t)
         self.assertIn("skills", t["input_schema"]["properties"])
+        # Personal-data capture disabled: no identity in schema or description.
+        self.assertNotIn("identity", t["input_schema"]["properties"])
+        self.assertNotIn("preferred_name", t["description"])
+        self.assertIn("Do not record learner names", t["description"])
 
     def test_parse_sheet_json(self):
         raw = '```json\n{"version": 2, "identity": {"preferred_name": "Pat"}}\n```'
@@ -253,6 +305,8 @@ class TestSheetCore(unittest.TestCase):
         self.assertEqual(d["identity"]["preferred_name"], "Pat")
         n = normalize_sheet(d)
         self.assertIn("IP-01", n["skills"])
+        # Personal-data capture disabled: normalize strips identity data.
+        self.assertIsNone(n["identity"]["preferred_name"])
 
     def test_greet_known_shifts_next_best(self):
         s = default_sheet()
@@ -269,9 +323,12 @@ class TestSheetCore(unittest.TestCase):
         self.assertIn("Can-dos", t)
         self.assertIn("IP-01", t)
 
-    def test_me_llama_es_captures_name(self):
+    def test_me_llama_es_earns_ip03_but_stores_no_name(self):
+        # Personal-data capture disabled (2026-07-28): the introduction
+        # surface form still earns IP-03 ability credit, but no name is
+        # ever written to the sheet.
         s = apply_rule_updates(default_sheet(), "estoy bien. Me llama es Patrick")
-        self.assertEqual(s["identity"]["preferred_name"], "Patrick")
+        self.assertIsNone((s.get("identity") or {}).get("preferred_name"))
         self.assertGreater(s["skills"]["IP-03"]["confidence"], 0.1)
 
     def test_scaffold_stays_on_with_english_meta(self):

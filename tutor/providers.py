@@ -16,6 +16,8 @@ from typing import Any
 
 import httpx
 
+from . import config as _cfg
+
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
 
 _STOP_MAP = {
@@ -230,6 +232,11 @@ class _GeminiMessages:
             "max_tokens": max_tokens,
             "messages": oai_messages,
         }
+        # Thinking models share max_tokens between reasoning and visible text;
+        # an effort hint keeps reasoning from starving the reply.
+        effort = getattr(_cfg, "GEMINI_REASONING_EFFORT", None)
+        if effort:
+            body["reasoning_effort"] = effort
         oai_tools = anthropic_tools_to_openai(tools)
         if oai_tools:
             body["tools"] = oai_tools
@@ -253,13 +260,18 @@ class _GeminiMessages:
         blocks, stop = parse_openai_message_to_anthropic(
             msg, choice.get("finish_reason"))
         usage = data.get("usage", {})
+        # Billing extras: reasoning tokens charge at the OUTPUT rate but are
+        # not in completion_tokens; cached prompt tokens bill at the cache rate.
+        _cdet = usage.get("completion_tokens_details") or {}
+        _pdet = usage.get("prompt_tokens_details") or {}
         return SimpleNamespace(
             content=blocks,
             stop_reason=stop,
             usage=SimpleNamespace(
                 input_tokens=usage.get("prompt_tokens", 0),
                 output_tokens=usage.get("completion_tokens", 0),
-                cache_read_input_tokens=0,
+                thinking_tokens=_cdet.get("reasoning_tokens", 0) or 0,
+                cache_read_input_tokens=_pdet.get("cached_tokens", 0) or 0,
                 cache_creation_input_tokens=0,
             ),
         )
