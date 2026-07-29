@@ -1,6 +1,32 @@
 """Mechanical checks for ConvSession smoke trajectories (no LLM judging).
 
 Findings prefixed WARN are advisory; any non-WARN finding fails the trajectory.
+
+Typed-event migration (Phase 3 batch 2, docs/reviews-architecture-refactor.md)
+------------------------------------------------------------------------------
+run_conv_smoke records each turn's serialized TurnEvent timeline under
+``turn["events"]`` (kind/key/payload/seq/stage — tutor/turn_events.py).  Every
+checker that historically parsed note-string prefixes now PREFERS the typed
+events and falls back to the note strings ONLY when a turn record carries no
+``events`` key — eval results are historical artifacts and old recorded runs
+must stay replayable.
+
+DECLARED TIGHTENING on the event path (accidental-substring false positives
+the string scans could produce are impossible against typed kinds):
+  - ``recast_or_gate_attempt``: the joined-notes substring scans
+    ("output_gate" / "missing_recast") become precise checks — any of the six
+    ``output_gate*`` event KINDS, and the ``gate:missing_recast`` fault id
+    inside gate-fail event payloads.  A payload that merely CONTAINED either
+    substring (e.g. a ``why=``/reason text mentioning "output_gate") no
+    longer counts as gate evidence.
+  - ``due_elicit_fired`` / ``introduce_scaffolded`` / ``task_goal_offered``:
+    substring scans over whole notes become event-kind checks — a payload
+    accidentally containing "due_elicit_offered" / "introduce_planned:" /
+    "task_goal_offered:" no longer satisfies the expectation.
+  - ``_mode`` / ``phase_adherence`` / ``uptake_flag_honored`` /
+    ``progress_milestones_fired``: same answers by construction (their
+    string parses were prefix-anchored); the event path simply reads
+    kind/key/payload instead of splitting strings.
 """
 
 from __future__ import annotations
@@ -12,6 +38,39 @@ def _turns(result: dict) -> list[dict]:
     return list(result.get("turns") or [])
 
 
+def _events(turn: dict) -> list[dict] | None:
+    """The turn's serialized TurnEvent timeline, or None for records made
+    before Phase 3 batch 2 (replay fallback → note strings)."""
+    ev = turn.get("events")
+    if not isinstance(ev, list):
+        return None
+    return [e for e in ev if isinstance(e, dict)]
+
+
+def _events_of(turn: dict, *kinds: str) -> list[dict] | None:
+    evs = _events(turn)
+    if evs is None:
+        return None
+    want = set(kinds)
+    return [e for e in evs if str(e.get("kind")) in want]
+
+
+# The six gate event kinds (tutor/turn_events.py OUTPUT_GATE_*).
+_GATE_EVENT_KINDS = (
+    "output_gate_ok",
+    "output_gate_soft_fail",
+    "output_gate_fail",
+    "output_gate_repaired",
+    "output_gate_still_fail",
+    "output_gate_error",
+)
+_GATE_FAIL_EVENT_KINDS = (
+    "output_gate_soft_fail",
+    "output_gate_fail",
+    "output_gate_still_fail",
+)
+
+
 def _mode(turn: dict) -> str | None:
     parts = turn.get("parts") or {}
     m = parts.get("mode")
@@ -20,7 +79,10 @@ def _mode(turn: dict) -> str | None:
     md = parts.get("mode_decision") or {}
     if isinstance(md, dict) and md.get("mode"):
         return str(md["mode"])
-    # notes fallback: mode=foo
+    # typed events (preferred), then legacy notes fallback: mode=foo
+    for e in _events_of(turn, "mode") or []:
+        if e.get("key"):
+            return str(e["key"])
     for n in turn.get("notes") or []:
         s = str(n)
         if s.startswith("mode="):
@@ -103,6 +165,34 @@ def teach_moves(traj: dict, result: dict) -> list[str]:
     return findings
 
 
+def open_english_orientation(traj: dict, result: dict) -> list[str]:
+    """True-zero open must carry English support (incident 2026-07-28).
+
+    Mechanical, applies only when expect.open_english is set (blank-sheet
+    trajectories): the open reply must show at least one English hit from
+    the gate's closed lexicon OR a parenthetical gloss containing letters
+    (the app's gloss convention). The failing shape it catches is exactly
+    the incident: a 100%-Spanish opening at a learner with a wiped sheet.
+    """
+    if not (traj.get("expect") or {}).get("open_english"):
+        return []
+    turns = _turns(result)
+    if not turns:
+        return ["no open turn recorded"]
+    visible = str(turns[0].get("visible") or turns[0].get("reply") or "")
+    from tutor.output_gate import spanish_token_ratio
+
+    has_en_lexicon = spanish_token_ratio(visible) < 1.0
+    has_gloss_paren = bool(re.search(r"\([^)]*[A-Za-z]{2,}[^)]*\)", visible))
+    if not (has_en_lexicon or has_gloss_paren):
+        return [
+            "turn 0: true-zero open shows no English orientation "
+            "(no English lexicon hit, no gloss parenthetical): "
+            + visible[:120].replace("\n", " ")
+        ]
+    return []
+
+
 def gate_contract(traj: dict, result: dict) -> list[str]:
     specs = (traj.get("expect") or {}).get("gate") or []
     turns = _turns(result)
@@ -133,7 +223,13 @@ def gate_contract(traj: dict, result: dict) -> list[str]:
 
 
 def recast_or_gate_attempt(traj: dict, result: dict) -> list[str]:
-    """For cf_recast turns: either recast text present or gate flagged it."""
+    """For cf_recast turns: either recast text present or gate flagged it.
+
+    Event path (preferred): a gate signal is any of the six ``output_gate*``
+    event KINDS or a ``missing_recast`` fault id inside a gate-fail event's
+    payload — TIGHTENED vs the legacy joined-notes substring scan, which an
+    unrelated payload containing "output_gate"/"missing_recast" could
+    satisfy accidentally (declared improvement, module docstring)."""
     findings = []
     for i, t in enumerate(_turns(result)):
         if _mode(t) != "cf_recast":
@@ -141,14 +237,23 @@ def recast_or_gate_attempt(traj: dict, result: dict) -> list[str]:
         parts = _parts(t)
         if _truthy(parts, "recast"):
             continue
-        notes = " ".join(str(n) for n in (t.get("notes") or []))
         gate_faults = _gate(t).get("faults") or []
         if "gate:missing_recast" in gate_faults:
             findings.append(
                 f"WARN turn {i}: cf_recast still missing <recast> after gate"
             )
             continue
-        if "output_gate" in notes or "missing_recast" in notes:
+        gate_evs = _events_of(t, *_GATE_EVENT_KINDS)
+        if gate_evs is not None:
+            gate_signal = bool(gate_evs) or any(
+                "missing_recast" in str(f)
+                for e in _events_of(t, *_GATE_FAIL_EVENT_KINDS) or []
+                for f in (e.get("payload") or {}).get("faults") or []
+            )
+        else:  # replay fallback: old records without events
+            notes = " ".join(str(n) for n in (t.get("notes") or []))
+            gate_signal = "output_gate" in notes or "missing_recast" in notes
+        if gate_signal:
             findings.append(
                 f"WARN turn {i}: cf_recast without recast part (gate notes only)"
             )
@@ -196,11 +301,15 @@ def uptake_flag_honored(traj: dict, result: dict) -> list[str]:
     review (no gate until detection precision is measured)."""
     findings = []
     for i, t in enumerate(_turns(result)):
-        toks = [
-            str(n).split(":", 1)[1]
-            for n in (t.get("notes") or [])
-            if str(n).startswith("uptake_flagged:")
-        ]
+        evs = _events_of(t, "uptake_flagged")
+        if evs is not None:  # typed events (preferred)
+            toks = [str(e.get("key") or "") for e in evs if e.get("key")]
+        else:  # replay fallback
+            toks = [
+                str(n).split(":", 1)[1]
+                for n in (t.get("notes") or [])
+                if str(n).startswith("uptake_flagged:")
+            ]
         if not toks:
             continue
         parts = _parts(t)
@@ -354,7 +463,12 @@ def due_elicit_fired(traj: dict, result: dict) -> list[str]:
     if not (traj.get("expect") or {}).get("due_elicit"):
         return []
     for t in _turns(result):
-        for n in t.get("notes") or []:
+        evs = _events_of(t, "due_elicit_offered")
+        if evs is not None:  # typed events (preferred; kind-precise)
+            if evs:
+                return []
+            continue
+        for n in t.get("notes") or []:  # replay fallback (substring scan)
             if "due_elicit_offered" in str(n):
                 return []
     return [
@@ -373,11 +487,19 @@ def progress_milestones_fired(traj: dict, result: dict) -> list[str]:
     want = list((traj.get("expect") or {}).get("progress_milestones") or [])
     if not want:
         return []
-    notes = [
-        str(n)
-        for t in _turns(result)
-        for n in (t.get("notes") or [])
-    ]
+    # Per turn: typed events (preferred; identical answers — the string
+    # match was already exact) with note-string replay fallback.
+    notes: list[str] = []
+    for t in _turns(result):
+        evs = _events_of(t, "progress_milestone")
+        if evs is not None:
+            notes.extend(
+                "progress_milestone:"
+                f"{(e.get('payload') or {}).get('milestone')}:{e.get('key')}"
+                for e in evs
+            )
+        else:
+            notes.extend(str(n) for n in (t.get("notes") or []))
     out: list[str] = []
     for w in want:
         tag = f"progress_milestone:{w}"
@@ -407,7 +529,12 @@ def introduce_scaffolded(traj: dict, result: dict) -> list[str]:
     if not (traj.get("expect") or {}).get("introduce_planned"):
         return []
     for t in _turns(result):
-        for n in t.get("notes") or []:
+        evs = _events_of(t, "introduce_planned")
+        if evs is not None:  # typed events (preferred; kind-precise)
+            if evs:
+                return []
+            continue
+        for n in t.get("notes") or []:  # replay fallback (substring scan)
             if "introduce_planned:" in str(n):
                 return []
     return [
@@ -428,7 +555,12 @@ def task_goal_offered(traj: dict, result: dict) -> list[str]:
     if not (traj.get("expect") or {}).get("task_instructions_offered"):
         return []
     for t in _turns(result):
-        for n in t.get("notes") or []:
+        evs = _events_of(t, "task_goal_offered", "task_slot_filled")
+        if evs is not None:  # typed events (preferred; kind-precise)
+            if evs:
+                return []
+            continue
+        for n in t.get("notes") or []:  # replay fallback (substring scan)
             s = str(n)
             if "task_goal_offered:" in s or "task_slot_filled:" in s:
                 return []
@@ -473,11 +605,16 @@ def phase_adherence(traj: dict, result: dict) -> list[str]:
             allowed = [allowed]
         total += 1
         got = None
-        for note in turns[i].get("notes") or []:
-            s = str(note)
-            if s.startswith("activity="):
-                got = s.split("=", 1)[1].strip()
-                break
+        evs = _events_of(turns[i], "activity")
+        if evs is not None:  # typed events (preferred)
+            if evs:
+                got = str(evs[0].get("key") or "").strip() or None
+        else:  # replay fallback
+            for note in turns[i].get("notes") or []:
+                s = str(note)
+                if s.startswith("activity="):
+                    got = s.split("=", 1)[1].strip()
+                    break
         if got in set(allowed):
             matching += 1
         else:
@@ -515,6 +652,7 @@ CHECKS = {
         no_turn_error,
         mode_sequence,
         teach_moves,
+        open_english_orientation,
         gate_contract,
         recast_or_gate_attempt,
         recast_no_confirm_praise,

@@ -33,7 +33,7 @@ We still ship Vercel config for easy previews and HTTP tutor demos, with auto-de
 | `ANTHROPIC_API_KEY` | Optional Claude models |
 | `TUTOR_MODEL` | e.g. `gemini-3.6-flash` |
 | `FOCUS_MODEL` | e.g. `grok-3-mini` or `off` |
-| `TEACHER_MODE` | `planned` |
+| `TEACHER_MODE` | `planned` (only supported value family; `rules`/`legacy` deleted — E4/E4b 2026-07-28) |
 | `TTS_ENABLED` | `true` / `false` |
 | `STT_ENABLED` | prefer `false` or browser-side on Vercel |
 

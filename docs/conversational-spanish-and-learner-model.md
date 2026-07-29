@@ -1,6 +1,6 @@
 # Conversational Spanish + Learner Character Sheet
 
-**Status:** Direction doc — **plan/realize controller TABLED** (kept, not deleted)  
+**Status:** Direction doc — **plan/realize controller RETIRED** (code deleted 2026-07-28; git history is the archive)  
 **Date:** 2026-07-23  
 **Authors:** project owner + session synthesis  
 

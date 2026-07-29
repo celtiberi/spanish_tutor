@@ -1,0 +1,86 @@
+{
+  "_comment": "Asset SIDECAR (Phase 5 batch 1, docs/reviews-architecture-refactor.md; PEDAGOGY §1.1a). Image/caption/visual metadata keyed by association_table.json keys — NEVER a second concept list: every key here must be a table key or listed in migration_deprecations.json. fold_asset_key(key) yields the legacy CONCEPT_LEXICON asset id (cache filenames unchanged). aliases preserve historical free-text lookups. Loaded by tutor/teach_assets.load_asset_sidecar; this batch the loader overlays CONCEPT_LEXICON (parity-pinned identical); batch 2 deletes the in-code lexicon.",
+  "hola": {
+    "form": "Hola",
+    "caption": "greeting — hello / wave",
+    "visual": 0.95,
+    "kind": "gesture",
+    "aliases": ["hola", "hello", "hi ", "buenos dias", "buenas"],
+    "image_prompt": "Friendly educational illustration: person waving hello. No text, no letters. Flat illustration, warm colors.",
+    "file": "hola.jpg"
+  },
+  "estoy bien": {
+    "form": "Estoy bien",
+    "caption": "I am fine / feeling well",
+    "visual": 0.85,
+    "kind": "state",
+    "aliases": ["estoy bien", "estoy muy bien", "todo bien"],
+    "image_prompt": "Friendly educational illustration: person looking fine and at ease, thumbs up or calm smile. No text. Flat illustration, warm colors.",
+    "file": "estoy_bien.jpg"
+  },
+  "me llamo": {
+    "form": "Me llamo…",
+    "caption": "my name is… (this is me)",
+    "visual": 0.9,
+    "kind": "person",
+    "aliases": ["me llamo", "como te llamas", "cómo te llamas", "my name"],
+    "image_prompt": "Friendly educational illustration: person pointing to own chest (this is me / my name). No text. Flat illustration, warm colors.",
+    "file": "me_llamo.jpg"
+  },
+  "soy de": {
+    "form": "Soy de…",
+    "caption": "I am from… (origin / place)",
+    "visual": 0.8,
+    "kind": "place",
+    "aliases": ["soy de", "de donde eres", "dónde eres", "donde eres", "from"],
+    "image_prompt": "Friendly educational illustration: simple world map with a person pointing to a place (I am from here). No text, no country names. Flat illustration, warm colors."
+  },
+  "café": {
+    "form": "el café",
+    "caption": "coffee",
+    "visual": 0.95,
+    "kind": "food",
+    "aliases": ["café", "cafe", "coffee"],
+    "image_prompt": "Friendly educational illustration: a cup of coffee on a table. No text. Flat illustration, warm colors."
+  },
+  "bote": {
+    "form": "el bote",
+    "caption": "boat",
+    "visual": 0.95,
+    "kind": "object",
+    "aliases": ["bote", "barco", "boat"],
+    "image_prompt": "Friendly educational illustration: a small boat on calm water. No text. Flat illustration, warm colors."
+  },
+  "música": {
+    "form": "la música",
+    "caption": "music",
+    "visual": 0.85,
+    "kind": "activity",
+    "aliases": ["música", "musica", "music"],
+    "image_prompt": "Friendly educational illustration: person listening to music with notes floating nearby. No text. Flat illustration, warm colors."
+  },
+  "comida": {
+    "form": "la comida",
+    "caption": "food / meal",
+    "visual": 0.9,
+    "kind": "food",
+    "aliases": ["comida", "food", "comer"],
+    "image_prompt": "Friendly educational illustration: a simple tasty meal on a plate. No text. Flat illustration, warm colors."
+  },
+  "me gusta": {
+    "form": "Me gusta…",
+    "caption": "I like… (preference)",
+    "visual": 0.7,
+    "kind": "state",
+    "aliases": ["me gusta", "te gusta", "qué te gusta"],
+    "image_prompt": "Friendly educational illustration: person smiling happily at something they like (heart or warm expression). No text. Flat illustration."
+  },
+  "río": {
+    "form": "el río",
+    "caption": "river",
+    "visual": 0.9,
+    "kind": "place",
+    "aliases": ["río", "rio", "river"],
+    "image_prompt": "Friendly educational illustration: a calm river landscape. No text. Flat illustration, warm colors."
+  }
+}

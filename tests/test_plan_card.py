@@ -1,28 +1,24 @@
-"""PlanCard gate, optional rules planner, session memory, teach images."""
+"""AI tutor context, session memory, teach images (PlanCard as image DTO).
+
+The rules planner/gate runtime and its tests were DELETED (E4,
+docs/reviews-architecture-refactor.md, 2026-07-28); PlanCard/PlanTargets
+survive only as the live image-decision DTO on the AI path.
+"""
 
 import unittest
 
 from tutor.character_sheet import default_sheet
 from tutor.executor import build_ai_tutor_user_message
 from tutor.observe import build_observations, probe_signals
-from tutor.plan_card import PlanCard, PlanTargets, fallback_diagnostic_card, gate_plan_card
-from tutor.rules_planner import plan_turn
+from tutor.plan_card import PlanCard, PlanTargets
 from tutor.session_memory import SessionMemory
 from tutor.teach_assets import (
     assets_for_ai_turn,
-    assets_for_plan,
     cache_lookup,
     concept_in_text,
     decide_teach_image,
     extract_concept_candidates,
 )
-
-
-class TestPlanCard(unittest.TestCase):
-    def test_gate_accepts_open(self):
-        card = fallback_diagnostic_card()
-        g = gate_plan_card(card)
-        self.assertTrue(g.ok, g.errors)
 
 
 class TestObserve(unittest.TestCase):
@@ -80,29 +76,21 @@ class TestAiTutorContext(unittest.TestCase):
             AI_TUTOR_SYSTEM,
         )
 
+    def test_true_zero_english_exception_in_system_prompt(self):
+        # Incident 2026-07-28: reset beginner got zero English. The lifeline
+        # stance must carry an explicit true-zero exception (PEDAGOGY P1,
+        # §2.3) while keeping the English-wall ban intact.
+        from tutor.executor import AI_TUTOR_SYSTEM
 
-class TestRulesPlannerOptional(unittest.TestCase):
-    """Rules mode kept for experiments — not the product default."""
-
-    def test_open_comm(self):
-        card = plan_turn(default_sheet(), is_open=True)
-        self.assertTrue(card.try_prompt)
-
-    def test_yo_esta_recast(self):
-        card = plan_turn(default_sheet(), learner="Yo está bien")
-        self.assertEqual(card.move, "recast_retry")
-
-    def test_free_chat_gate_ok(self):
-        mem = SessionMemory()
-        mem.shown = {"greet", "estoy", "name", "origin"}
-        mem.asked = {"ask_how", "ask_name", "ask_origin"}
-        card = plan_turn(
-            default_sheet(),
-            learner="Me gusta el café",
-            memory=mem,
+        self.assertIn("English is a lifeline only", AI_TUTOR_SYSTEM)
+        self.assertIn(
+            "EXCEPTION — true-zero learner (blank sheet)", AI_TUTOR_SYSTEM
         )
-        g = gate_plan_card(card)
-        self.assertTrue(g.ok, g.errors)
+        self.assertIn(
+            "gloss on every Spanish item until the", AI_TUTOR_SYSTEM
+        )
+        # Wall ban stays
+        self.assertIn("walls stay banned", AI_TUTOR_SYSTEM.lower())
 
 
 class TestSessionMemory(unittest.TestCase):
@@ -137,8 +125,17 @@ class TestImageDecision(unittest.TestCase):
         d = decide_teach_image(card, images_shown=set(), session_turns=0)
         self.assertTrue(d.want)
         self.assertEqual(d.concept, "hola")
-        imgs = assets_for_plan(card, images_shown=set(), session_turns=0)
+        # Asset resolution retargeted to the live AI path (assets_for_plan
+        # deleted with the rules runtime — E4, option (b)).
+        imgs, d2 = assets_for_ai_turn(
+            is_open=True,
+            blank_sheet=True,
+            images_shown=set(),
+            session_turns=0,
+        )
+        self.assertTrue(d2.want)
         self.assertTrue(imgs)
+        self.assertEqual(imgs[0]["concept"], "hola")
         self.assertEqual(cache_lookup("hola")["cache"], "hit")
 
     def test_ai_turn_open_image(self):
@@ -251,8 +248,18 @@ class TestImageDecision(unittest.TestCase):
         self.assertEqual(d.reason, "skip_rate_limit")
 
     def test_recast_abstract_no_image(self):
-        card = plan_turn(default_sheet(), learner="Yo está bien")
-        self.assertEqual(card.move, "recast_retry")
+        # Hand-built recast card (plan_turn died with the rules planner —
+        # E4): a grammar repair with no concrete visual concept gets no image.
+        card = PlanCard(
+            phase="teach_form",
+            move="recast_retry",
+            models=["Yo **estoy** bien."],
+            try_prompt="¿Cómo estás?",
+            targets=PlanTargets(
+                form_id="present_estar_person", concepts=[]
+            ),
+            reason="recast:yo_esta",
+        )
         d = decide_teach_image(card, images_shown=set(), session_turns=2, turns_since_image=5)
         self.assertFalse(d.want)
 

@@ -187,19 +187,37 @@ class TestSheetCore(unittest.TestCase):
         self.assertAlmostEqual(s["skills"]["IP-01"]["confidence"], 0.25)
 
     def test_confidence_cap_and_known_gate(self):
-        """One tool turn cannot jump 0 → known 0.9; known needs uses + conf."""
+        """One tool turn cannot jump 0 → known 0.9; known needs OBSERVED uses.
+
+        CHAR-BUG-008 fix (2026-07-29): the old version of this test pinned
+        a 4-call claim climb to known (each merge minted a solid use via
+        the rose/promoted heuristic). Uses now come only from code
+        observation, so claim-only climbing stalls at emerging forever and
+        promotion lands only once the sheet's own recorded uses reach the
+        gate.
+        """
         s = apply_delta(
             default_sheet(),
             {"skills": {"IP-02": {"status": "known", "confidence": 0.9}}},
         )
         self.assertLessEqual(s["skills"]["IP-02"]["confidence"], 0.25)
         self.assertNotEqual(s["skills"]["IP-02"]["status"], "known")
-        # Climb over several solid updates
+        # Claim-only climbing: conf ceilings at 0.75, status stays
+        # emerging, zero uses minted — the gate is uncrossable by claim.
         for _ in range(4):
             s = apply_delta(
                 s,
                 {"skills": {"IP-02": {"status": "known", "confidence": 0.95}}},
             )
+        self.assertEqual(s["skills"]["IP-02"]["status"], "emerging")
+        self.assertEqual(s["skills"]["IP-02"]["solid_uses"], 0)
+        self.assertLessEqual(s["skills"]["IP-02"]["confidence"], 0.75)
+        # Once code observation supplies the uses, the same claim promotes.
+        s["skills"]["IP-02"]["solid_uses"] = 2  # code-observed (_bump_status)
+        s = apply_delta(
+            s,
+            {"skills": {"IP-02": {"status": "known", "confidence": 0.95}}},
+        )
         self.assertEqual(s["skills"]["IP-02"]["status"], "known")
         self.assertGreaterEqual(s["skills"]["IP-02"]["confidence"], 0.8)
 
@@ -352,6 +370,354 @@ class TestSheetCore(unittest.TestCase):
             s = load_sheet(p)
             self.assertGreaterEqual(s["skills"]["IP-01"]["confidence"], 0.9)
             self.assertIn("IP-03", s["skills"])
+
+
+class TestAbilityStateMachine(unittest.TestCase):
+    """Phase 1.5 batch 2 (machine B): explicit ability-axis machine.
+
+    Write-path formalization only — field outcomes are unchanged (goldens
+    pin them); the machine validates band edges per via and rejects
+    cross-axis (schedule-field) writes, the mirror of machine A's _write
+    allowlist. The known gate stays in the writers, never the edge set
+    (adjudication: "KNOWN-gate evidence stays a gate, not an enum").
+    """
+
+    def test_ability_band_classification(self):
+        from tutor.character_sheet import STATUSES, ability_band
+
+        self.assertEqual(ability_band(None), "unknown")
+        self.assertEqual(ability_band({}), "unknown")
+        self.assertEqual(ability_band({"confidence": 0.9}), "unknown")
+        self.assertEqual(ability_band({"status": "Known"}), "unknown")  # strict
+        self.assertEqual(ability_band({"status": "durable"}), "unknown")
+        for st in STATUSES:
+            self.assertEqual(ability_band({"status": st}), st)
+
+    def test_band_vocabulary_matches_reality_not_sketch(self):
+        """Sketch said unknown/fragile/emerging/known; code has 5 statuses."""
+        from tutor.character_sheet import (
+            ABILITY_BANDS,
+            ABILITY_TRANSITIONS,
+            STATUSES,
+        )
+
+        self.assertEqual(ABILITY_BANDS, STATUSES)
+        self.assertEqual(set(ABILITY_TRANSITIONS), set(STATUSES))
+        self.assertIn("fragile", ABILITY_BANDS)   # real, not sketch-only
+        self.assertIn("blocked", ABILITY_BANDS)   # sketch omitted it
+
+    def test_union_graph_matches_via_edges(self):
+        from tutor.character_sheet import (
+            ABILITY_TRANSITIONS,
+            _ABILITY_VIA_EDGES,
+        )
+
+        derived = {}
+        for edges in _ABILITY_VIA_EDGES.values():
+            for f, t in edges:
+                derived.setdefault(f, set()).add(t)
+        self.assertEqual(derived, ABILITY_TRANSITIONS)
+
+    def test_bump_cannot_mint_blocked_and_escapes_it(self):
+        from tutor.character_sheet import _ABILITY_VIA_EDGES, _bump_status
+
+        self.assertFalse(
+            any(t == "blocked" for _f, t in _ABILITY_VIA_EDGES["bump"])
+        )
+        e = _bump_status({"status": "blocked", "confidence": 0.3}, success=True)
+        self.assertEqual(e["status"], "emerging")
+        e = _bump_status({"status": "blocked", "confidence": 0.3}, success=False)
+        self.assertEqual(e["status"], "unknown")
+
+    def test_down_edges_are_real(self):
+        """Demotion exists in code: known → fragile/unknown (bump fail),
+        known → emerging (_cap_turn_confidence re-gate)."""
+        from tutor.character_sheet import _bump_status, _cap_turn_confidence
+
+        e = _bump_status(
+            {"status": "known", "confidence": 0.82, "solid_uses": 3},
+            success=False,
+        )
+        self.assertEqual(e["status"], "fragile")
+        e = _bump_status(
+            {"status": "known", "confidence": 0.3, "solid_uses": 3},
+            success=False,
+        )
+        self.assertEqual(e["status"], "unknown")
+        # Cap re-gate: known with uses below gate demotes to emerging.
+        final = {"skills": {"IP-01": {
+            "status": "known", "confidence": 0.9, "solid_uses": 0,
+        }}}
+        start = {"skills": {"IP-01": {
+            "status": "known", "confidence": 0.9, "solid_uses": 0,
+        }}}
+        out = _cap_turn_confidence(start, start, final)
+        self.assertEqual(out["skills"]["IP-01"]["status"], "emerging")
+
+    def test_known_self_loop_survives_failure_at_gate(self):
+        from tutor.character_sheet import _bump_status
+
+        e = _bump_status(
+            {"status": "known", "confidence": 1.0, "solid_uses": 3},
+            success=False,
+        )
+        self.assertEqual(e["status"], "known")  # conf still >= gate
+
+    def test_unknown_success_skips_fragile(self):
+        """The bands below known are evidence-direction siblings, not
+        ordered rungs: first success goes straight to emerging."""
+        from tutor.character_sheet import _bump_status
+
+        e = _bump_status({"status": "unknown", "confidence": 0.0}, success=True)
+        self.assertEqual(e["status"], "emerging")
+
+    def test_cap_and_normalize_vias_are_narrow(self):
+        from tutor.character_sheet import _ABILITY_VIA_EDGES, STATUSES
+
+        self.assertEqual(
+            _ABILITY_VIA_EDGES["cap"],
+            frozenset({(s, s) for s in STATUSES} | {("known", "emerging")}),
+        )
+        self.assertEqual(
+            _ABILITY_VIA_EDGES["normalize"],
+            frozenset((s, s) for s in STATUSES),
+        )
+
+    def test_transition_rejects_unknown_via_and_illegal_edge(self):
+        from tutor.character_sheet import (
+            IllegalAbilityTransition,
+            ability_transition,
+        )
+
+        with self.assertRaises(ValueError):
+            ability_transition({}, {"status": "emerging"}, via="teleport")
+        # unknown → known is not a "cap" edge (cap only clips/demotes)
+        with self.assertRaises(IllegalAbilityTransition) as ctx:
+            ability_transition(
+                {"status": "unknown"}, {"status": "known"},
+                via="cap", evidence={"probe": "x"},
+            )
+        self.assertIn("probe", str(ctx.exception))  # evidence in message
+        # emerging → known is not a "normalize" edge (coercion only)
+        with self.assertRaises(IllegalAbilityTransition):
+            ability_transition(
+                {"status": "emerging"}, {"status": "known"}, via="normalize",
+            )
+
+    def test_ability_writer_cannot_move_schedule_fields(self):
+        """BUILD 4 mirror: machine A already restores ability fields; machine
+        B must reject schedule-field moves (changed, added, or removed)."""
+        from tutor.character_sheet import ability_transition
+
+        laddered = {
+            "status": "emerging", "confidence": 0.4,
+            "next_due": "2027-01-01", "interval_days": 3,
+            "introduced_at": "2026-07-01",
+        }
+        for staged in (
+            {**laddered, "next_due": "2027-06-01"},          # changed
+            {**laddered, "first_seen": "2026-07-01"},        # added
+            {k: v for k, v in laddered.items() if k != "next_due"},  # removed
+        ):
+            with self.assertRaises(ValueError) as ctx:
+                ability_transition(laddered, staged, via="bump")
+            self.assertIn("honesty law", str(ctx.exception))
+        # Pass-through of unchanged schedule fields stays legal.
+        out = ability_transition(
+            laddered, {**laddered, "confidence": 0.5}, via="bump",
+        )
+        self.assertEqual(out["next_due"], "2027-01-01")
+
+    def test_cross_axis_symmetry_both_directions(self):
+        """One place that shows BOTH guards: schedule writers cannot touch
+        ability fields (machine A) and ability writers cannot touch
+        schedule fields (machine B)."""
+        from tutor.character_sheet import ability_transition
+        from tutor.retrieval_scheduler import _write
+
+        for illegal in (
+            {"confidence": 0.9}, {"status": "known"}, {"solid_uses": 3},
+        ):
+            with self.assertRaises(ValueError):
+                _write({"status": "unknown", "confidence": 0.0}, illegal)
+        with self.assertRaises(ValueError):
+            ability_transition(
+                {"status": "unknown"},
+                {"status": "emerging", "next_due": "2027-01-01"},
+                via="bump",
+            )
+
+    def test_ability_fields_match_scheduler_protected(self):
+        """Cross-module sync pin (test, not import — the scheduler stays
+        stdlib-only): the two axes name the same field sets."""
+        from tutor import retrieval_scheduler as rs
+        from tutor.character_sheet import (
+            ABILITY_FIELDS,
+            SCHEDULE_ENTRY_FIELDS,
+        )
+
+        self.assertEqual(ABILITY_FIELDS, rs._PROTECTED_FIELDS)
+        self.assertEqual(set(SCHEDULE_ENTRY_FIELDS), set(rs.SCHEDULE_FIELDS))
+
+    def test_writers_preserve_schedule_fields_through_process_turn(self):
+        """End-to-end cross-axis guard: a full tool-delta turn on a laddered
+        sheet leaves every schedule field byte-identical."""
+        base = default_sheet()
+        base["lexicon"]["pan"] = {
+            "status": "emerging", "confidence": 0.4, "solid_uses": 1,
+            "introduced_at": "2026-07-01", "first_seen": "2026-07-01",
+            "scaffold": "gloss", "next_due": "2026-07-05",
+            "interval_days": 3, "successive_successes": 2,
+        }
+        sched_before = {
+            k: base["lexicon"]["pan"][k]
+            for k in (
+                "introduced_at", "first_seen", "scaffold", "next_due",
+                "interval_days", "successive_successes",
+            )
+        }
+        s, _vis, _notes = process_turn(
+            base, "me gusta el pan", "¡Qué rico!",
+            tool_delta={"lexicon": {"pan": {
+                "status": "emerging", "confidence": 0.6,
+                "next_due": "2020-01-01",  # cross-axis attempt: stripped
+            }}},
+        )
+        after = s["lexicon"]["pan"]
+        self.assertEqual(
+            {k: after.get(k) for k in sched_before}, sched_before
+        )
+
+    def test_char_bug_008_009_resolved_tool_cannot_jump_bands(self):
+        """CHAR-BUG-008/009 RESOLVED (2026-07-29): the model's sheet tool
+        lost the power to inflate the diagnosis (PEDAGOGY §3.2/P7 — the
+        sheet is the targeting instrument; §4.5 — capability removal).
+
+        008: solid_uses claims are no longer evidence — the merge starts
+        from the sheet's own recorded (observed) count, a claim may LOWER
+        it but never raise it, and no merge heuristic mints uses. The
+        known gate (conf ≥ 0.80 + 2 solid uses) is uncrossable by claim
+        alone. 009: apply_delta's lexicon branches (dict + bare-string)
+        route through _clamp_skill_entry (via="delta_lexicon") — no branch
+        mints band/confidence unclamped; a new-word known-claim at conf
+        1.0 lands emerging at the +0.25 first-appearance ceiling.
+        Inverted from the Phase 1.5 batch 2 characterization pin; the
+        registry entries flipped RESOLVED in the same change (Phase 0 law).
+        """
+        # Unchanged guard: unknown at conf 0 cannot reach known.
+        s, _v, _n = process_turn(
+            default_sheet(), "hola", "¡Hola!",
+            tool_delta={"skills": {"IP-02": {
+                "status": "known", "confidence": 0.9, "solid_uses": 5,
+            }}},
+        )
+        self.assertEqual(s["skills"]["IP-02"]["status"], "emerging")
+        self.assertAlmostEqual(s["skills"]["IP-02"]["confidence"], 0.25)
+        self.assertEqual(s["skills"]["IP-02"]["solid_uses"], 0)
+        # 008 INVERTED: the old one-call crossing claim now lands clamped —
+        # emerging at the 0.75 over-claim ceiling, uses still 0.
+        base = default_sheet()
+        base["skills"]["IP-02"] = {
+            **base["skills"]["IP-02"],
+            "status": "emerging", "confidence": 0.6, "solid_uses": 0,
+        }
+        s, _v, _n = process_turn(
+            base, "hola", "¡Hola!",
+            tool_delta={"skills": {"IP-02": {
+                "status": "known", "confidence": 0.85, "solid_uses": 2,
+            }}},
+        )
+        self.assertEqual(s["skills"]["IP-02"]["status"], "emerging")
+        self.assertAlmostEqual(s["skills"]["IP-02"]["confidence"], 0.75)
+        self.assertEqual(s["skills"]["IP-02"]["solid_uses"], 0)
+        # 008 lawful landing: with OBSERVED uses at the gate the same claim
+        # promotes — the diagnosis follows evidence, not claims.
+        base = default_sheet()
+        base["skills"]["IP-02"] = {
+            **base["skills"]["IP-02"],
+            "status": "emerging", "confidence": 0.6, "solid_uses": 2,
+        }
+        s, _v, _n = process_turn(
+            base, "hola", "¡Hola!",
+            tool_delta={"skills": {"IP-02": {
+                "status": "known", "confidence": 0.85,
+            }}},
+        )
+        self.assertEqual(s["skills"]["IP-02"]["status"], "known")
+        # A uses claim may LOWER the observed count (honest demotion).
+        base = default_sheet()
+        base["skills"]["IP-02"] = {
+            **base["skills"]["IP-02"],
+            "status": "emerging", "confidence": 0.6, "solid_uses": 3,
+        }
+        s, _v, _n = process_turn(
+            base, "hola", "¡Hola!",
+            tool_delta={"skills": {"IP-02": {"solid_uses": 1}}},
+        )
+        self.assertEqual(s["skills"]["IP-02"]["solid_uses"], 1)
+        # 009 INVERTED: lexicon absent + claim {known, 1.0, uses 2} lands
+        # emerging at the first-appearance ceiling, zero uses.
+        s, _v, _n = process_turn(
+            default_sheet(), "hola", "¡Hola!",
+            tool_delta={"lexicon": {"perro": {
+                "status": "known", "confidence": 1.0, "solid_uses": 2,
+            }}},
+        )
+        self.assertEqual(s["lexicon"]["perro"]["status"], "emerging")
+        self.assertAlmostEqual(s["lexicon"]["perro"]["confidence"], 0.25)
+        self.assertEqual(s["lexicon"]["perro"]["solid_uses"], 0)
+        # Without the uses claim the landing is the same — pre-fix, conf
+        # 1.0 survived the cap re-gate demotion; now the merge clamps it.
+        s, _v, _n = process_turn(
+            default_sheet(), "hola", "¡Hola!",
+            tool_delta={"lexicon": {"perro": {
+                "status": "known", "confidence": 1.0,
+            }}},
+        )
+        self.assertEqual(s["lexicon"]["perro"]["status"], "emerging")
+        self.assertAlmostEqual(s["lexicon"]["perro"]["confidence"], 0.25)
+
+    def test_tool_vias_tightened_char_bug_008_009(self):
+        """The tool_merge/delta_lexicon edge tables are no longer
+        edge-complete: unknown → known and blocked → known are gone. The
+        rule per case: routine inflation is CLAMPED in the writer (the
+        _cap_turn_confidence philosophy — the claim lands, demoted);
+        the machine RAISES only on the two impossible promotions, which
+        the fixed writer can no longer stage (production-unreachable
+        backstop, mirror of the batch-1 double-introduce ruling)."""
+        from tutor.character_sheet import (
+            _ABILITY_VIA_EDGES,
+            STATUSES,
+            IllegalAbilityTransition,
+            ability_transition,
+        )
+
+        expected = frozenset(
+            {(f, t) for f in STATUSES
+             for t in ("unknown", "emerging", "fragile", "blocked")}
+            | {(f, "known") for f in ("emerging", "fragile", "known")}
+        )
+        self.assertEqual(_ABILITY_VIA_EDGES["tool_merge"], expected)
+        self.assertEqual(_ABILITY_VIA_EDGES["delta_lexicon"], expected)
+        for via in ("tool_merge", "delta_lexicon"):
+            for frm in ({}, {"status": "blocked"}):
+                with self.assertRaises(IllegalAbilityTransition):
+                    ability_transition(
+                        frm, {"status": "known", "confidence": 1.0}, via=via,
+                    )
+
+    def test_clamp_keeps_legacy_known_without_uses(self):
+        """Why the known gate stays in writers, not the machine: legacy /
+        seeded sheets legally hold known with solid_uses 0, and the tool
+        merge preserves that claim (prev-known + conf >= gate)."""
+        from tutor.character_sheet import _clamp_skill_entry
+
+        merged = _clamp_skill_entry(
+            {"status": "known", "confidence": 0.9},
+            {"status": "known", "confidence": 0.9},
+        )
+        self.assertEqual(merged["status"], "known")
+        self.assertEqual(merged["solid_uses"], 0)
 
 
 if __name__ == "__main__":

@@ -23,6 +23,23 @@ from pathlib import Path
 
 TABLE_FILENAME = "association_table.json"
 
+# ---------------------------------------------------------------------------
+# Structural exemption sets (canonical home since Phase 5 batch 2 — they
+# describe TABLE data, so they live with the table; output_gate re-exports
+# its historical names).  Grammar infrastructure: pronouns, question words,
+# copulas, counting sequences and `hay` are paradigms, not lexical topics or
+# introductions — the gate's unscaffolded scan skips them (Round-2 AMEND 3B)
+# and the topic-concept palette excludes them (CHAR-BUG-007 fix).
+# ---------------------------------------------------------------------------
+STRUCTURAL_THEMES = frozenset({
+    "pronouns", "question_words", "copulas", "function", "numbers",
+})
+STRUCTURAL_KEYS = frozenset({
+    # surface forms of exempt paradigms not themed as structural
+    "soy", "eres", "es", "somos", "sois", "son",
+    "estoy", "estás", "está", "estamos", "estáis", "están",
+})
+
 _REQUIRED_FIELDS = ("gloss_en", "theme", "imageable")
 _NULLABLE_STR_FIELDS = ("cognate_en", "false_friend", "keyword_en")
 _ALLOWED_FIELDS = frozenset(_REQUIRED_FIELDS) | frozenset(_NULLABLE_STR_FIELDS) | {
@@ -130,3 +147,53 @@ def same_theme(table: dict[str, dict], a: str, b: str) -> bool:
 def entries_for_theme(table: dict[str, dict], theme: str) -> list[str]:
     """All keys in ``theme``, in table order (R-F cluster-ban candidates)."""
     return [k for k, v in table.items() if v["theme"] == theme]
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 batch 2 (inventory flip, docs/reviews-architecture-refactor.md):
+# the four legacy concept lists (session_memory.TOPIC_CONCEPT_NOUNS /
+# SPANISH_CONCEPT_PAIRS, modes.NOUN_TEXT_PAIRS / NEW_CONCRETE_NOUNS,
+# observe's topic_vocab regex) derive from THIS table — one inventory, no
+# parallel frozen lists.  The default-pack table is loaded once per process
+# through the validating loader; a broken/missing default pack raises LOUDLY
+# at first use instead of silently emptying routing lists (the loader's
+# validation is the contract — do not bypass it with a lax re-parse).
+# ---------------------------------------------------------------------------
+
+_default_table_cache: dict[str, dict] | None = None
+
+
+def cached_default_table() -> dict[str, dict]:
+    """Validated association table for ``config.DEFAULT_PACK_DIR``, loaded
+    once per process (module-level cache; cheap for the derived-list
+    builders).  Sessions with a CUSTOM pack dir still load their own table
+    (``ConversationalSession.association_table``); this cache backs only the
+    module-level derived constants, exactly like the hardcoded lists it
+    replaced."""
+    global _default_table_cache
+    if _default_table_cache is None:
+        from .config import DEFAULT_PACK_DIR
+
+        _default_table_cache = load_association_table(DEFAULT_PACK_DIR)
+    return _default_table_cache
+
+
+def content_topic_keys(table: dict[str, dict] | None) -> list[str]:
+    """Table keys that can honestly be a TOPIC concept, in table order.
+
+    Excludes STRUCTURAL_THEMES / STRUCTURAL_KEYS — grammar infrastructure
+    (pronouns, question words, copulas, numbers, `hay`) is never a topic of
+    conversation (CHAR-BUG-007: «¿Dónde estás tú?» must register the bare
+    ``location`` frame, not ``location:tu``).  No in_pack filter: off-pack
+    keys stay valid for OBSERVATION (asked-topics, probe-loop dedupe) even
+    though they are introduce-ineligible (batch-1 record)."""
+    out: list[str] = []
+    for key, entry in (table or {}).items():
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("theme") or "") in STRUCTURAL_THEMES:
+            continue
+        if key in STRUCTURAL_KEYS:
+            continue
+        out.append(key)
+    return out

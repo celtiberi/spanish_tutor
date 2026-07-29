@@ -18,6 +18,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .pedagogy_contract import evaluate_turn
+# Phase 2 (docs/reviews-architecture-refactor.md): boundary matching + the
+# lexical fold come from the shared textnorm module. fold_lexical replaces
+# the old private import of session_memory._deaccent — the registry keys and
+# this gate's due-exemption compare through the SAME named policy.
+from .textnorm import SPANISH_LETTERS, fold_lexical, phrase_body, phrase_match
 
 # Adjudicated turn-level wall (2026-07-26 Tier-1 #2): critical iff
 # spanish_token_ratio < MIN_SPANISH_RATIO and alphabetic tokens >= MIN_ALPHA_TOKENS.
@@ -25,6 +30,14 @@ from .pedagogy_contract import evaluate_turn
 # turns never trip; long English does, even on open.
 MIN_SPANISH_RATIO = 0.50
 MIN_ALPHA_TOKENS = 12
+# True-zero exemption (2026-07-28 zero-English incident): a COMPLIANT
+# true-zero opening (one English framing line + glossed tiny Spanish)
+# measures tl_ratio ≈ 0.32–0.40 and used to trip the wall, whose forced
+# "Rewrite Spanish-forward" re-ask reproduced the 100%-Spanish incident.
+# Placement mode and blank_zero turns (zero-register overlay riding
+# conversation/repair modes, threaded from conv_session) use this floor
+# instead; a genuinely all-English turn (ratio ≈ 0) still faults everywhere.
+ZERO_MIN_SPANISH_RATIO = 0.25
 # Short L1 sandwich in <explain>: exclude English from the ratio when explain
 # has at most this many non-Spanish alphabetic tokens (A3 "≤6 words" gloss).
 MAX_EXPLAIN_GLOSS_WORDS = 6
@@ -81,6 +94,46 @@ class OutputGateResult:
             "scaffold_saved": dict(self.scaffold_saved),
             "flood_keys": list(self.flood_keys),
         }
+
+
+@dataclass
+class GateContext:
+    """E3 (Phase 4 batch 3, docs/reviews-architecture-refactor.md): the
+    gate's full input surface as ONE typed object — what the historical
+    18-argument ``check_output_gate`` signature encoded (2 positionals +
+    16 keyword-only).  ``check_output_gate(ctx)`` is the new surface; the
+    legacy kwarg call remains as a thin shim that builds this context, so
+    the existing gate tests keep their call shape.  Field semantics are
+    exactly the old parameters':
+
+    - ``parts``/``visible``/``raw``: the parsed tutor reply under test
+      (per-ATTEMPT fields — the repair loop re-checks a rewritten reply
+      via ``dataclasses.replace`` on the same turn-constant base).
+    - ``require_recast``/``truncated``: per-attempt check switches.
+    - everything else is turn-constant session/turn state (sheet, table,
+      memory registries, mode, learner text, blank-zero register).
+    """
+
+    # -- per-attempt: the reply under test -----------------------------------
+    parts: dict | None = None
+    visible: str = ""
+    raw: str | None = None
+    require_recast: bool = False
+    truncated: bool = False
+    # -- turn-constant context ----------------------------------------------
+    is_open: bool = False
+    already_asked: set[str] | list[str] | None = None
+    already_shown: set[str] | list[str] | None = None
+    mode: str | None = None
+    image_present: bool = False
+    association_table: dict | None = None
+    sheet: dict | None = None
+    introduce_key: str | None = None
+    retrieval_failed_keys: Any = None
+    learner_text: str = ""
+    blank_zero: bool = False
+    asked_topics: Any = None
+    topic_nouns: Any = None
 
 
 _ALPHA_TOKEN_RE = re.compile(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+")
@@ -239,52 +292,30 @@ _SHEET_LEAK_RES = (
 # protocol (blank_open_placement freezes the phase clock and the router
 # never plans on placement). Without an association table AND a sheet the
 # check is disabled entirely.
-STRUCTURAL_THEMES = frozenset({
-    "pronouns", "question_words", "copulas", "function", "numbers",
-})
-STRUCTURAL_KEYS = frozenset({
-    # surface forms of exempt paradigms not themed as structural
-    "soy", "eres", "es", "somos", "sois", "son",
-    "estoy", "estás", "está", "estamos", "estáis", "están",
-})
+# Canonical home moved to tutor/association_table.py (Phase 5 batch 2 —
+# the sets describe table data; session_memory's topic palette shares them).
+# Historical names re-exported here; the semantics are unchanged.
+from .association_table import (  # noqa: E402  (re-export façade)
+    STRUCTURAL_KEYS,
+    STRUCTURAL_THEMES,
+)
 MAX_NEW_ITEM_GLOSS_WORDS = 6
 # >= this many DISTINCT bare unscaffolded keys on one turn → soft flood.
 FLOOD_MIN_DISTINCT = 3
 
-_ES_BOUND = "a-záéíóúüñ"
-
-
-def _key_body(key: str) -> str:
-    words = [re.escape(w) for w in (key or "").lower().split()]
-    return r"\s+".join(words)
-
-
-def _key_match(key: str, text: str) -> "re.Match[str] | None":
-    """Boundary-safe first match of a (possibly multiword) table key.
-
-    Same discipline as observe.word_present / task_runtime.phrase_present:
-    whole-word containment with simple plural tolerance, Spanish-aware
-    letter boundaries.
-    """
-    body = _key_body(key)
-    if not body:
-        return None
-    return re.search(
-        rf"(?<![{_ES_BOUND}]){body}(?:e?s)?(?![{_ES_BOUND}])",
-        (text or "").lower(),
-    )
-
-
-def _gloss_after_key(key: str, text: str) -> bool:
+def gloss_after_key(key: str, text: str) -> bool:
     """True when the key is immediately followed by a short "(gloss)".
 
     Markdown emphasis and light punctuation between key and parenthetical are
-    tolerated; the parenthetical must respect the ≤6-word micro-gloss law."""
-    body = _key_body(key)
+    tolerated; the parenthetical must respect the ≤6-word micro-gloss law.
+    Shared scaffold-evidence detector: used by the unscaffolded-new-item scan
+    below AND by conv_session.mark_introduced_if_visible (introduce-move
+    evidence, 2026-07-28 false-planted incident) — one definition, no drift."""
+    body = phrase_body(key)
     if not body:
         return False
     m = re.search(
-        rf"(?<![{_ES_BOUND}]){body}(?:e?s)?[\*_`]*[\s:,–—-]*\(([^)]{{1,80}})\)",
+        rf"(?<![{SPANISH_LETTERS}]){body}(?:e?s)?[\*_`]*[\s:,–—-]*\(([^)]{{1,80}})\)",
         (text or "").lower(),
     )
     if not m:
@@ -292,14 +323,18 @@ def _gloss_after_key(key: str, text: str) -> bool:
     return len(_ALPHA_TOKEN_RE.findall(m.group(1))) <= MAX_NEW_ITEM_GLOSS_WORDS
 
 
-def _anchor_in_reply(entry: dict, text: str) -> bool:
-    """Cognate/keyword anchor text from the table entry present in-reply."""
+def anchor_in_reply(entry: dict, text: str) -> bool:
+    """Cognate/keyword anchor text from the table entry present in-reply.
+
+    Shared scaffold-evidence detector (same sharing law as gloss_after_key):
+    `entry` needs only `cognate_en` / `keyword_en` fields — callers may pass a
+    real association-table entry or a plan-payload shim."""
     for field_name in ("cognate_en", "keyword_en"):
         raw = entry.get(field_name)
         if not raw:
             continue
         head = str(raw).split("(")[0].strip().strip(" .,'\"").lower()
-        if head and _key_match(head, text):
+        if head and phrase_match(head, text):
             return True
     return False
 
@@ -358,7 +393,7 @@ def scan_unscaffolded_new_items(
             # Surface form of an exempt paradigm themed elsewhere (AMEND 3B).
             continue
         if is_introduced(sheet, key, "lexicon"):
-            if key not in failed and _gloss_after_key(key, full_blob):
+            if key not in failed and gloss_after_key(key, full_blob):
                 reglossed.append(key)
             continue
         if has_first_seen(sheet, key, "lexicon"):
@@ -375,10 +410,10 @@ def scan_unscaffolded_new_items(
         if conf > 0.0:
             # Sheet evidence = the learner has met this key; not "never seen".
             continue
-        if learner_text and _key_match(key, learner_text) is not None:
+        if learner_text and phrase_match(key, learner_text) is not None:
             # The learner just used it themselves (observer lags the gate).
             continue
-        m = _key_match(key, teach_blob)
+        m = phrase_match(key, teach_blob)
         if m is not None:
             hits.append((m.start(), m.end(), key))
 
@@ -405,15 +440,23 @@ def scan_unscaffolded_new_items(
     bare: list[str] = []
     scaffold_saved: dict[str, str] = {}
     for key in ordered:
-        if key == introduce_key:
-            continue
         entry = table.get(key) or {}
-        if _gloss_after_key(key, full_blob):
+        # Audit (a4) 2026-07-28: the planned introduce_key is checked AFTER
+        # the scaffold detectors, not skipped entirely. A planned intro whose
+        # scaffold TYPE lapsed (R-A cognate planned, gloss delivered) still
+        # exposed the learner to a scaffolded key — record scaffold_saved so
+        # the first_seen ledger sees it (no bare fault either way; the
+        # introduce path owns the lapse). Skipping the key outright left
+        # BOTH ledgers blind → guaranteed critical thrash on next bare use
+        # (Grok's encantado proof).
+        if gloss_after_key(key, full_blob):
             scaffold_saved[key] = "gloss"
             continue
-        if _anchor_in_reply(entry, full_blob):
+        if anchor_in_reply(entry, full_blob):
             scaffold_saved[key] = "anchor"
             continue
+        if key == introduce_key:
+            continue  # planned key bare: introduce path owns fault/lapse
         bare.append(key)
     # Cluster veto: >1 unintroduced same-theme key in one reply → the extras
     # fault even when glossed (one new item per turn). Bare same-theme keys
@@ -458,8 +501,8 @@ def detect_sheet_leak(text: str) -> list[str]:
 
 
 def check_output_gate(
-    parts: dict | None,
-    visible: str,
+    parts: dict | GateContext | None,
+    visible: str = "",
     *,
     is_open: bool = False,
     already_asked: set[str] | list[str] | None = None,
@@ -474,14 +517,72 @@ def check_output_gate(
     introduce_key: str | None = None,
     retrieval_failed_keys=None,
     learner_text: str = "",
+    blank_zero: bool = False,
+    asked_topics=None,
+    topic_nouns=None,
 ) -> OutputGateResult:
     """Hard checks on the composed tutor turn (+ optional per-mode contracts).
+
+    E3 surface (Phase 4 batch 3): pass a single ``GateContext`` as the
+    first argument — ``check_output_gate(ctx)``.  The legacy 18-argument
+    kwarg signature remains as a thin shim that builds the context; both
+    paths funnel into the same implementation, so shim == context by
+    construction.
 
     association_table + sheet (+ this turn's IntroducePlan key and any
     retrieval-failure keys) enable the Phase 4 r7 S3 checks; without both the
     unscaffolded/regloss checks are disabled (e.g. table failed to load).
+    blank_zero (threaded from conv_session): the true-zero register overlay
+    is active — the english_wall floor drops to ZERO_MIN_SPANISH_RATIO.
+    asked_topics + topic_nouns: the session's semantic asked-topic registry
+    (SessionMemory) — a composed try whose semantic key was already asked
+    faults gate:probe_loop even off the 4 social fast-path regexes.
     """
-    parts = parts or {}
+    if isinstance(parts, GateContext):
+        return _check_output_gate(parts)
+    return _check_output_gate(GateContext(
+        parts=parts,
+        visible=visible,
+        is_open=is_open,
+        already_asked=already_asked,
+        already_shown=already_shown,
+        mode=mode,
+        image_present=image_present,
+        require_recast=require_recast,
+        raw=raw,
+        truncated=truncated,
+        association_table=association_table,
+        sheet=sheet,
+        introduce_key=introduce_key,
+        retrieval_failed_keys=retrieval_failed_keys,
+        learner_text=learner_text,
+        blank_zero=blank_zero,
+        asked_topics=asked_topics,
+        topic_nouns=topic_nouns,
+    ))
+
+
+def _check_output_gate(gctx: GateContext) -> OutputGateResult:
+    """The gate implementation — all inputs ride the GateContext."""
+    visible = gctx.visible
+    is_open = gctx.is_open
+    already_asked = gctx.already_asked
+    already_shown = gctx.already_shown
+    mode = gctx.mode
+    image_present = gctx.image_present
+    require_recast = gctx.require_recast
+    raw = gctx.raw
+    truncated = gctx.truncated
+    association_table = gctx.association_table
+    sheet = gctx.sheet
+    introduce_key = gctx.introduce_key
+    retrieval_failed_keys = gctx.retrieval_failed_keys
+    learner_text = gctx.learner_text
+    blank_zero = gctx.blank_zero
+    asked_topics = gctx.asked_topics
+    topic_nouns = gctx.topic_nouns
+
+    parts = gctx.parts or {}
     asked = set(already_asked or [])
     shown = set(already_shown or [])
     faults: list[str] = []
@@ -551,9 +652,18 @@ def check_output_gate(
     ratio = spanish_token_ratio(ratio_blob_with_sandwich_exempt(parts, visible))
     n_alpha = alphabetic_token_count(full_blob)
     notes.append(f"tl_ratio={ratio:.2f}")
-    if n_alpha >= MIN_ALPHA_TOKENS and ratio < MIN_SPANISH_RATIO:
+    # True-zero exemption (2026-07-28 incident): placement opens and
+    # blank_zero overlay turns REQUIRE English orientation — the wall floor
+    # drops to 0.25 there so a compliant glossed opening passes while a
+    # genuinely all-English turn (ratio ≈ 0) still faults in every mode.
+    min_ratio = (
+        ZERO_MIN_SPANISH_RATIO
+        if (mode_l == "placement" or blank_zero)
+        else MIN_SPANISH_RATIO
+    )
+    if n_alpha >= MIN_ALPHA_TOKENS and ratio < min_ratio:
         faults.append("gate:english_wall")
-        notes.append(f"gate:english_wall ratio={ratio:.2f}<{MIN_SPANISH_RATIO}")
+        notes.append(f"gate:english_wall ratio={ratio:.2f}<{min_ratio}")
 
     # Phase 4 enforcement (r7 S3): naked first exposures + cluster veto +
     # re-gloss. Placement (blank feel-out) precedes the introduce protocol.
@@ -614,6 +724,35 @@ def check_output_gate(
         sk = skill_map.get(p)
         if sk and sk in shown:
             loop_hits.append(f"{p}/shown:{sk}")
+    # Registry check (2026-07-28 repetition forensics): the composed try's
+    # semantic key — same extractor that writes SessionMemory.asked_topics —
+    # already asked this session ⇒ probe loop on ANY topic, not only the 4
+    # social fast-path regexes (turn-4/5 city-size re-ask escaped them).
+    if asked_topics:
+        from .session_memory import compose_topic_key, topic_key_for_try
+
+        try_txt = str(parts.get("try") or parts.get("continue") or "")
+        frame, concept = topic_key_for_try(try_txt, nouns=topic_nouns)
+        topic_key = compose_topic_key(frame, concept)
+        if topic_key and topic_key in set(asked_topics):
+            # Audit (a2) 2026-07-28 — retrieval > anti-repeat: a currently-
+            # due concept may be re-elicited even if this frame+concept was
+            # asked earlier this session (P3 spacing is law; do_not_re_ask
+            # is a courtesy). Ledger keys keep their accents («café»); the
+            # extractor deaccents its concept — compare through the same
+            # textnorm.fold_lexical transform (exact key match otherwise).
+            concept_due = False
+            if concept and isinstance(sheet, dict):
+                from .retrieval_scheduler import due_items
+
+                due_keys = {
+                    fold_lexical(d.key) for d in due_items(sheet, max_due=50)
+                }
+                concept_due = concept in due_keys
+            if concept_due:
+                notes.append(f"probe_loop_due_exempt:{topic_key}")
+            else:
+                loop_hits.append(f"topic:{topic_key}")
     if loop_hits:
         faults.append("gate:probe_loop")
         notes.append("gate:probe_loop " + ",".join(sorted(set(loop_hits))))
@@ -633,9 +772,23 @@ def check_output_gate(
                 "Include a clear Spanish <model> and a real <try> (question or invite)."
             )
         if "gate:english_wall" in faults:
-            bits.append(
-                "Rewrite Spanish-forward: most words in Spanish. English only as a short lifeline."
-            )
+            # Audit (b1) 2026-07-28: repair copy must be mode-aware. Under
+            # placement/blank_zero the zero register REQUIRES English
+            # orientation + glosses — ordering "Rewrite Spanish-forward"
+            # there re-fought the register the floor exemption had just
+            # permitted (100%-Spanish incident vector).
+            if mode_l == "placement" or blank_zero:
+                bits.append(
+                    "True-zero / placement register: keep ONE short English "
+                    "orientation line and a ≤6-word English gloss on each new "
+                    "Spanish item; raise Spanish share above the zero floor "
+                    f"({ZERO_MIN_SPANISH_RATIO:.2f}) without an all-English turn "
+                    "and without dumping English essays."
+                )
+            else:
+                bits.append(
+                    "Rewrite Spanish-forward: most words in Spanish. English only as a short lifeline."
+                )
         if "gate:unscaffolded_new_item" in faults:
             bits.append(
                 "You used new Spanish the learner has never seen without "
@@ -660,8 +813,11 @@ def check_output_gate(
             )
         if "gate:probe_loop" in faults:
             bits.append(
-                "Do NOT re-ask how they are / their name / origin / likes if already covered. "
-                "Apologize briefly if needed and advance to new ground."
+                "Do NOT re-ask a question already covered this session — how "
+                "they are / their name / origin / likes, or the same "
+                "frame+topic you already asked (e.g. the same size/location "
+                "question about the same noun). Apologize briefly if needed "
+                "and advance to new ground with a DIFFERENT question."
             )
         if "gate:form_focus_needs_model" in faults:
             bits.append(

@@ -1,0 +1,240 @@
+{
+  "learners": [
+    "(session open)",
+    "Muy bien, gracias. El pan (bread?) es muy rico.",
+    "La leche (milk?) es buena.",
+    "Sí, hablo con mi familia cada día.",
+    "Quiero leche (milk?) en el desayuno."
+  ],
+  "turns": [
+    {
+      "instructions": {
+        "budget_exhausted_line": false,
+        "introduce_block": true,
+        "new_input_prefix": true,
+        "task_block": false,
+        "uptake_block": false
+      },
+      "intro_budget_remaining": 2,
+      "introduced_this_session": [],
+      "learner_turn_index": 1,
+      "mode": "conversation",
+      "notes": [
+        "mode=conversation",
+        "mode_reason=known_open_from_sheet",
+        "introduce_planned:hola:R-E",
+        "output_gate_ok",
+        "rules_backup",
+        "hard_observer",
+        "can-dos=*",
+        "scaffold=ES-forward+EN-rescue",
+        "focus_async",
+        "structured_reply",
+        "pedagogy:ok",
+        "pedagogy:known_learner_open",
+        "open_phase=known",
+        "activity=new_input",
+        "phase_consumed=True",
+        "hard_break=False",
+        "plan_source=mode_runtime",
+        "teacher_mode=planned",
+        "open_scenes=boat_likes,boat_meet_captain,boat_where_boat",
+        "mem_shown=greet",
+        "mem_asked=conversation"
+      ],
+      "phase": {
+        "frozen_turns": 0,
+        "index": 0,
+        "turns_in_phase": 1
+      },
+      "requests_so_far": 1,
+      "uptake_last_turn": -999
+    },
+    {
+      "instructions": {
+        "budget_exhausted_line": false,
+        "introduce_block": true,
+        "new_input_prefix": true,
+        "task_block": false,
+        "uptake_block": true
+      },
+      "intro_budget_remaining": 1,
+      "introduced_this_session": [
+        "hola"
+      ],
+      "learner_turn_index": 2,
+      "mode": "conversation",
+      "notes": [
+        "mode=conversation",
+        "mode_reason=default_conversation",
+        "uptake_flagged:pan",
+        "introduce_planned:hola:R-E",
+        "output_gate_ok",
+        "rules_backup",
+        "hard_observer",
+        "can-dos=*",
+        "scaffold=ES-forward+EN-rescue",
+        "focus_async",
+        "structured_reply",
+        "pedagogy:ok",
+        "introduced:hola",
+        "progress_milestone:planted:hola",
+        "pedagogy:known_learner_open",
+        "phase=ai_tutor",
+        "activity=new_input",
+        "phase_consumed=True",
+        "hard_break=False",
+        "plan_source=mode_runtime",
+        "teacher_mode=planned",
+        "open_scenes=boat_likes,boat_meet_captain,boat_where_boat",
+        "mem_shown=greet,spanish_ok",
+        "mem_asked=conversation"
+      ],
+      "phase": {
+        "frozen_turns": 0,
+        "index": 0,
+        "turns_in_phase": 2
+      },
+      "requests_so_far": 2,
+      "uptake_last_turn": 2
+    },
+    {
+      "instructions": {
+        "budget_exhausted_line": false,
+        "introduce_block": true,
+        "new_input_prefix": true,
+        "task_block": false,
+        "uptake_block": false
+      },
+      "intro_budget_remaining": 0,
+      "introduced_this_session": [
+        "hola",
+        "buenos días"
+      ],
+      "learner_turn_index": 3,
+      "mode": "conversation",
+      "notes": [
+        "mode=conversation",
+        "mode_reason=default_conversation",
+        "introduce_planned:buenos días:R-D",
+        "output_gate_ok",
+        "rules_backup",
+        "hard_observer",
+        "can-dos=*",
+        "scaffold=ES-forward+EN-rescue",
+        "focus_async",
+        "structured_reply",
+        "pedagogy:ok",
+        "introduced:buenos días",
+        "progress_milestone:planted:buenos días",
+        "pedagogy:known_learner_open",
+        "phase=ai_tutor",
+        "activity=new_input",
+        "phase_consumed=True",
+        "hard_break=False",
+        "plan_source=mode_runtime",
+        "teacher_mode=planned",
+        "open_scenes=boat_likes,boat_meet_captain,boat_where_boat",
+        "mem_shown=greet,spanish_ok",
+        "mem_asked=conversation"
+      ],
+      "phase": {
+        "frozen_turns": 0,
+        "index": 0,
+        "turns_in_phase": 3
+      },
+      "requests_so_far": 3,
+      "uptake_last_turn": 2
+    },
+    {
+      "instructions": {
+        "budget_exhausted_line": true,
+        "introduce_block": false,
+        "new_input_prefix": true,
+        "task_block": false,
+        "uptake_block": false
+      },
+      "intro_budget_remaining": 0,
+      "introduced_this_session": [
+        "hola",
+        "buenos días"
+      ],
+      "learner_turn_index": 4,
+      "mode": "conversation",
+      "notes": [
+        "mode=conversation",
+        "mode_reason=default_conversation",
+        "output_gate_ok",
+        "rules_backup",
+        "hard_observer",
+        "scaffold=ES-forward+EN-rescue",
+        "focus_async",
+        "structured_reply",
+        "pedagogy:ok",
+        "pedagogy:known_learner_open",
+        "phase=ai_tutor",
+        "activity=new_input",
+        "phase_consumed=True",
+        "hard_break=False",
+        "plan_source=mode_runtime",
+        "teacher_mode=planned",
+        "open_scenes=boat_likes,boat_meet_captain,boat_where_boat",
+        "mem_shown=greet,spanish_ok",
+        "mem_asked=conversation"
+      ],
+      "phase": {
+        "frozen_turns": 0,
+        "index": 1,
+        "turns_in_phase": 0
+      },
+      "requests_so_far": 4,
+      "uptake_last_turn": 2
+    },
+    {
+      "instructions": {
+        "budget_exhausted_line": false,
+        "introduce_block": false,
+        "new_input_prefix": false,
+        "task_block": true,
+        "uptake_block": true
+      },
+      "intro_budget_remaining": 0,
+      "introduced_this_session": [
+        "hola",
+        "buenos días"
+      ],
+      "learner_turn_index": 5,
+      "mode": "conversation",
+      "notes": [
+        "mode=conversation",
+        "mode_reason=default_conversation",
+        "uptake_flagged:leche",
+        "task_goal_offered:boat_likes",
+        "output_gate_ok",
+        "rules_backup",
+        "hard_observer",
+        "scaffold=ES-forward+EN-rescue",
+        "focus_async",
+        "structured_reply",
+        "pedagogy:ok",
+        "pedagogy:known_learner_open",
+        "phase=ai_tutor",
+        "activity=task",
+        "phase_consumed=True",
+        "hard_break=False",
+        "plan_source=mode_runtime",
+        "teacher_mode=planned",
+        "open_scenes=boat_likes,boat_meet_captain,boat_where_boat",
+        "mem_shown=greet,spanish_ok",
+        "mem_asked=conversation"
+      ],
+      "phase": {
+        "frozen_turns": 0,
+        "index": 1,
+        "turns_in_phase": 1
+      },
+      "requests_so_far": 5,
+      "uptake_last_turn": 5
+    }
+  ]
+}

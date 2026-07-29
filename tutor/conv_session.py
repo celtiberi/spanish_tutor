@@ -9,8 +9,6 @@ import json
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from types import SimpleNamespace
-from typing import Any
 
 from . import config
 from .can_dos import build_focus_panel
@@ -20,23 +18,28 @@ from .character_sheet import (
     compute_progress_score,
     default_sheet,
     extract_sheet_delta,
-    format_sheet_for_prompt,
     format_sheet_human,
     load_sheet,
     process_turn,
     save_sheet,
 )
-from .corpus import load_pack
 from .focus_enrich import enrich_focus_panel, focus_cache_key, focus_model_enabled
 from .session_log import SessionLogger
 from .pedagogy_contract import evaluate_turn
+from .session_state import DEBUG_RING_SIZE, SessionState
+from .turn_events import (
+    TurnEventKind as EV,
+    TurnEventLog,
+    begin_turn_log,
+    render_note,
+    session_event_log,
+)
 from .tutor_response import compose_visible, process_tutor_raw
 
 
 def compose_if_needed(parts) -> str:
     return compose_visible(parts)
 
-CONV_PROMPT = config.REPO_ROOT / "prompts" / "conversational_tutor.md"
 DEFAULT_SHEET_PATH = config.CHARACTER_SHEET_PATH
 SHEET_TOOLS = [UPDATE_CHARACTER_SHEET_TOOL]
 
@@ -47,46 +50,6 @@ SHEET_TOOLS = [UPDATE_CHARACTER_SHEET_TOOL]
 # Grok countersign 2026-07-28: a cap is a control, tracking alone is not.
 MAX_IMAGE_GENERATIONS_PER_SESSION = 8
 MAX_DECLARED_NOVEL_PER_SESSION = 5
-
-# Known learner: sheet has evidence — still teach, but can go a bit faster
-OPEN_HARNESS_KNOWN = (
-    "(harness) Open a TEACHING session for a learner we already have evidence on. "
-    "Use the character sheet (next_best / form_focus / scaffold / name). "
-    "OPEN RECIPE: short warm open → <model> 1–2 targets → <try> one production. "
-    "Do NOT dump a long Spanish monologue. Do NOT fake 'Got it' with no learner line. "
-    "Skip leave-taking and multi-question stacks. "
-    "LANGUAGE: Spanish-forward; English only if scaffold still true. "
-    "Use structured <tutor> parts (model + try required). "
-    "Do not emit sheet JSON. The app updates the learner sheet."
-)
-
-# Blank / wiped sheet: DIAGNOSTIC feel-out — we do not know their level
-OPEN_HARNESS_DIAGNOSTIC = (
-    "(harness) DIAGNOSTIC OPEN — character sheet is EMPTY / all can-dos unknown. "
-    "You do NOT know this learner's ability. Do NOT open like an intermediate chat. "
-    "Do NOT pure-Spanish monologue. Do NOT say 'cuéntame cómo va todo' or long "
-    "unmodeled questions. Do NOT invent that you 'know' them. "
-    "GOAL OF THIS TURN: feel-out / placement probe + first teach move. "
-    "OPEN RECIPE (required): "
-    "(1) 1–2 short English sentences: who you are + that you'll start tiny "
-    "to see what they already know; "
-    "(2) <model> only 2 ultra-short Spanish forms they can copy: "
-    "**Hola.** and **Estoy bien.**; "
-    "(3) <try> ONE easy production: say **Hola** — or try **Estoy bien** if they can. "
-    "Optional: one plain English gloss only on the try line (not dual-subtitle walls). "
-    "Keep the whole turn SHORT (TTS will speak it). "
-    "No <acknowledge> pretending they already spoke. "
-    "Use structured <tutor> tags. Skip sheet tools on open."
-)
-
-
-def open_harness_for_sheet(sheet: dict) -> str:
-    from .pedagogy_contract import open_phase
-
-    if open_phase(sheet) == "diagnostic":
-        return OPEN_HARNESS_DIAGNOSTIC
-    return OPEN_HARNESS_KNOWN
-
 
 # --- Retrieval scheduler soft wiring (Phase 1 pedagogy engine) --------------
 # Due re-encounters ride the mode instructions as SOFT additions inside
@@ -179,14 +142,53 @@ def introduce_block(
     return plan_instructions(plan), plan
 
 
-def mark_introduced_if_visible(sheet: dict, plan, reply: str):
-    """POST-turn introduce-ledger write, gated on the VISIBLE reply.
+def introduce_scaffold_evidence(plan, reply: str, teach_images=None) -> bool:
+    """Did the plan's INTRODUCE MOVE visibly happen in this reply?
 
-    Only when the tutor's visible reply actually carries the key does the
-    introduction count: S1 mark + R-H enqueue via
-    retrieval_scheduler.mark_introduced (confidence untouched — honesty law
-    enforced there). A reply without the key lets the plan lapse: returns
-    (sheet unchanged, None) and the session budget is not consumed.
+    Honesty rule (2026-07-28 false-planted incident, PEDAGOGY §3): mere key
+    presence is NOT an introduction — the tutor greets with «¡Buenas tardes!»
+    naturally without teaching it. Evidence required per scaffold:
+    - R-D gloss    → the "(≤6-word gloss)" parenthetical right after the key
+    - R-A cognate / R-E keyword → the plan's anchor text present in-reply
+    - R-B image    → a teach_image with this concept actually attached
+    Detection reuses the output gate's scaffold detectors (gloss_after_key /
+    anchor_in_reply) — one definition, no drift.
+    """
+    from .output_gate import anchor_in_reply, gloss_after_key
+
+    payload = getattr(plan, "scaffold_payload", None) or {}
+    stype = getattr(plan, "scaffold_type", "")
+    if stype == "gloss":
+        return gloss_after_key(plan.key, reply or "")
+    if stype == "cognate":
+        return anchor_in_reply({"cognate_en": payload.get("anchor")}, reply or "")
+    if stype == "keyword":
+        return anchor_in_reply({"keyword_en": payload.get("keyword")}, reply or "")
+    if stype == "image":
+        return any(
+            (t.get("concept") or "") == plan.key for t in (teach_images or [])
+        )
+    return False
+
+
+def introduce_outcome(sheet: dict, plan, reply: str, *, teach_images=None):
+    """POST-turn introduce-ledger write, gated on introduce-move EVIDENCE.
+
+    Returns (sheet, status, key) with status in ("introduced", "lapsed",
+    None) — the STRUCTURED source the typed INTRODUCED / INTRODUCE_LAPSED
+    events are minted from (Phase 3 batch 1: the caller no longer re-parses
+    a note string). ``mark_introduced_if_visible`` below keeps the
+    historical string-returning contract for existing callers/tests.
+
+    The introduction counts (S1 mark + R-H enqueue via
+    retrieval_scheduler.mark_introduced — confidence untouched, honesty law
+    enforced there) ONLY when the visible reply carries the key AND the
+    plan's scaffold evidence (introduce_scaffold_evidence). Key present but
+    scaffold absent = the tutor used the word naturally, not as a teaching
+    move (2026-07-28 «buenas tardes» incident): the plan lapses — status
+    "lapsed", no ledger write, budget unconsumed; the gate's
+    first_seen/flood machinery keeps owning natural bare use. Key absent
+    entirely → (sheet unchanged, None, None).
     observe.word_present handles single words and MWUs alike (boundary-safe
     containment, same as the due-outcome recorder).
     """
@@ -194,9 +196,25 @@ def mark_introduced_if_visible(sheet: dict, plan, reply: str):
     from .retrieval_scheduler import mark_introduced
 
     if plan is None or not word_present(plan.key, reply or ""):
-        return sheet, None
+        return sheet, None, None
+    if not introduce_scaffold_evidence(plan, reply, teach_images):
+        return sheet, "lapsed", plan.key
     updated = mark_introduced(sheet, plan.key, "lexicon", plan.scaffold_type)
-    return updated, f"introduced:{plan.key}"
+    return updated, "introduced", plan.key
+
+
+def mark_introduced_if_visible(sheet: dict, plan, reply: str, *, teach_images=None):
+    """Historical string contract over ``introduce_outcome`` (see there)."""
+    sheet, status, key = introduce_outcome(
+        sheet, plan, reply, teach_images=teach_images
+    )
+    if status == "introduced":
+        return sheet, render_note(EV.INTRODUCED, key=key)
+    if status == "lapsed":
+        return sheet, render_note(
+            EV.INTRODUCE_LAPSED, key=key, payload={"reason": "no_scaffold"}
+        )
+    return sheet, None
 
 
 # --- Close phase soft wiring (PEDAGOGY §1.2, USER-ratified 2026-07-28) ------
@@ -260,12 +278,17 @@ def self_flag_uptake_block(
     reason: str = "",
     mode_state=None,
 ) -> tuple[str, str]:
-    """(instruction_text, note) for a §2.1a self-flagged form, or ("", "").
+    """(instruction_text, flagged_token) for a §2.1a self-flagged form, or
+    ("", "").
 
     Budget-tracked in ModeSessionState (content_uptake_last_turn): ≤1 per 3
     teaching turns, never consecutive — when exhausted, nothing fires and the
     agenda proceeds (§2.1a anti-starvation clause). Fires only on
     conversation-flavored turns; guard/repair turns keep their single focus.
+
+    Phase 3 batch 2 leaf push-down: returns the RAW token (not the rendered
+    "uptake_flagged:<token>" string) — the caller emits the typed
+    UPTAKE_FLAGGED TurnEvent whose render is that legacy note.
     """
     from .observe import detect_self_flagged_token
 
@@ -283,7 +306,7 @@ def self_flag_uptake_block(
         "its correct pack-legal form or nearest pack paraphrase THIS turn "
         "(one model). No ledger introduce, no denylist breach, no side quest."
     )
-    return instr, f"uptake_flagged:{token}"
+    return instr, token
 
 
 # --- Progress journey rail wiring (docs/design-progression-view.md) ---------
@@ -297,8 +320,16 @@ def emit_progress_events(
     *,
     session_id: str,
     ledger_path=None,
+    ev_log: TurnEventLog | None = None,
+    stage: str = "record",
 ) -> list[str]:
-    """Record pre-validated crossing events; return session-note tags."""
+    """Record pre-validated crossing events; return session-note tags.
+
+    Phase 3 batch 1: when ``ev_log`` is given (the session's per-turn log),
+    each recorded crossing also mints a typed PROGRESS_MILESTONE /
+    PROGRESS_REGRESSION event; the returned strings are the rendered
+    projection (byte-identical to the historical f-strings).
+    """
     from . import progress_ledger as pl
 
     notes: list[str] = []
@@ -312,13 +343,125 @@ def emit_progress_events(
             item_kind=ev.get("item_kind", ""),
             ledger_path=ledger_path,
         )
-        tag = (
-            "progress_regression"
+        kind = (
+            EV.PROGRESS_REGRESSION
             if ev.get("polarity") == "down"
-            else "progress_milestone"
+            else EV.PROGRESS_MILESTONE
         )
-        notes.append(f"{tag}:{ev['kind']}:{ev['key']}")
+        key = str(ev["key"])
+        payload = {"milestone": str(ev["kind"])}
+        if ev_log is not None:
+            notes.append(ev_log.emit(kind, key=key, payload=payload,
+                                     stage=stage))
+        else:
+            notes.append(render_note(kind, key=key, payload=payload))
     return notes
+
+
+# --- Debug request capture (local web debug box, 2026-07-28) ----------------
+# Per tutor call: the OUTBOUND request (ordered system blocks, chat history,
+# the task message, model) + response metadata (usage incl. thinking/cached,
+# gate faults, notes, mode/reason/activity). IN-MEMORY ONLY — a ring buffer
+# of the last DEBUG_RING_SIZE calls per session, served by
+# GET /api/debug/requests for the web debug box. These payloads are NEVER
+# written to disk logs (session .jsonl logging is unchanged).
+# DEBUG_RING_SIZE now lives in tutor.session_state (Phase 1 batch 1) and is
+# re-exported above for existing importers (tests import it from here).
+
+
+def _label_system_block(text: str, index: int) -> str:
+    """Human label for a system block (marker-based, position fallback)."""
+    # The debug entry stores the FULL block text; only the label sniffs a head.
+    head = (text or "").lstrip()[:200].lower()  # truncation-ok: label sniffing only, full text kept
+    if "course pack palette" in head:
+        return "course_pack"
+    if "student character sheet" in head or "character sheet" in head:
+        return "character_sheet"
+    if "tutor persona" in head:
+        return "persona"
+    if "you are a skilled conversational spanish tutor" in head:
+        return "tutor_stance"
+    if index == 0:
+        return "tutor_stance"
+    return f"system_block_{index}"
+
+
+def _msg_text(content) -> str:
+    """Message content as text (tool-use lists rendered as JSON)."""
+    if isinstance(content, str):
+        return content
+    try:
+        return json.dumps(content, ensure_ascii=False, indent=2)
+    except (TypeError, ValueError):
+        return str(content)
+
+
+def build_debug_entry(
+    *,
+    model: str,
+    system,
+    messages,
+    task: str,
+    decision_dict: dict | None,
+    activity: str | None,
+    usage: dict | None,
+    gate_result=None,
+    notes=None,
+    stop_reason: str = "",
+    turn: int = 0,
+    is_open: bool = False,
+) -> dict:
+    """One debug ring-buffer entry (JSON-safe; full text, no truncation)."""
+    import datetime as _dt
+
+    dec = decision_dict or {}
+    u = usage or {}
+    history = [
+        {"role": str(m.get("role") or ""), "content": _msg_text(m.get("content"))}
+        for m in (messages or [])
+    ]
+    # The final user message IS the task; keep history = everything before it.
+    if history and task and history[-1]["content"] == task:
+        history = history[:-1]
+    gate_faults: list = []
+    gate_notes: list = []
+    if gate_result is not None:
+        gate_faults = list(getattr(gate_result, "faults", None) or [])
+        gate_notes = list(getattr(gate_result, "notes", None) or [])
+    return {
+        "ts": _dt.datetime.now().isoformat(timespec="seconds"),
+        "turn": int(turn or 0),
+        "is_open": bool(is_open),
+        "model": model,
+        "mode": str(dec.get("mode") or ""),
+        "reason": str(dec.get("reason") or ""),
+        "activity": str(activity or ""),
+        "hard_break": bool(dec.get("hard_break")),
+        "instructions": str(dec.get("instructions") or ""),
+        "system_blocks": [
+            {
+                "label": _label_system_block(b.get("text") or "", i),
+                "text": str(b.get("text") or ""),
+                "cached": bool(b.get("cache_control")),
+            }
+            for i, b in enumerate(system or [])
+            if isinstance(b, dict)
+        ],
+        "history": history,
+        "task_message": task or "",
+        "response": {
+            "usage": {
+                "input_tokens": int(u.get("input_tokens") or 0),
+                "output_tokens": int(u.get("output_tokens") or 0),
+                "thinking_tokens": int(u.get("thinking_tokens") or 0),
+                "cached_input_tokens": int(u.get("cached_input_tokens") or 0),
+            },
+            "stop_reason": stop_reason or "",
+            "gate_faults": gate_faults,
+            "gate_notes": gate_notes,
+            "notes": list(notes or []),
+        },
+    }
 
 
 # --- Session phase layer (Phase 2 pedagogy engine) --------------------------
@@ -355,10 +498,6 @@ def build_session_phase_state(sheet: dict, pack_dir) -> "PhaseState":
     ))
 
 
-# Back-compat name
-OPEN_HARNESS = OPEN_HARNESS_DIAGNOSTIC
-
-
 @dataclass
 class TurnResult:
     reply: str
@@ -373,6 +512,12 @@ class TurnResult:
     focus_meta: dict = field(default_factory=dict)
     # Structured multi-part reply (recast / explain / continue / …)
     parts: dict = field(default_factory=dict)
+    # Typed turn events (tutor/turn_events.py). Since Phase 3 batch 2 the
+    # notes list above IS their chronological projection ([render(e) for e
+    # in events], seq order — CHAR-BUG-003 resolved), and to_dict() exposes
+    # the serialized timeline (web /api responses; the eval harness records
+    # it per turn so evals/conv_checks.py can consume typed events).
+    events: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -387,72 +532,11 @@ class TurnResult:
             "error": self.error,
             "focus_meta": self.focus_meta,
             "parts": self.parts,
+            "events": [
+                e.as_dict() if hasattr(e, "as_dict") else e
+                for e in (self.events or [])
+            ],
         }
-
-
-def build_conversational_system(pack_dir: Path, sheet: dict) -> list[dict]:
-    """Sheet = context about the learner; pack = legal language palette."""
-    from .character_sheet import active_error_patterns, now_iso
-
-    stance = CONV_PROMPT.read_text()
-    pack = load_pack(pack_dir)
-    sheet_txt = format_sheet_for_prompt(sheet)
-    now = now_iso()
-    active = active_error_patterns(sheet)
-    err_block = ""
-    if active:
-        lines = [
-            "# ACTIVE ERROR PATTERNS (priority — do not ignore)",
-            "These constructions keep failing. Recast + weave practice THIS turn "
-            "before chasing a brand-new stretch.",
-        ]
-        for ep in active:
-            lines.append(
-                f"- {ep['id']} ×{ep['count']}: {ep['label']} "
-                f"(last_seen={ep.get('last_seen')}) "
-                f"examples={ep.get('last_examples')}"
-            )
-            if ep.get("teach_hint"):
-                lines.append(f"  teach: {ep['teach_hint']}")
-        err_block = "\n".join(lines) + "\n\n"
-    return [
-        {
-            "type": "text",
-            "text": (
-                stance
-                + f"\n\n# Clock\nCurrent local date/time: **{now}**\n"
-                + "Use this to interpret last_seen / updated_at on the sheet "
-                + "(e.g. yesterday vs today).\n\n"
-                + err_block
-                + "# Student character sheet (YOUR model of this learner)\n"
-                + "Use this to choose Spanish level, scaffolding, and what to "
-                + "weave in next. Do not ignore next_best / avoid / "
-                + "active error patterns.\n\n"
-                + (
-                    "**BLANK LEARNER:** all can-dos unknown — still in feel-out / "
-                    "placement. Keep models tiny; English frame OK; do not assume "
-                    "intermediate comprehension.\n\n"
-                    if _sheet_looks_blank(sheet)
-                    else ""
-                )
-                + "The app updates the sheet from dialogue. Do NOT paste sheet "
-                + "JSON, tool payloads, or can-do codes into the learner reply.\n\n"
-                + sheet_txt
-            ),
-        },
-        {
-            "type": "text",
-            "text": "# Course pack palette (in-scope inventory + denylist)\n\n"
-                    + pack,
-            "cache_control": {"type": "ephemeral"},
-        },
-    ]
-
-
-def _sheet_looks_blank(sheet: dict) -> bool:
-    from .pedagogy_contract import is_blank_learner
-
-    return is_blank_learner(sheet)
 
 
 def _usage_dict(final) -> dict:
@@ -607,8 +691,63 @@ def _skills_snapshot(sheet: dict) -> dict:
     }
 
 
+def _state_delegate(field_name: str, attr_name: str | None = None) -> property:
+    """Thin delegate: session.<attr> ⇄ session.state.<field>.
+
+    Phase 1 batch 1 (docs/reviews-architecture-refactor.md): every
+    pre-aggregate attribute keeps its historical name and read/write
+    semantics while the value lives on the SessionState aggregate — no call
+    site or test changes this batch (Phase 4's pipeline consumes state
+    directly). Compatibility escape: tests that build partial sessions via
+    ``ConversationalSession.__new__`` (no __init__, so no ``state``) fall
+    back to plain instance attributes, exactly the pre-aggregate behavior.
+    """
+    attr = attr_name or field_name
+
+    def _get(self):
+        state = self.__dict__.get("state")
+        if state is not None:
+            return getattr(state, field_name)
+        try:
+            return self.__dict__[attr]
+        except KeyError:
+            raise AttributeError(attr) from None
+
+    def _set(self, value) -> None:
+        state = self.__dict__.get("state")
+        if state is not None:
+            setattr(state, field_name, value)
+        else:
+            self.__dict__[attr] = value
+
+    return property(_get, _set)
+
+
 class ConversationalSession:
     """Stateful chat session shared by CLI and web."""
+
+    # --- SessionState delegates (Phase 1 batch 1) ---------------------------
+    history = _state_delegate("history")
+    messages_for_ui = _state_delegate("messages_for_ui")
+    _focus_panel = _state_delegate("focus_panel", "_focus_panel")
+    _focus_key = _state_delegate("focus_key", "_focus_key")
+    _focus_meta = _state_delegate("focus_meta", "_focus_meta")
+    _focus_version = _state_delegate("focus_version", "_focus_version")
+    _focus_lock = _state_delegate("focus_lock", "_focus_lock")
+    _focus_inflight = _state_delegate("focus_inflight", "_focus_inflight")
+    _image_warm_lock = _state_delegate("image_warm_lock", "_image_warm_lock")
+    _image_warm_inflight = _state_delegate(
+        "image_warm_inflight", "_image_warm_inflight"
+    )
+    last_plan = _state_delegate("last_plan")
+    pedagogy_memory = _state_delegate("pedagogy_memory")
+    mode_state = _state_delegate("mode_state")
+    phase_state = _state_delegate("phase_state")
+    task_state = _state_delegate("task_state")
+    last_mode_decision = _state_delegate("last_mode_decision")
+    debug_requests = _state_delegate("debug_requests")
+    costs = _state_delegate("costs")
+    progress_session_id = _state_delegate("progress_session_id")
 
     def __init__(
         self,
@@ -644,28 +783,42 @@ class ConversationalSession:
         # Drop stale "only a few minutes" energy from prior days/sessions
         self.sheet = clear_session_scoped_affect(self.sheet)
         save_sheet(self.sheet_path, self.sheet)
-        self.history: list[dict] = []
         self.tools = SHEET_TOOLS if use_tools else None
-        self.messages_for_ui: list[dict] = []  # learner-visible only
-        self._focus_panel: dict | None = None
-        self._focus_key: str | None = None
-        self._focus_meta: dict = {"source": "static"}
-        self._focus_version: int = 0
-        self._focus_lock = threading.Lock()
-        self._focus_inflight = False
         self.logger: SessionLogger | None = None
         self.teacher_mode = (config.TEACHER_MODE or "planned").strip().lower()
-        self.last_plan: dict | None = None
-        from .session_memory import SessionMemory
-        from .modes import ModeSessionState
-        self.pedagogy_memory = SessionMemory()
-        self.mode_state = ModeSessionState()
-        # Session phase plan (Phase 2): built once from the loaded sheet.
-        self.phase_state = build_session_phase_state(self.sheet, self.pack_dir)
-        # ConvergentTaskRuntime state (Phase 5, r6 Rank-4): bound to the
-        # first task-capable open scene on the first task-phase turn;
-        # session-scoped, persists across turns until done.
-        self.task_state = None
+        # E4/E4b deletion (docs/reviews-architecture-refactor.md, 2026-07-28):
+        # the TEACHER_MODE=rules PlanCard runtime and the legacy harness were
+        # DELETED — both bypassed the output gate, mode runtime, retrieval
+        # scheduler and phase clock (a constitution hole reachable only by an
+        # env var nothing sets). Planned aliases are the only teacher runtime;
+        # anything else is a hard error here, not a silent fallthrough.
+        if self.teacher_mode not in config.PLANNED_TEACHER_MODES:
+            raise ValueError(
+                f"TEACHER_MODE={self.teacher_mode!r} is not supported: the "
+                "rules PlanCard runtime and the legacy harness were deleted "
+                "(E4/E4b, docs/reviews-architecture-refactor.md, 2026-07-28). "
+                f"Use one of {config.PLANNED_TEACHER_MODES} (default: planned)."
+            )
+        # Aggregate session state (Phase 1 batch 1,
+        # docs/reviews-architecture-refactor.md): the five stores
+        # (SessionMemory / ModeSessionState / PhaseState / TaskState /
+        # SessionCostTracker) + the loose session attributes, constructed
+        # exactly as the old inline block did — same helpers, same args,
+        # same defaults (the phase-plan inputs below are what
+        # build_session_phase_state computed internally). All historical
+        # attribute names keep working via the delegate properties defined
+        # after __init__.
+        from .corpus import pack_topic_titles
+        from .pedagogy_contract import is_blank_learner
+        from .retrieval_scheduler import due_items
+
+        self.state = SessionState.fresh(
+            self.sheet,
+            source_label=label,
+            pack_topics=pack_topic_titles(Path(self.pack_dir)),
+            due_count=len(due_items(self.sheet)),
+            blank=is_blank_learner(self.sheet),
+        )
         # Association table (Phase 3, r7 S4): loaded once per session. A
         # missing/invalid table disables the introduce router (turns note
         # introduce_table_missing) — never a crash.
@@ -676,9 +829,6 @@ class ConversationalSession:
             )
         except (FileNotFoundError, ValueError, OSError):
             self.association_table = None
-        self.last_mode_decision: dict | None = None
-        from .costs import SessionCostTracker
-        self.costs = SessionCostTracker(source=label)
         if log:
             self.logger = SessionLogger(
                 arch="conversational",
@@ -725,7 +875,8 @@ class ConversationalSession:
                 "polarity": polarity,
                 "item_kind": item_kind,
                 "detail": pl.detail_for(kind, key, **(detail_ctx or {})),
-            }], session_id=self.progress_session_id)
+            }], session_id=self.progress_session_id,
+                ev_log=session_event_log(self))
         except Exception:
             return []
 
@@ -737,7 +888,8 @@ class ConversationalSession:
         try:
             evs = pl.ladder_crossings(transition, seen=pl.up_keys())
             return emit_progress_events(
-                evs, session_id=self.progress_session_id
+                evs, session_id=self.progress_session_id,
+                ev_log=session_event_log(self), stage="schedule",
             )
         except Exception:
             return []
@@ -751,14 +903,58 @@ class ConversationalSession:
                 prev_sheet, self.sheet, seen=pl.up_keys()
             )
             return emit_progress_events(
-                evs, session_id=self.progress_session_id
+                evs, session_id=self.progress_session_id,
+                ev_log=session_event_log(self), stage="sheet",
             )
         except Exception:
             return []
 
-    @property
-    def system(self) -> list[dict]:
-        return build_conversational_system(self.pack_dir, self.sheet)
+    def _topic_nouns(self) -> list[str]:
+        """Concept palette for the asked-topic extractor — ONE derivation
+        (session_memory.topic_palette) over the SESSION's association table:
+        priority tier (incident nouns ciudad/casa lead) then the table's
+        content keys.  CHAR-BUG-007 RESOLVED (Phase 5 batch 2): structural
+        table keys — pronouns, question words, copulas, numbers, `hay` —
+        are grammar infrastructure, not topics, and no longer bind as
+        concepts («¿Dónde estás tú?» registers the bare ``location`` frame,
+        not ``location:tu``)."""
+        from .session_memory import topic_palette
+
+        return topic_palette(self.association_table)
+
+    def _capture_debug_request(
+        self,
+        *,
+        system,
+        messages,
+        task: str,
+        decision_dict: dict | None,
+        activity: str | None,
+        usage: dict | None,
+        gate_result=None,
+        notes=None,
+        stop_reason: str = "",
+        is_open: bool = False,
+    ) -> None:
+        """Append one entry to the in-memory debug ring buffer (never raises,
+        never touches disk)."""
+        try:
+            self.debug_requests.append(build_debug_entry(
+                model=self.model,
+                system=system,
+                messages=messages,
+                task=task,
+                decision_dict=decision_dict,
+                activity=activity,
+                usage=usage,
+                gate_result=gate_result,
+                notes=notes,
+                stop_reason=stop_reason,
+                turn=self.pedagogy_memory.turns,
+                is_open=is_open,
+            ))
+        except Exception:
+            pass
 
     def _sheet_for_focus(self) -> dict:
         """Ability sheet for the focus rail (no personal-name injection —
@@ -832,23 +1028,129 @@ class ConversationalSession:
             return False
         return True
 
-    def _attach_mode_image(self, decision, sched_notes: list[str]) -> list[dict]:
-        """Primary attach: mode-requested concept via ensure_asset (cap-gated).
+    def _schedule_image_warm(
+        self,
+        concept: str,
+        *,
+        source: str,
+        decision_reason: str = "async_warm",
+    ) -> bool:
+        """Warm a missed teach-image concept OFF the reply path.
 
-        Same-turn: hit cache or generate (never "only if we pre-seeded it");
-        novel generation respects the session budget cap. Misses are NEVER
-        silent (incident 2026-07-28: the pipeline looked generation-dead
-        because mode-path misses left no note): the notes say whether the
-        session cap, a disabled generator, or a generation failure ate the
-        image.
+        Latency law (audit (e) 2026-07-28; commits 2d160e0/7275bdc): the
+        reply thread never pays image-API RTT. Mirrors _schedule_focus_enrich
+        — daemon thread, in-flight dedupe, session caps checked at spawn AND
+        inside the worker (_may_generate_image), costs recorded through the
+        existing _note_image_costs path when generation completes. The
+        in-flight reply is never touched — the image appears on a LATER turn
+        via cache hit. Returns True when a warm thread was spawned.
+        """
+        from .teach_assets import cache_lookup, ensure_asset, generation_ready
+
+        key = (concept or "").strip().lower()
+        if not key or cache_lookup(key):
+            return False
+        if not self._may_generate_image(source=source):
+            return False
+        if not generation_ready():
+            return False
+        with self._image_warm_lock:
+            if key in self._image_warm_inflight:
+                return False
+            self._image_warm_inflight.add(key)
+
+        def _work() -> None:
+            try:
+                if not self._may_generate_image(source=source):
+                    return
+                hit = ensure_asset(key, generate=True)
+                if hit and (hit.get("cache") or "") == "miss_generated":
+                    self._note_image_costs([
+                        {**hit, "decision_reason": decision_reason}
+                    ])
+            except Exception:
+                pass
+            finally:
+                with self._image_warm_lock:
+                    self._image_warm_inflight.discard(key)
+
+        threading.Thread(
+            target=_work, name=f"image-warm-{key}", daemon=True
+        ).start()
+        return True
+
+    def _note_image_miss(
+        self,
+        concept: str,
+        notes: list[str] | None = None,
+        *,
+        source: str,
+        decision_reason: str,
+    ) -> None:
+        """Generation-miss visibility + async warm (audit (e) contract).
+
+        Misses are NEVER silent (incident 2026-07-28): the notes say whether
+        the session cap, a disabled generator, or the async-warm handoff ate
+        the same-turn image. Never generates in-line.
+
+        Phase 3 batch 2: the typed IMAGE_GEN_* event IS the record —
+        result.notes is the chronological event projection, so the optional
+        ``notes`` accumulator is legacy-caller compatibility only.
+
+        CHAR-BUG-004 RESOLVED (Phase 4 batch 2): ONE miss note per concept
+        per turn.  The mode-attach site and the assets_for_ai_turn fallback
+        could both decide the SAME concept and double-note it (the
+        known_bugs.json entry; duplicate pins regenerated with this fix in
+        golden_blank_open/golden_due_turn).  Visibility is unchanged — the
+        first note still lands; only the byte-identical repeat is dropped.
+        Warm scheduling is unaffected: _schedule_image_warm already dedupes
+        in-flight keys, so the skipped second call never did real work.
+        """
+        sink = notes if notes is not None else []
+        ev = session_event_log(self)
+        _k = str(concept)
+        if any(
+            e.key == _k
+            for kind in (
+                EV.IMAGE_GEN_CAPPED, EV.IMAGE_GEN_DISABLED,
+                EV.IMAGE_GEN_ASYNC,
+            )
+            for e in ev.find(kind)
+        ):
+            return
+        if not self._may_generate_image(source=source):
+            sink.append(ev.emit(
+                EV.IMAGE_GEN_CAPPED, key=concept, stage="image",
+            ))
+            return
+        from .teach_assets import generation_ready
+
+        if not generation_ready():
+            sink.append(ev.emit(
+                EV.IMAGE_GEN_DISABLED, key=concept, stage="image",
+            ))
+            return
+        self._schedule_image_warm(
+            concept, source=source, decision_reason=decision_reason
+        )
+        sink.append(ev.emit(EV.IMAGE_GEN_ASYNC, key=concept, stage="image"))
+
+    def _attach_mode_image(
+        self, decision, sched_notes: list[str] | None = None
+    ) -> list[dict]:
+        """Primary attach: mode-requested concept, cache-only on the reply path.
+
+        Audit (e) 2026-07-28: the reply path never generates (latency law) —
+        a cache hit attaches same-turn; a miss returns [] instantly, is noted
+        visibly (capped/disabled/async), and warms in a daemon thread so the
+        image exists on a later turn.
         """
         concept = decision.image_concept
         if not concept:
             return []
-        from .teach_assets import ensure_asset, generation_ready
+        from .teach_assets import ensure_asset
 
-        may_gen = self._may_generate_image(source="mode")
-        hit = ensure_asset(concept, generate=may_gen)
+        hit = ensure_asset(concept, generate=False)
         if hit:
             self.pedagogy_memory.note_image(concept)
             return [{
@@ -856,12 +1158,12 @@ class ConversationalSession:
                 "decision_reason": f"mode:{decision.mode.value}",
                 "visual_score": 1.0,
             }]
-        if not may_gen:
-            sched_notes.append(f"image_gen_capped:{concept}")
-        elif not generation_ready():
-            sched_notes.append(f"image_gen_disabled:{concept}")
-        else:
-            sched_notes.append(f"image_gen_failed:{concept}")
+        self._note_image_miss(
+            concept,
+            sched_notes,
+            source="mode",
+            decision_reason=f"warm:mode:{decision.mode.value}",
+        )
         return []
 
     def _record_due_outcomes(self, learner: str, sigs: set[str]) -> list[str]:
@@ -895,17 +1197,22 @@ class ConversationalSession:
             for pid in (resolves - hit_ids)
         }
         resolved_forms.discard(None)
+        ev = session_event_log(self)
         for d in due:
             if d.kind == "lexicon" and word_present(d.key, learner):
                 ok = not meta
                 self.sheet, tr = record_outcome_ex(self.sheet, d.key, d.kind, ok)
-                notes.append(
-                    f"due_outcome_{'success' if ok else 'fail'}:{d.key}"
-                )
+                notes.append(ev.emit(
+                    EV.DUE_OUTCOME_SUCCESS if ok else EV.DUE_OUTCOME_FAIL,
+                    key=d.key, payload={"kind": d.kind}, stage="schedule",
+                ))
                 notes.extend(self._progress_ladder(tr))
             elif d.kind == "grammar" and d.key in resolved_forms:
                 self.sheet, tr = record_outcome_ex(self.sheet, d.key, d.kind, True)
-                notes.append(f"due_outcome_success:{d.key}")
+                notes.append(ev.emit(
+                    EV.DUE_OUTCOME_SUCCESS,
+                    key=d.key, payload={"kind": d.kind}, stage="schedule",
+                ))
                 notes.extend(self._progress_ladder(tr))
         return notes
 
@@ -1081,14 +1388,32 @@ class ConversationalSession:
                 json.dumps(self.sheet.get("error_patterns") or {})
             ),
         }
+        sheet_events: list = []
         self.sheet, _sheet_visible, notes = process_turn(
             self.sheet,
             learner,
             composed,
             tool_delta=tool_delta if self.use_tools else None,
+            event_sink=sheet_events,
         )
         visible = composed or _sheet_visible or compose_if_needed(tutor_parts)
-        save_sheet(self.sheet_path, self.sheet)
+        # CHAR-BUG-001 RESOLVED (Phase 4 batch 4): _finish's historical
+        # mid-turn save_sheet is gone — _finish has exactly one caller (the
+        # turn pipeline's stage_finish) and the turn's single durable
+        # persist is stage_sheet_commit at the end of the recorder family.
+        # Typed leaf emission (Phase 3 batch 2 push-down): character_sheet
+        # mints (kind, key, payload) triples natively; emit them — the render
+        # is byte-identical to the returned strings. absorb() stays ONLY as
+        # the safety net for an un-typed emitter (e.g. a test fake replacing
+        # process_turn) — golden runs must never hit it (contract-tested).
+        ev = session_event_log(self)
+        if len(sheet_events) == len(notes):
+            notes = [
+                ev.emit(kind, key=key, payload=payload, stage="sheet")
+                for kind, key, payload in sheet_events
+            ]
+        else:  # safety net: strings without triples — classify at the bus
+            notes = [ev.absorb(n, stage="sheet") for n in notes]
         notes = list(notes) + self._progress_sheet_crossings(_prog_prev)
         if refresh_focus:
             # Static rail immediately; FOCUS_MODEL enriches async (non-blocking)
@@ -1096,11 +1421,11 @@ class ConversationalSession:
                 learner=learner,
                 tutor_reply=visible,
             )
-            notes = list(notes) + ["focus_async"]
+            notes = list(notes) + [ev.emit(EV.FOCUS_ASYNC, stage="sheet")]
         if tutor_parts.has_recast() and "recast" not in notes:
-            notes = list(notes) + ["recast"]
+            notes = list(notes) + [ev.emit(EV.RECAST, stage="sheet")]
         if parts_dict.get("structured"):
-            notes = list(notes) + ["structured_reply"]
+            notes = list(notes) + [ev.emit(EV.STRUCTURED_REPLY, stage="sheet")]
 
         # Durable pedagogy contract (code-enforced, not prompt-only)
         ped = evaluate_turn(
@@ -1109,7 +1434,18 @@ class ConversationalSession:
             structured=bool(parts_dict.get("structured")),
             visible=visible,
         )
-        notes = list(notes) + list(ped.notes)
+        # Typed leaf emission (Phase 3 batch 2 push-down): pedagogy_contract
+        # carries the bare note_keys; the PEDAGOGY render is "pedagogy:"+key.
+        # absorb() only as the safety net for a keyless (test-built) check.
+        if len(getattr(ped, "note_keys", []) or []) == len(ped.notes):
+            notes = list(notes) + [
+                ev.emit(EV.PEDAGOGY, key=k, stage="contract")
+                for k in ped.note_keys
+            ]
+        else:  # safety net
+            notes = list(notes) + [
+                ev.absorb(n, stage="contract") for n in ped.notes
+            ]
         parts_dict = {**parts_dict, "pedagogy": ped.as_dict()}
 
         result = TurnResult(
@@ -1124,6 +1460,10 @@ class ConversationalSession:
             focus_meta=dict(self._focus_meta or {}),
             parts=parts_dict,
         )
+        # Typed event log rides the result (Phase 3 batch 1). Alias, not
+        # copy: emitters that run after _finish (introduce ledger, gate tail,
+        # asked-topic registry, tail summary) land in the same list.
+        result.events = ev.events
         # Mode runtime attaches plan/mode/images *after* finish — log then.
         if self.logger and not skip_log:
             self._log_turn_result(
@@ -1131,6 +1471,17 @@ class ConversationalSession:
                 log_learner=log_learner if log_learner is not None else learner,
             )
         return result
+
+    def _commit_sheet(self) -> None:
+        """THE atomic-turn commit point (CHAR-BUG-001 RESOLVED — Phase 4
+        batch 4 declared delta, Grok amendment (a)): one durable sheet
+        persist per successful turn, called by stage_sheet_commit after
+        every recorder stage has written its fields into the in-memory
+        sheet.  Crash semantics: the turn commits or it doesn't — a crash
+        mid-turn leaves the previous turn's sheet on disk, never a
+        half-written turn.  Uses the module ``save_sheet`` binding so the
+        characterization harness's save-call recorder keeps its seam."""
+        save_sheet(self.sheet_path, self.sheet)
 
     def _log_turn_result(
         self,
@@ -1173,14 +1524,6 @@ class ConversationalSession:
             },
         )
 
-    def _planned_enabled(self) -> bool:
-        # planned / plan / new / ai = AI-first tutor (default)
-        # rules = optional PlanCard ladder (not recommended for product)
-        return self.teacher_mode in ("planned", "plan", "new", "ai", "rules")
-
-    def _rules_mode(self) -> bool:
-        return self.teacher_mode == "rules"
-
     def _execute_planned(
         self,
         learner: str,
@@ -1189,17 +1532,11 @@ class ConversationalSession:
         input_mode: str = "text",
         log_learner: str | None = None,
     ) -> TurnResult:
-        """Default: AI tutor with sheet + memory + pedagogy direction.
-
-        TEACHER_MODE=rules → old PlanCard ladder (optional / experiments).
-        """
-        if self._rules_mode():
-            return self._execute_rules_planned(
-                learner,
-                is_open=is_open,
-                input_mode=input_mode,
-                log_learner=log_learner,
-            )
+        """AI tutor with sheet + memory + pedagogy direction — the ONLY
+        teacher runtime (E4/E4b deletion 2026-07-28,
+        docs/reviews-architecture-refactor.md: the TEACHER_MODE=rules
+        PlanCard ladder and the legacy harness were deleted; TEACHER_MODE
+        validates to planned aliases at session construction)."""
         return self._execute_ai_tutor(
             learner,
             is_open=is_open,
@@ -1215,926 +1552,64 @@ class ConversationalSession:
         input_mode: str = "text",
         log_learner: str | None = None,
     ) -> TurnResult:
-        """Code selects mode; AI realizes; gate verifies; sheet hard-updates."""
-        from .executor import build_ai_tutor_system, build_ai_tutor_user_message
-        from .modes import Mode, select_mode
-        from .observe import build_observations
-        from .pedagogy_contract import (
-            NOTE_DIAGNOSTIC_OPEN,
-            NOTE_KNOWN_LEARNER_OPEN,
-            is_blank_learner,
-            open_phase,
+        """Code selects mode; AI realizes; gate verifies; sheet hard-updates.
+
+        Phase 4 CLOSED (docs/reviews-architecture-refactor.md): every
+        region runs as named stages over a TurnContext — the stage tuples
+        in tutor/turn_pipeline.py ARE the documentation.  Executor order:
+        PRE_MODEL_STAGES → stage_contributors → stage_phase_tick (its
+        verified real site: AFTER the contributors) → REALIZE_STAGES (a
+        provider exception becomes ctx.error_result, returned immediately)
+        → the GATE_REPAIR_STAGES trio (context build outside the historical
+        try/except; any gate exception emits OUTPUT_GATE_ERROR and the turn
+        proceeds ungated) → RECORDER_STAGES (incl. the atomic sheet commit)
+        → CAPTURE_LOG_STAGES.
+        """
+        ev = begin_turn_log(self)
+        from .turn_pipeline import (
+            CAPTURE_LOG_STAGES,
+            PRE_MODEL_STAGES,
+            REALIZE_STAGES,
+            RECORDER_STAGES,
+            TurnContext,
+            stage_contributors,
+            stage_gate_check,
+            stage_gate_context,
+            stage_gate_repair,
+            stage_phase_tick,
         )
-        from .scenes import open_scenes_for_sheet, scene_hints_for_prompt
-        from .teach_assets import assets_for_ai_turn, cache_lookup
 
-        # LLM intent classifier (regex retirement, phase E). BLOCKING mode
-        # classifies before routing (+~2-3s/turn); default SHADOW mode runs
-        # parallel to the tutor call via _spawn_signal_shadow below (zero
-        # latency, audits disagreements, fixes stale holds for next turn).
-        llm_signals: set[str] | None = None
-        if not is_open and learner and getattr(
-            config, "SIGNAL_CLASSIFIER_BLOCKING", False
-        ):
-            from .signal_classifier import (
-                OBSERVATIONAL_SIGNALS,
-                classify_signals,
-            )
-
-            clf = classify_signals(learner)
-            if clf is not None:
-                llm_signals, clf_meta = clf
-                # §2.1a: content_offer / self_flagged_form are shadow-only
-                # observations — they must not reach select_mode routing.
-                llm_signals = set(llm_signals) - OBSERVATIONAL_SIGNALS
-                u = clf_meta.get("usage") or {}
-                if u.get("input_tokens") or u.get("output_tokens"):
-                    self.costs.add_llm(
-                        "classifier",
-                        str(clf_meta.get("model") or ""),
-                        input_tokens=u.get("input_tokens", 0),
-                        output_tokens=u.get("output_tokens", 0),
-                    )
-
-        if not is_open and learner:
-            sig_pre = self.pedagogy_memory.note_learner(
-                learner, extra_signals=llm_signals
-            )
-            # Eager clears (Grok round-1 C): own Spanish, a topic request, or a
-            # help request all mean "not stuck on our last try" — grammar
-            # questions with own content must NOT keep the hold.
-            if sig_pre & {"spanish_ok", "topic_request", "help_request"}:
-                self.pedagogy_memory.clear_comprehension_hold()
-        else:
-            sig_pre = set()
-
-        self.mode_state.tick()
-        obs = build_observations(
-            self.sheet, learner=learner, is_open=is_open,
-            extra_signals=llm_signals,
-        )
-        # Recency memory for streak hard breaks (this turn's hits at this index)
-        self.mode_state.note_error_hits(obs.get("error_hit_ids"))
-        blank = bool(obs.get("blank_sheet") or is_blank_learner(self.sheet))
-
-        sigs = set(obs.get("signals") or [])
-        if "english_only" in sigs:
-            self.mode_state.english_only_streak += 1
-        elif learner and not is_open:
-            self.mode_state.english_only_streak = 0
-
-        # Retrieval scheduler (Phase 1): record retrieval outcomes on clear
-        # evidence BEFORE building the turn, so ladders/next_due advance and
-        # a just-used item is not re-offered this turn.
-        sched_notes: list[str] = []
-        if learner and not is_open:
-            sched_notes.extend(self._record_due_outcomes(learner, sigs))
-
-        open_scenes = open_scenes_for_sheet(self.sheet, self.pack_dir)
-        self.mode_state.open_scene_ids = [
-            s.get("id") for s in open_scenes if s.get("id")
-        ]
-
-        from .corpus import pack_topic_titles
-
-        # Session phase layer (Phase 2): code decides the activity class for
-        # this turn; select_mode's guard chain keeps absolute priority and
-        # only the default/known-open path is flavored by the hint.
-        # Resolve empty retrieval BEFORE flavoring the turn (Grok AMEND 2b,
-        # 2026-07-28): a turn must never be flavored for a retrieval phase
-        # with nothing due.
-        if self.phase_state.current_activity() == "retrieval":
-            from .retrieval_scheduler import due_items as _due_now
-
-            if not _due_now(self.sheet):
-                self.phase_state.force_advance()
-
-        activity = self.phase_state.current_activity()
-
-        decision = select_mode(
-            self.sheet,
-            observations=obs,
-            is_open=is_open,
-            learner=learner if not is_open else "",
-            mode_state=self.mode_state,
-            open_scenes=open_scenes,
-            images_shown=self.pedagogy_memory.images_shown,
-            session_memory=self.pedagogy_memory.snapshot(),
-            pack_topics=pack_topic_titles(self.pack_dir),
-            activity_hint=activity,
-        )
-        # Due re-encounters ride as a SOFT instruction addition on
-        # conversation-flavored turns only (no new hard mode; repair and
-        # guard turns keep their single focus).
-        due_block, due = due_elicit_block(
-            self.sheet, mode=decision.mode.value, reason=decision.reason,
-            activity_hint=activity,
-        )
-        if due_block:
-            decision.instructions = (
-                (decision.instructions or "").rstrip() + "\n\n" + due_block
-            ).strip()
-            sched_notes.append(
-                "due_elicit_offered:" + ",".join(d.key for d in due)
-            )
-        # §2.1a self-flag uptake (instruction path — regex-visible cheap
-        # case only; shadow classifier owns meaning-level detection). Budget
-        # lives in ModeSessionState; the note feeds the uptake_flag_honored
-        # eval (measurement first, per the closed content-uptake review).
-        if learner and not is_open:
-            uptake_txt, uptake_note = self_flag_uptake_block(
-                learner,
-                mode=decision.mode.value,
-                reason=decision.reason,
-                mode_state=self.mode_state,
-            )
-            if uptake_txt:
-                decision.instructions = (
-                    (decision.instructions or "").rstrip()
-                    + "\n\n" + uptake_txt
-                ).strip()
-                sched_notes.append(uptake_note)
-        # INTRODUCE plan (Phase 3, r7 S2): new_input phase + flavorable turn
-        # only. Code picks the item + scaffold; the model realizes it; the
-        # ledger write happens POST-turn only if the reply shows the key.
-        # R-B honesty (Grok AMEND 4b, 2026-07-28): the INTRODUCE block is
-        # rendered AFTER image resolution below, so an image plan can never
-        # claim an attachment that the cache/cap denied.
-        intro_plan = None
-        if self.association_table is None:
-            if activity == "new_input" and decision.mode.value == "conversation":
-                sched_notes.append("introduce_table_missing")
-        else:
-            _intro_txt, intro_plan = introduce_block(
-                self.sheet,
-                self.association_table,
-                self.pedagogy_memory.snapshot(),
-                mode=decision.mode.value,
-                reason=decision.reason,
-                activity_hint=activity,
-            )
-            if intro_plan is not None:
-                if (
-                    intro_plan.scaffold_type == "image"
-                    and decision.image_concept is None
-                ):
-                    # Existing image pipeline (ensure_asset, cap-gated) shows it
-                    decision.image_concept = intro_plan.key
-                sched_notes.append(
-                    f"introduce_planned:{intro_plan.key}:{intro_plan.rule_id}"
-                )
-        # ConvergentTaskRuntime wiring (Phase 5, r6 Rank-4): task-phase turns
-        # bind the FIRST task-capable open scene (session-scoped, persists
-        # until done). Slot filling is evaluated on the learner's OWN text
-        # BEFORE the tutor call; the teacher-facing task block (goal, slots,
-        # tutor_private_info with the never-volunteer directive) rides only
-        # flavorable turns — the same set as INTRODUCE, so guards and repairs
-        # keep their single focus. After done, task turns fall back to normal
-        # flavor (the completing turn still carries the celebrate line).
-        if activity == "task":
-            from .task_runtime import (
-                evaluate_turn as _task_eval,
-                task_from_scene,
-                task_instructions,
-            )
-
-            task_scene = None
-            if self.task_state is not None:
-                task_scene = next(
-                    (
-                        s for s in open_scenes
-                        if s.get("id") == self.task_state.scene_id
-                    ),
-                    None,
-                )
-            if self.task_state is None:
-                for sc in open_scenes:
-                    st = task_from_scene(sc)
-                    if st is not None:
-                        self.task_state = st
-                        task_scene = sc
-                        break
-            just_done = False
-            if self.task_state is not None and task_scene is not None:
-                if (
-                    learner and not is_open
-                    and self.task_state.status == "open"
-                ):
-                    before_slots = set(self.task_state.slots_filled)
-                    self.task_state = _task_eval(
-                        self.task_state, learner, task_scene
-                    )
-                    for sid in self.task_state.slots_filled:
-                        if sid not in before_slots:
-                            sched_notes.append(f"task_slot_filled:{sid}")
-                    if self.task_state.status == "done":
-                        just_done = True
-                        sched_notes.append(
-                            f"task_complete:{self.task_state.scene_id}"
-                        )
-                        _desc = str(((task_scene or {}).get("primary_exit") or {}).get("description") or "")
-                        sched_notes.extend(self._progress_note(
-                            "task_complete", self.task_state.scene_id,
-                            item_kind="task", detail_ctx={"desc": _desc},
-                        ))
-                if (
-                    decision.mode.value == "conversation"
-                    and decision.reason in INTRODUCE_FLAVORABLE_REASONS
-                    and (self.task_state.status == "open" or just_done)
-                ):
-                    decision.instructions = (
-                        (decision.instructions or "").rstrip()
-                        + "\n\n"
-                        + task_instructions(self.task_state, task_scene)
-                    ).strip()
-                    sched_notes.append(
-                        f"task_goal_offered:{self.task_state.scene_id}"
-                    )
-        # CLOSE phase (PEDAGOGY §1.2, USER-ratified 2026-07-28): flavorable
-        # close turns carry the compact session summary the one-line English
-        # close must be built from. Same condition set as INTRODUCE — guard
-        # and repair turns keep their single focus.
-        if (
-            activity == "close"
-            and decision.mode.value == "conversation"
-            and decision.reason in INTRODUCE_FLAVORABLE_REASONS
-        ):
-            decision.instructions = (
-                (decision.instructions or "").rstrip()
-                + "\n\n"
-                + close_summary_block(
-                    self.pedagogy_memory.snapshot(),
-                    resolved_forms=self.mode_state.resolved_this_session,
-                    task_state=self.task_state,
-                )
-            ).strip()
-            sched_notes.append("close_phase_offered")
-        # Advance/freeze the phase clock: repair + guard turns freeze;
-        # interventions (cf_recast/form_focus/association/transfer) consume.
-        phase_consumed = phase_turn_consumed(
-            decision.mode.value, decision.reason
-        )
-        self.phase_state.tick(phase_consumed)
-        # last_mode_decision (focus rail) is snapshotted AFTER the INTRODUCE
-        # render below so its instructions stay faithful to what the model
-        # actually receives.
-        if not is_open and learner:
-            self._spawn_signal_shadow(
-                learner, decision.mode.value, decision.reason
-            )
-
-        image_decision = None
-        teach_images: list = self._attach_mode_image(decision, sched_notes)
-
-        # Any mode may request association image; placement always tries open assets
-        if not teach_images and (
-            decision.mode in (
-                Mode.PLACEMENT,
-                Mode.ASSOCIATION,
-                Mode.COMPREHENSION_REPAIR,
-            )
-            or decision.image_concept
-        ):
-            # Incident 2026-07-28: on comprehension_repair (incl. meta/grammar
-            # questions) the fallback may only serve a concept that is
-            # surface-present in the CURRENT exchange (the learner's words +
-            # this turn's model lines). No relevant concept → NO image.
-            relevant_to = None
-            if decision.mode == Mode.COMPREHENSION_REPAIR:
-                relevant_to = " ".join(
-                    [learner if not is_open else ""]
-                    + [str(m) for m in (
-                        (decision.targets or {}).get("model_lines") or []
-                    )]
-                )
-            teach_images, image_decision = assets_for_ai_turn(
-                is_open=is_open or decision.mode == Mode.PLACEMENT,
-                blank_sheet=blank,
-                learner=learner if not is_open else "",
-                tutor_models=list((decision.targets or {}).get("model_lines") or []),
-                signals=list(sigs),
-                images_shown=self.pedagogy_memory.images_shown,
-                turns_since_image=self.pedagogy_memory.turns_since_image,
-                session_turns=self.pedagogy_memory.turns,
-                require_relevant_to=relevant_to,
-            )
-            if teach_images:
-                self.pedagogy_memory.note_image(teach_images[0].get("concept"))
-
-        self._note_image_costs(teach_images)
-
-        # Render the INTRODUCE block now that image resolution is known
-        # (Grok AMEND 4b, 2026-07-28): an R-B plan whose image did NOT
-        # actually attach (cache miss + generation cap/denied) downgrades to
-        # the R-D single ≤6-word micro-gloss — instructions must never claim
-        # a dual-code image that is not there.
-        if intro_plan is not None:
-            from .introduce_router import IntroducePlan, plan_instructions
-
-            if intro_plan.scaffold_type == "image":
-                has_img = any(
-                    (t.get("concept") or "") == intro_plan.key
-                    for t in (teach_images or [])
-                )
-                if not has_img:
-                    entry = (
-                        (self.association_table or {}).get(intro_plan.key)
-                        or {}
-                    )
-                    gloss = str(entry.get("gloss_en") or intro_plan.key)
-                    intro_plan = IntroducePlan(
-                        key=intro_plan.key,
-                        rule_id="R-D",
-                        scaffold_type="gloss",
-                        scaffold_payload={
-                            "gloss": gloss,
-                            "format": f"**{intro_plan.key}** ({gloss})",
-                        },
-                        forbid_cluster_with=list(
-                            intro_plan.forbid_cluster_with
-                        ),
-                    )
-                    sched_notes.append(
-                        f"introduce_downgraded:{intro_plan.key}:R-B_to_R-D"
-                    )
-            decision.instructions = (
-                (decision.instructions or "").rstrip()
-                + "\n\n"
-                + plan_instructions(intro_plan)
-            ).strip()
-
-        self.last_mode_decision = {
-            **decision.as_dict(),
-            "phase": {
-                "activity": activity,
-                "consumed": phase_consumed,
-                "index": self.phase_state.index,
-                "turns_in_phase": self.phase_state.turns_in_phase,
-                "frozen_turns": self.phase_state.frozen_turns,
-            },
-        }
-
-        # System = STATIC blocks only (stance/persona/pack) so the provider
-        # prefix-cache covers system + chat history. The per-turn sheet rides
-        # in the task message at the request tail. No personal context —
-        # personal-data capture is disabled.
-        system = build_ai_tutor_system(
-            pack_palette=load_pack(self.pack_dir),
-        )
-        task = build_ai_tutor_user_message(
+        ctx = TurnContext(
             learner=learner,
             is_open=is_open,
-            session_memory=self.pedagogy_memory.snapshot(),
-            observations=obs,
-            teach_images=teach_images,
-            blank_sheet=blank,
-            mode_decision=decision.as_dict(),
-            open_scene_hints=scene_hints_for_prompt(open_scenes),
-            sheet_summary=format_sheet_for_prompt(self.sheet),
+            ev=ev,
+            input_mode=input_mode,
+            log_learner=log_learner,
         )
-        if is_open:
-            messages = [{"role": "user", "content": task}]
-        else:
-            # Full history in testing (HISTORY_TURNS=0). Never mutate self.history here.
-            messages = config.history_for_model(self.history) + [
-                {"role": "user", "content": task}
-            ]
-
+        for _stage in PRE_MODEL_STAGES:
+            _stage(self, ctx)
+        stage_contributors(self, ctx)
+        stage_phase_tick(self, ctx)
+        for _stage in REALIZE_STAGES:
+            _stage(self, ctx)
+        if ctx.error_result is not None:
+            return ctx.error_result
+        stage_gate_context(self, ctx)
         try:
-            # No tool round-trips by default (SHEET_TOOLS=0); hard_observer updates sheet
-            tools = self.tools if getattr(config, "SHEET_TOOLS", False) else None
-            final, raw, tool_delta, usage, _ = tutor_turn(
-                self.client,
-                self.caps,
-                system,
-                messages,
-                tools=tools,
-                max_tool_rounds=1 if tools else 0,
-            )
-        except Exception as e:
-            return TurnResult(
-                reply="",
-                error=f"{type(e).__name__}: {e}",
-                input_mode=input_mode,
-            )
-
-        from .output_gate import check_output_gate, repair_user_message
-        from .tutor_response import process_tutor_raw as _ptr
-
-        gate_notes: list[str] = []
-        gate_result = None
-        image_present = bool(teach_images)
-        was_truncated = (getattr(final, "stop_reason", "") or "") == "max_tokens"
-        # Phase 4 gate context (r7 S3): the table + live sheet + this turn's
-        # IntroducePlan key + retrieval failures this turn (a failed
-        # re-encounter legalizes a re-gloss).
-        _failed_due = {
-            n.split(":", 1)[1]
-            for n in sched_notes
-            if n.startswith("due_outcome_fail:")
-        }
-        _gate_ctx = dict(
-            association_table=self.association_table,
-            sheet=self.sheet,
-            introduce_key=(intro_plan.key if intro_plan is not None else None),
-            retrieval_failed_keys=_failed_due,
-            learner_text=learner if not is_open else "",
-        )
-        try:
-            _vis0, _parts0 = _ptr(raw or "")
-            gate_result = check_output_gate(
-                _parts0.as_dict(),
-                _vis0,
-                is_open=is_open,
-                already_asked=self.pedagogy_memory.asked,
-                already_shown=self.pedagogy_memory.shown,
-                mode=decision.mode.value,
-                image_present=image_present,
-                raw=raw or "",
-                truncated=was_truncated,
-                **_gate_ctx,
-            )
-            critical = {
-                "pedagogy:no_teach_move",
-                "pedagogy:open_needs_model_try",
-                "gate:english_wall",
-                "gate:form_focus_needs_model",
-                "gate:missing_recast",  # form error must surface a short correction
-                "gate:sheet_leak",  # model dumped sheet/tool JSON into chat
-                "gate:truncated",  # reply hit max_tokens mid-sentence
-                # r7 S3: naked first exposure / cluster dump (gate:regloss
-                # stays SOFT by omission)
-                "gate:unscaffolded_new_item",
-            }
-            need_recast = bool(
-                decision.mode.value in ("cf_recast", "form_focus")
-                or (decision.targets or {}).get("require_recast_tag")
-            )
-            # Re-check with recast requirement if mode demands it
-            if need_recast:
-                gate_result = check_output_gate(
-                    _parts0.as_dict(),
-                    _vis0,
-                    is_open=is_open,
-                    already_asked=self.pedagogy_memory.asked,
-                    already_shown=self.pedagogy_memory.shown,
-                    mode=decision.mode.value,
-                    image_present=image_present,
-                    require_recast=True,
-                    raw=raw or "",
-                    truncated=was_truncated,
-                    **_gate_ctx,
-                )
-            needs_repair = (
-                getattr(config, "GATE_REPAIR", True)
-                and not gate_result.ok
-                and any(f in critical for f in (gate_result.faults or []))
-            )
-            if not gate_result.ok and not needs_repair:
-                gate_notes.append(
-                    "output_gate_soft_fail:" + ",".join(gate_result.faults)
-                )
-            elif needs_repair:
-                gate_notes.append("output_gate_fail:" + ",".join(gate_result.faults))
-                repair_msg = {
-                    "role": "user",
-                    "content": repair_user_message(gate_result, raw or ""),
-                }
-                final2, raw2, _td2, usage2, _ = tutor_turn(
-                    self.client,
-                    self.caps,
-                    system,
-                    messages
-                    + [{"role": "assistant", "content": raw or ""}]
-                    + [repair_msg],
-                    tools=None,
-                )
-                if usage2:
-                    usage = {
-                        k: (usage or {}).get(k, 0) + (usage2 or {}).get(k, 0)
-                        for k in (
-                            "input_tokens", "output_tokens",
-                            "thinking_tokens", "cached_input_tokens",
-                        )
-                    }
-                if raw2 and raw2.strip():
-                    raw = raw2
-                    final = final2
-                    _vis1, _parts1 = _ptr(raw or "")
-                    gate2 = check_output_gate(
-                        _parts1.as_dict(),
-                        _vis1,
-                        is_open=is_open,
-                        already_asked=self.pedagogy_memory.asked,
-                        already_shown=self.pedagogy_memory.shown,
-                        mode=decision.mode.value,
-                        image_present=image_present,
-                        require_recast=need_recast,
-                        raw=raw or "",
-                        truncated=(
-                            (getattr(final2, "stop_reason", "") or "")
-                            == "max_tokens"
-                        ),
-                        **_gate_ctx,
-                    )
-                    gate_result = gate2
-                    if gate2.ok:
-                        gate_notes.append("output_gate_repaired")
-                    else:
-                        gate_notes.append(
-                            "output_gate_still_fail:" + ",".join(gate2.faults)
-                        )
-            else:
-                gate_notes.append("output_gate_ok")
+            stage_gate_check(self, ctx)
+            stage_gate_repair(self, ctx)
         except Exception as ge:
-            gate_notes.append(f"output_gate_error:{type(ge).__name__}")
-
-        result = self._finish(
-            learner if not is_open else "",
-            raw or "",
-            tool_delta,
-            final,
-            usage,
-            input_mode=input_mode,
-            log_learner=log_learner if log_learner is not None else (
-                "(session open)" if is_open else None
-            ),
-            is_open=is_open,
-            skip_log=True,  # log after mode/plan/images attached
-        )
-
-        # Introduce ledger (r7 S1 + R-H): mark ONLY if the visible reply
-        # actually presented the key; otherwise the plan lapses and the
-        # session budget is not consumed. R-I: an already-introduced table
-        # key appearing in the reply needs no action (no re-gloss machinery
-        # this ship — the gate owns regloss in Phase 4).
-        if intro_plan is not None:
-            self.sheet, intro_note = mark_introduced_if_visible(
-                self.sheet, intro_plan, result.reply
+            ev.emit(
+                EV.OUTPUT_GATE_ERROR, key=type(ge).__name__, stage="gate",
             )
-            if intro_note:
-                save_sheet(self.sheet_path, self.sheet)
-                self.pedagogy_memory.note_introduced(intro_plan.key)
-                sched_notes.append(intro_note)
-                sched_notes.extend(self._progress_note(
-                    "planted", intro_plan.key, item_kind="lexicon",
-                    detail_ctx={"scaffold": intro_plan.scaffold_type},
-                ))
-
-        # Round-2 AMEND 1c: keys the gate would have faulted but that were
-        # saved solely by an in-reply scaffold (gloss/anchor) get a durable
-        # first_seen bit so later bare reuse is a re-encounter, not a fresh
-        # CRITICAL fault (Grok's gloss-turn1 → bare-turn2 thrash proof).
-        # Deliberately NOT an introduction: no budget consumed, no retrieval
-        # enqueue (router-only), confidence/status untouched (honesty law).
-        saved_map = dict(
-            getattr(gate_result, "scaffold_saved", None) or {}
-        ) if gate_result is not None else {}
-        if saved_map:
-            from .retrieval_scheduler import (
-                has_first_seen,
-                is_introduced,
-                mark_first_seen,
-            )
-
-            wrote_first_seen = False
-            for fs_key, fs_kind in saved_map.items():
-                if intro_plan is not None and fs_key == intro_plan.key:
-                    continue  # real introduction owns this key
-                if is_introduced(self.sheet, fs_key, "lexicon"):
-                    continue
-                if has_first_seen(self.sheet, fs_key, "lexicon"):
-                    continue
-                self.sheet = mark_first_seen(
-                    self.sheet, fs_key, "lexicon", fs_kind
-                )
-                sched_notes.append(f"first_seen:{fs_key}")
-                wrote_first_seen = True
-            if wrote_first_seen:
-                save_sheet(self.sheet_path, self.sheet)
-
-        try_text = ""
-        models: list[str] = []
-        if result.parts:
-            try_text = (result.parts.get("try") or result.parts.get("continue") or "")
-            m = result.parts.get("model") or ""
-            if m:
-                models = [m]
-            self.pedagogy_memory.note_plan_try(decision.mode.value, try_text)
-            # Remember tutor Spanish so meta "what does that mean?" can re-ask SAME idea
-            img_concepts = [
-                (t.get("concept") or "")
-                for t in (teach_images or [])
-                if t.get("concept")
-            ]
-            self.pedagogy_memory.note_tutor_turn(
-                model=m,
-                try_=try_text,
-                acknowledge=result.parts.get("acknowledge") or "",
-                concepts=img_concepts or None,
-            )
-
-        # Tutor-declared image (optional <image concept="…"/> in the reply —
-        # the model's pedagogical decision replaces regex noun-scanning).
-        declared = ((result.parts or {}).get("image_concept") or "").strip()
-        if not teach_images and declared:
-            from .teach_assets import concept_in_text
-
-            if not concept_in_text(declared, result.reply or ""):
-                # Same relevance law as mode/fallback images (incident
-                # 2026-07-28): a declared concept absent from the visible
-                # reply is not this turn's teaching content — no image
-                # beats a wrong one.
-                result.notes = list(result.notes or []) + [
-                    f"image_declared_irrelevant:{declared}"
-                ]
-            elif declared in self.pedagogy_memory.images_shown:
-                result.notes = list(result.notes or []) + [
-                    f"image_declared_skip_repeat:{declared}"
-                ]
-            elif self.pedagogy_memory.declared_image_cooldown > 0:
-                result.notes = list(result.notes or []) + [
-                    f"image_declared_cooldown:{declared}"
-                ]
-            else:
-                from .teach_assets import ensure_asset
-
-                # Cache hits always allowed; NOVEL generation is budget-capped
-                may_gen = self._may_generate_image(source="tutor_declared")
-                hit = None
-                try:
-                    hit = ensure_asset(declared, generate=may_gen)
-                except Exception:
-                    hit = None
-                if hit:
-                    teach_images = [{
-                        **hit,
-                        "decision_reason": "tutor_declared",
-                        "visual_score": 1.0,
-                    }]
-                    self.pedagogy_memory.note_image(declared)
-                    self.pedagogy_memory.declared_image_cooldown = 3
-                    self._note_image_costs(teach_images)
-                else:
-                    result.notes = list(result.notes or []) + [
-                        (f"image_gen_capped:{declared}" if not may_gen
-                         else f"image_declared_unresolved:{declared}")
-                    ]
-
-        if decision.hard_break:
-            self.mode_state.note_hard_break(decision.mode)
-        if decision.mode == Mode.FORM_FOCUS:
-            pid = (decision.targets or {}).get("error_pattern")
-            if pid:
-                self.mode_state.set_cooldown(str(pid), 4)
-        elif decision.mode == Mode.CF_RECAST:
-            # Recast already corrected this pattern. Under ModeSessionState
-            # .tick() (decrement BEFORE select; drop at v<=1), set N suppresses
-            # the next (N-1) learner turns: N=3 → 2 subsequent turns without a
-            # sheet-streak form_focus re-correction (Grok countersign
-            # 2026-07-28 caught the off-by-one in the original N=2).
-            pid = (decision.targets or {}).get("error_pattern")
-            if pid:
-                self.mode_state.set_cooldown(str(pid), 3)
-        if decision.scene_ids:
-            for sid in decision.scene_ids:
-                if sid:
-                    self.mode_state.scene_modeled.add(sid)
-        from .character_sheet import (
-            ERROR_PATTERN_CATALOG,
-            detect_error_pattern_resolves,
-        )
-        resolved = detect_error_pattern_resolves(learner) if learner and not is_open else []
-        if resolved:
-            self.mode_state.last_resolved_form = resolved[0]
-            # Session-scoped resolve record for the close-phase summary.
-            self.mode_state.note_resolved(resolved)
-            # r6: enqueue after transfer success — durability moves to the
-            # due queue. First-time scheduling only: an already-scheduled
-            # form's ladder is owned by record_outcome, never reset here.
-            from .retrieval_scheduler import enqueue as _sched_enqueue
-
-            enq = False
-            for pid in resolved:
-                fid = (ERROR_PATTERN_CATALOG.get(pid) or {}).get("form_id")
-                if not fid:
-                    continue
-                g_entry = (self.sheet.get("grammar") or {}).get(fid) or {}
-                if g_entry.get("next_due"):
-                    continue
-                self.sheet = _sched_enqueue(self.sheet, fid, "grammar")
-                sched_notes.append(f"due_enqueued:{fid}")
-                enq = True
-            if enq:
-                save_sheet(self.sheet_path, self.sheet)
-        elif decision.mode == Mode.TRANSFER:
-            self.mode_state.last_resolved_form = None
-        self.mode_state.last_mode = decision.mode.value
-
-        phase = open_phase(self.sheet) if is_open else "ai"
-        phase_note = (
-            NOTE_DIAGNOSTIC_OPEN if (is_open and blank) else NOTE_KNOWN_LEARNER_OPEN
-        )
-        soft_plan = {
-            "source": "mode_runtime",
-            "mode": decision.mode.value,
-            "mode_reason": decision.reason,
-            "hard_break": decision.hard_break,
-            "phase": "diagnostic" if (is_open and blank) else "chat",
-            "open_scenes": self.mode_state.open_scene_ids,
-            "observations": {
-                "signals": obs.get("signals"),
-                "error_hit_ids": obs.get("error_hit_ids"),
-                "next_best": obs.get("next_best"),
-            },
-            "image": (teach_images[0].get("concept") if teach_images else None),
-            "targets": decision.targets,
-        }
-        self.last_plan = soft_plan
-        result.notes = list(result.notes or []) + gate_notes + sched_notes + [
-            phase_note,
-            f"open_phase={phase}" if is_open else "phase=ai_tutor",
-            f"mode={decision.mode.value}",
-            f"mode_reason={decision.reason}",
-            f"activity={activity}",
-            f"phase_consumed={phase_consumed}",
-            f"hard_break={decision.hard_break}",
-            "plan_source=mode_runtime",
-            f"teacher_mode={self.teacher_mode}",
-            f"open_scenes={','.join(self.mode_state.open_scene_ids) or '—'}",
-            f"mem_shown={','.join(sorted(self.pedagogy_memory.shown)) or '—'}",
-            f"mem_asked={','.join(sorted(self.pedagogy_memory.asked)) or '—'}",
-        ]
-        if result.parts is not None:
-            result.parts = {
-                **result.parts,
-                "plan": soft_plan,
-                "mode": decision.mode.value,
-                "mode_decision": decision.as_dict(),
-                "open_phase": phase if is_open else result.parts.get("open_phase"),
-                "teach_images": teach_images,
-            }
-            if gate_result is not None:
-                result.parts["output_gate"] = gate_result.as_dict()
-            if image_decision is not None:
-                result.parts["image_decision"] = image_decision.as_dict()
-                result.notes = list(result.notes or []) + [
-                    f"image_decision:{image_decision.reason}"
-                ]
-            if teach_images:
-                result.notes = list(result.notes or []) + [
-                    f"teach_image:{teach_images[0].get('concept')}"
-                ]
-        # Log once with full mode/plan/gate/images
-        self._log_turn_result(
-            result,
-            log_learner=log_learner if log_learner is not None else (
-                "(session open)" if is_open else (learner or "")
-            ),
-        )
-        return result
-
-    def _execute_rules_planned(
-        self,
-        learner: str,
-        *,
-        is_open: bool,
-        input_mode: str = "text",
-        log_learner: str | None = None,
-    ) -> TurnResult:
-        """Optional TEACHER_MODE=rules: PlanCard ladder + executor (not default)."""
-        from .executor import build_executor_system, build_executor_user_message
-        from .pedagogy_contract import (
-            NOTE_DIAGNOSTIC_OPEN,
-            NOTE_KNOWN_LEARNER_OPEN,
-        )
-        from .plan_card import fallback_diagnostic_card, gate_plan_card
-        from .rules_planner import plan_turn
-        from .teach_assets import assets_for_plan
-
-        if not is_open and learner:
-            self.pedagogy_memory.note_learner(learner)
-
-        card = plan_turn(
-            self.sheet,
-            learner=learner,
-            is_open=is_open,
-            memory=self.pedagogy_memory,
-        )
-        gated = gate_plan_card(card)
-        if not gated.ok or not gated.card:
-            card = fallback_diagnostic_card()
-            gate_notes = [f"plan_gate_fail:{','.join(gated.errors)}"]
-        else:
-            card = gated.card
-            gate_notes = ["plan_gate_ok"]
-
-        self.pedagogy_memory.note_plan_try(card.reason, card.try_prompt)
-        self.last_plan = card.as_dict()
-
-        teach_images = assets_for_plan(
-            card,
-            images_shown=self.pedagogy_memory.images_shown,
-            turns_since_image=self.pedagogy_memory.turns_since_image,
-            session_turns=self.pedagogy_memory.turns,
-        )
-        self._note_image_costs(teach_images)
-        image_decision = getattr(card, "_image_decision", None)
-        if teach_images:
-            concept = teach_images[0].get("concept")
-            card.image_concept = concept
-            self.pedagogy_memory.note_image(concept)
-            self.last_plan = card.as_dict()
-        elif image_decision is not None and not getattr(image_decision, "want", False):
-            card.image_concept = None
-            self.last_plan = card.as_dict()
-
-        system = build_executor_system(
-            sheet_summary=format_sheet_for_prompt(self.sheet),
-            pack_palette=load_pack(self.pack_dir),
-        )
-        task = build_executor_user_message(
-            card,
-            learner=learner,
-            is_open=is_open,
-            session_memory=self.pedagogy_memory.snapshot(),
-            teach_images=teach_images,
-        )
-        if is_open:
-            messages = [{"role": "user", "content": task}]
-        else:
-            messages = self.history + [{"role": "user", "content": task}]
-
-        try:
-            final, raw, tool_delta, usage, _ = tutor_turn(
-                self.client,
-                self.caps,
-                system,
-                messages,
-                tools=self.tools,
-            )
-        except Exception as e:
-            return TurnResult(
-                reply="",
-                error=f"{type(e).__name__}: {e}",
-                input_mode=input_mode,
-            )
-
-        result = self._finish(
-            learner if not is_open else "",
-            raw or "",
-            tool_delta,
-            final,
-            usage,
-            input_mode=input_mode,
-            log_learner=log_learner if log_learner is not None else (
-                "(session open)" if is_open else None
-            ),
-            is_open=is_open,
-        )
-        phase = card.phase
-        phase_note = (
-            NOTE_DIAGNOSTIC_OPEN if phase == "diagnostic" else NOTE_KNOWN_LEARNER_OPEN
-        )
-        result.notes = list(result.notes or []) + gate_notes + [
-            phase_note,
-            f"open_phase={phase}" if is_open else f"phase={phase}",
-            f"plan:{card.phase}/{card.move}",
-            f"plan_reason={card.reason}",
-            f"teacher_mode={self.teacher_mode}",
-            "plan_source=rules",
-            f"mem_shown={','.join(sorted(self.pedagogy_memory.shown)) or '—'}",
-            f"mem_asked={','.join(sorted(self.pedagogy_memory.asked)) or '—'}",
-        ]
-        if result.parts is not None:
-            result.parts = {
-                **result.parts,
-                "plan": card.as_dict(),
-                "open_phase": phase if is_open else result.parts.get("open_phase"),
-                "teach_images": teach_images,
-            }
-            if image_decision is not None:
-                result.parts["image_decision"] = image_decision.as_dict()
-                result.notes = list(result.notes or []) + [
-                    f"image_decision:{image_decision.reason}"
-                ]
-            if teach_images:
-                result.notes = list(result.notes or []) + [
-                    f"teach_image:{teach_images[0].get('concept')}"
-                ]
-        return result
+        for _stage in RECORDER_STAGES:
+            _stage(self, ctx)
+        for _stage in CAPTURE_LOG_STAGES:
+            _stage(self, ctx)
+        return ctx.result
 
     def open_session(self) -> TurnResult:
-        """Opening tutor turn — planned PlanCard path or legacy harness."""
-        from .pedagogy_contract import (
-            NOTE_DIAGNOSTIC_OPEN,
-            NOTE_KNOWN_LEARNER_OPEN,
-            open_phase,
-        )
-
-        # Fresh chat = fresh session cost (the header shows per-session spend)
-        self.costs.reset()
-
+        """Opening tutor turn (AI tutor path — the only teacher runtime)."""
         # Reload sheet so wipe/reset is visible before we choose open phase
         try:
             self.sheet = load_sheet(self.sheet_path)
@@ -2142,63 +1617,29 @@ class ConversationalSession:
         except Exception:
             pass
 
+        # Unified new-chat reset (Phase 1 batch 2, docs/reviews-architecture-
+        # refactor.md): EVERY session-scoped store resets — memory, mode
+        # cooldowns/asked topics, phase clock (rebuilt from the CURRENT
+        # sheet), task state, debug ring, focus fields, last_* — closing the
+        # cross-chat leak. Costs continuity ruling: the per-chat tracker
+        # resets too (the header shows THIS chat's spend); the on-disk cost
+        # ledger keeps the money history. The sheet itself and
+        # progress_session_id are untouched.
+        self.state.reset("new_chat", sheet=self.sheet)
+
         # New chat ≠ new learner: seed session memory from durable sheet
         try:
             self.pedagogy_memory.seed_from_sheet(self.sheet, self.profile)
         except Exception:
             pass
 
-        if self._planned_enabled():
-            result = self._execute_planned(
-                "", is_open=True, log_learner="(session open)",
-            )
-            if result.error:
-                return result
-            self.history = [
-                {"role": "user", "content": "(session open)"},
-                {"role": "assistant", "content": result.reply},
-            ]
-            self.messages_for_ui = [
-                {
-                    "role": "tutor",
-                    "content": result.reply,
-                    "input_mode": "text",
-                    "parts": result.parts,
-                },
-            ]
+        result = self._execute_planned(
+            "", is_open=True, log_learner="(session open)",
+        )
+        if result.error:
             return result
-
-        # --- legacy path ---
-        phase = open_phase(self.sheet)
-        harness = open_harness_for_sheet(self.sheet)
-        try:
-            final, raw, tool_delta, usage, _ = tutor_turn(
-                self.client,
-                self.caps,
-                self.system,
-                [{"role": "user", "content": harness}],
-                tools=self.tools,
-            )
-        except Exception as e:
-            return TurnResult(
-                reply="",
-                error=f"{type(e).__name__}: {e}",
-            )
-        result = self._finish(
-            "", raw or "", tool_delta, final, usage,
-            log_learner="(session open)",
-            is_open=True,
-        )
-        phase_note = (
-            NOTE_DIAGNOSTIC_OPEN if phase == "diagnostic" else NOTE_KNOWN_LEARNER_OPEN
-        )
-        result.notes = list(result.notes or []) + [
-            phase_note, f"open_phase={phase}", "teacher_mode=legacy",
-        ]
-        if result.parts is not None:
-            result.parts = {**result.parts, "open_phase": phase}
         self.history = [
-            {"role": "user", "content": harness},
+            {"role": "user", "content": "(session open)"},
             {"role": "assistant", "content": result.reply},
         ]
         self.messages_for_ui = [
@@ -2222,124 +1663,12 @@ class ConversationalSession:
         if not text:
             return TurnResult(reply="", error="empty message")
 
-        if self._planned_enabled():
-            result = self._execute_planned(
-                text, is_open=False, input_mode=input_mode,
-            )
-            if result.error:
-                return result
-            # Keep FULL session history (do not silently drop older turns)
-            self.history = self.history + [
-                {"role": "user", "content": text},
-                {"role": "assistant", "content": result.reply},
-            ]
-            self.messages_for_ui.append(
-                {"role": "you", "content": text, "input_mode": input_mode})
-            self.messages_for_ui.append({
-                "role": "tutor",
-                "content": result.reply,
-                "input_mode": "text",
-                "parts": result.parts,
-            })
+        result = self._execute_planned(
+            text, is_open=False, input_mode=input_mode,
+        )
+        if result.error:
             return result
-
-        # --- legacy path ---
-        scaffold = (self.sheet.get("receptive") or {}).get(
-            "needs_english_scaffold", True)
-        scaffold_line = (
-            "SCAFFOLD: needs_english_scaffold=TRUE. Still Spanish-forward: "
-            "praise/react in Spanish (¡Muy bien!); model in Spanish; short "
-            "Spanish questions. English only for brief rescue / form contrast "
-            "if they freeze — never English cheerleading or dual-subtitle "
-            "every option (*word* *(translation)* lists)."
-            if scaffold else
-            "SCAFFOLD: needs_english_scaffold=FALSE. Mostly Spanish; English "
-            "rare. Still praise in Spanish."
-        )
-        mode_line = (
-            f"INPUT_MODE: {input_mode}. "
-            + (
-                "Learner spoke (STT may have typos); treat intent generously "
-                "but still recast clear form errors."
-                if input_mode == "speech"
-                else "Learner typed."
-            )
-        )
-        from .character_sheet import active_error_patterns, now_iso
-
-        active = active_error_patterns(self.sheet)
-        err_line = ""
-        if active:
-            top = active[0]
-            err_line = (
-                f"ERROR_FOCUS: {top['id']} ×{top['count']} — {top['label']}. "
-                f"Hint: {top.get('teach_hint') or ''} "
-                f"THIS TURN: recast if they miss it, then <try> the same form again "
-                f"(do not only chat past the error).\n"
-            )
-        nb = self.sheet.get("next_best") or {}
-        form_focus = nb.get("form_focus") or nb.get("error_pattern")
-        teach_line = (
-            f"TEACH_TARGET: practice form_focus={form_focus!r} "
-            f"(can_do={nb.get('can_do')!r}). Put it in <model> + <try> this turn.\n"
-            if form_focus
-            else (
-                f"TEACH_TARGET: next_best can_do={nb.get('can_do')!r} "
-                f"activity={nb.get('activity') or nb.get('stretch')!r}. "
-                f"Still include <model> + <try> — do not only ask open questions.\n"
-            )
-        )
-        harness = (
-            f"<harness_context>\n"
-            f"now={now_iso()}\n"
-            f"Character sheet is your model of this student — adapt to it.\n"
-            f"next_best: {json.dumps(nb, ensure_ascii=False)}\n"
-            f"{err_line}"
-            f"{teach_line}"
-            f"{scaffold_line}\n"
-            f"{mode_line}\n"
-            f"TEACHING RULE: you are a tutor, not a chat buddy. "
-            f"Every turn needs a teach move: <model> and/or <try> "
-            f"(and <recast>+retry when they err). "
-            f"If they ask what something means: explain briefly, then model+try "
-            f"so they USE it. "
-            f"OUTPUT: <tutor> parts "
-            f"(acknowledge / recast / explain / model / try / continue). "
-            f"Form/register/construction error → <recast> REQUIRED, then "
-            f"<try> same form (not a new topic). "
-            f"Do not praise incorrect Spanish as correct. "
-            f"LANGUAGE: Spanish-first praise; Spanish models; minimal English; "
-            f"no 'Good job/You nailed it'; no dual-subtitle every phrase. "
-            f"Do not skip form work only to chase next_best "
-            f"(especially ERROR_FOCUS).\n"
-            f"The app updates the character sheet — do NOT paste sheet JSON "
-            f"or tool payloads into the reply.\n"
-            f"Never mention the sheet, tools, or tag names to the learner.\n"
-            f"</harness_context>\n\n"
-        )
-        messages = config.history_for_model(self.history) + [
-            {"role": "user", "content": harness + text},
-        ]
-        try:
-            final, raw, tool_delta, usage, _ = tutor_turn(
-                self.client,
-                self.caps,
-                self.system,
-                messages,
-                tools=self.tools,
-            )
-        except Exception as e:
-            return TurnResult(
-                reply="",
-                error=f"{type(e).__name__}: {e}",
-                input_mode=input_mode,
-            )
-
-        result = self._finish(
-            text, raw or "", tool_delta, final, usage, input_mode=input_mode,
-        )
-        result.notes = list(result.notes or []) + ["teacher_mode=legacy"]
-        # Keep FULL session history (no silent drop of older turns)
+        # Keep FULL session history (do not silently drop older turns)
         self.history = self.history + [
             {"role": "user", "content": text},
             {"role": "assistant", "content": result.reply},
@@ -2370,9 +1699,10 @@ class ConversationalSession:
         return self.profile
 
     def reset_sheet(self) -> dict:
-        """Hard wipe of Spanish PROGRESS: new blank ability sheet + empty chat
-        memory. (Personal data is no longer stored at all, so there is
-        nothing else to keep or clear.)
+        """Hard wipe of Spanish PROGRESS: new blank ability sheet + a full
+        unified session-state reset (Phase 1 batch 2 kind "sheet_reset").
+        (Personal data is no longer stored at all, so there is nothing else
+        to keep or clear.)
 
         Deletes the sheet file first so nothing can merge residual state back in.
         """
@@ -2384,19 +1714,22 @@ class ConversationalSession:
         self.sheet = default_sheet()
         self.sheet_path.parent.mkdir(parents=True, exist_ok=True)
         save_sheet(self.sheet_path, self.sheet)
-        self.history = []
-        self.messages_for_ui = []
-        self._focus_panel = None
-        self._focus_key = None
-        self._focus_meta = {"source": "static"}
-        from .session_memory import SessionMemory
-        from .modes import ModeSessionState
-        self.pedagogy_memory = SessionMemory()
-        self.mode_state = ModeSessionState()
-        self.phase_state = build_session_phase_state(self.sheet, self.pack_dir)
-        self.task_state = None
-        self.last_mode_decision = None
-        self.last_plan = None
+        # Progress-ledger learner epoch (batch-2 declared delta 3): rotate
+        # the DEDUPE scope so the fresh learner re-earns milestones instead
+        # of being suppressed by the previous learner's history. Nothing is
+        # retracted — the old milestones were genuinely earned and stay
+        # displayable; the epoch row is the visible boundary. Best-effort:
+        # ledger trouble must never break a reset.
+        try:
+            from . import progress_ledger as pl
+
+            pl.record_epoch(session_id=self.progress_session_id)
+        except Exception:
+            pass
+        # Unified reset (batch 2): the batch-1 twelve stores + the four
+        # misses (costs, focus_version, focus_inflight, image_warm_inflight).
+        # The on-disk COST ledger is append-only forever (continuity ruling).
+        self.state.reset("sheet_reset", sheet=self.sheet)
         return self.sheet
 
     def sheet_human(self) -> str:

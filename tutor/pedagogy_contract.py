@@ -34,13 +34,27 @@ from typing import Any
 # Bump when invariants change (experiments document the new version).
 CONTRACT_VERSION = "1.1"  # + diagnostic open when sheet is blank
 
-# Machine ids for notes / checks
-VIOLATION_NO_TEACH_MOVE = "pedagogy:no_teach_move"
-VIOLATION_OPEN_NEEDS_MODEL_TRY = "pedagogy:open_needs_model_try"
-VIOLATION_RECAST_WITHOUT_TRY = "pedagogy:recast_without_try"
-OK_TEACH_MOVE = "pedagogy:ok"
-NOTE_DIAGNOSTIC_OPEN = "pedagogy:diagnostic_open"
-NOTE_KNOWN_LEARNER_OPEN = "pedagogy:known_learner_open"
+# Machine ids for notes / checks.
+# Phase 3 batch 2 (typed turn events, docs/reviews-architecture-refactor.md):
+# the bare KEYS are first-class — a note string is "pedagogy:" + key, the
+# rendered projection of a typed PEDAGOGY TurnEvent (tutor/turn_events.py).
+# conv_session emits from PedagogyCheck.note_keys / these KEY_ constants;
+# the full-string constants remain the comparison vocabulary for callers.
+PEDAGOGY_NOTE_PREFIX = "pedagogy:"
+KEY_NO_TEACH_MOVE = "no_teach_move"
+KEY_OPEN_NEEDS_MODEL_TRY = "open_needs_model_try"
+KEY_RECAST_WITHOUT_TRY = "recast_without_try"
+KEY_OK = "ok"
+KEY_UNSTRUCTURED = "unstructured"
+KEY_DIAGNOSTIC_OPEN = "diagnostic_open"
+KEY_KNOWN_LEARNER_OPEN = "known_learner_open"
+
+VIOLATION_NO_TEACH_MOVE = PEDAGOGY_NOTE_PREFIX + KEY_NO_TEACH_MOVE
+VIOLATION_OPEN_NEEDS_MODEL_TRY = PEDAGOGY_NOTE_PREFIX + KEY_OPEN_NEEDS_MODEL_TRY
+VIOLATION_RECAST_WITHOUT_TRY = PEDAGOGY_NOTE_PREFIX + KEY_RECAST_WITHOUT_TRY
+OK_TEACH_MOVE = PEDAGOGY_NOTE_PREFIX + KEY_OK
+NOTE_DIAGNOSTIC_OPEN = PEDAGOGY_NOTE_PREFIX + KEY_DIAGNOSTIC_OPEN
+NOTE_KNOWN_LEARNER_OPEN = PEDAGOGY_NOTE_PREFIX + KEY_KNOWN_LEARNER_OPEN
 
 # Teaching channels the system owns. v1 only *enforces* text moves;
 # planned channels are listed so they expand via contract, not as UI toys.
@@ -101,6 +115,12 @@ class PedagogyCheck:
     violations: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     version: str = CONTRACT_VERSION
+    # Typed event keys (Phase 3 batch 2 leaf push-down): the bare keys the
+    # notes render from — notes[i] == PEDAGOGY_NOTE_PREFIX + note_keys[i].
+    # conv_session._finish emits PEDAGOGY TurnEvents from these; when a
+    # (test-built) check carries notes without keys, the absorb safety net
+    # classifies the strings instead.  NOT in as_dict() (shape pinned).
+    note_keys: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -183,7 +203,7 @@ def check_tutor_parts(
 ) -> PedagogyCheck:
     """Validate structured (or unstructured) tutor parts against contract v1."""
     violations: list[str] = []
-    notes: list[str] = []
+    note_keys: list[str] = []
 
     has_model = _truthy_part(parts, "model")
     has_try = _truthy_part(parts, "try")
@@ -192,21 +212,26 @@ def check_tutor_parts(
 
     if not teach:
         violations.append(VIOLATION_NO_TEACH_MOVE)
-        notes.append(VIOLATION_NO_TEACH_MOVE)
+        note_keys.append(KEY_NO_TEACH_MOVE)
 
     if is_open and not (has_model and has_try):
         violations.append(VIOLATION_OPEN_NEEDS_MODEL_TRY)
-        notes.append(VIOLATION_OPEN_NEEDS_MODEL_TRY)
+        note_keys.append(KEY_OPEN_NEEDS_MODEL_TRY)
 
     if has_recast and not has_try:
         # Soft-hard: recast without re-try is incomplete focus-on-form
         violations.append(VIOLATION_RECAST_WITHOUT_TRY)
-        notes.append(VIOLATION_RECAST_WITHOUT_TRY)
+        note_keys.append(KEY_RECAST_WITHOUT_TRY)
 
     if not violations:
-        notes.append(OK_TEACH_MOVE)
+        note_keys.append(KEY_OK)
 
-    return PedagogyCheck(ok=not violations, violations=violations, notes=notes)
+    return PedagogyCheck(
+        ok=not violations,
+        violations=violations,
+        notes=[PEDAGOGY_NOTE_PREFIX + k for k in note_keys],
+        note_keys=note_keys,
+    )
 
 
 def check_visible_fallback(visible: str, *, is_open: bool = False) -> PedagogyCheck:
@@ -221,15 +246,21 @@ def check_visible_fallback(visible: str, *, is_open: bool = False) -> PedagogyCh
             ok=False,
             violations=[VIOLATION_NO_TEACH_MOVE],
             notes=[VIOLATION_NO_TEACH_MOVE],
+            note_keys=[KEY_NO_TEACH_MOVE],
         )
     # Unstructured always fails "has teach move tags" for open; for mid-turn
     # we still want a soft signal that structure was missing.
     violations = [VIOLATION_NO_TEACH_MOVE]
-    notes = [VIOLATION_NO_TEACH_MOVE, "pedagogy:unstructured"]
+    note_keys = [KEY_NO_TEACH_MOVE, KEY_UNSTRUCTURED]
     if is_open:
         violations.append(VIOLATION_OPEN_NEEDS_MODEL_TRY)
-        notes.append(VIOLATION_OPEN_NEEDS_MODEL_TRY)
-    return PedagogyCheck(ok=False, violations=violations, notes=notes)
+        note_keys.append(KEY_OPEN_NEEDS_MODEL_TRY)
+    return PedagogyCheck(
+        ok=False,
+        violations=violations,
+        notes=[PEDAGOGY_NOTE_PREFIX + k for k in note_keys],
+        note_keys=note_keys,
+    )
 
 
 def evaluate_turn(

@@ -1,7 +1,11 @@
-"""PlanCard: structured pedagogical decision (new teacher).
+"""PlanCard: structured DTO for the teach-image decision (AI path).
 
-The planner emits a PlanCard; the gate validates it; the executor only realizes it.
-See docs/new-teacher-plan.md.
+Historical: the rules planner/gate/executor runtime that emitted and
+validated PlanCards was DELETED (E4, docs/reviews-architecture-refactor.md,
+2026-07-28). The dataclasses survive because the live AI path's image stack
+(teach_assets.assets_for_ai_turn / decide_teach_image /
+extract_concept_candidates) uses PlanCard/PlanTargets as its decision DTO
+until Phase 5 inventory work replaces that shape.
 """
 
 from __future__ import annotations
@@ -10,27 +14,6 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 PLAN_CARD_VERSION = "0.1"
-
-PHASES = frozenset({
-    "diagnostic",
-    "teach_form",
-    "associate",
-    "transfer",
-    "chat_stretch",
-    "review",
-})
-
-MOVES = frozenset({
-    "model_try",
-    "recast_retry",
-    "comprehension_check",
-    "associate",
-    "transfer_try",
-    "english_frame",
-    "praise_continue",
-})
-
-SCAFFOLDS = frozenset({"en_rescue", "es_forward", "mostly_es"})
 
 
 @dataclass
@@ -117,97 +100,3 @@ class PlanCard:
             image_concept=assets.get("image_concept"),
             reason=str(d.get("reason") or ""),
         )
-
-
-@dataclass
-class GateResult:
-    ok: bool
-    errors: list[str] = field(default_factory=list)
-    card: PlanCard | None = None
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "ok": self.ok,
-            "errors": list(self.errors),
-            "card": self.card.as_dict() if self.card else None,
-        }
-
-
-def gate_plan_card(card: PlanCard | dict | None) -> GateResult:
-    """Validate a PlanCard. Reject incomplete / off-policy decisions."""
-    if card is None:
-        return GateResult(ok=False, errors=["missing_card"])
-    if isinstance(card, dict):
-        try:
-            card = PlanCard.from_dict(card)
-        except Exception as e:
-            return GateResult(ok=False, errors=[f"parse:{e}"])
-
-    errors: list[str] = []
-    if card.phase not in PHASES:
-        errors.append(f"bad_phase:{card.phase}")
-    if card.move not in MOVES:
-        errors.append(f"bad_move:{card.move}")
-    if card.scaffold not in SCAFFOLDS:
-        errors.append(f"bad_scaffold:{card.scaffold}")
-
-    models = [m.strip() for m in card.models if str(m).strip()]
-    try_prompt = (card.try_prompt or "").strip()
-
-    production_moves = {
-        "model_try", "recast_retry", "transfer_try", "associate", "english_frame",
-    }
-    if card.move in production_moves:
-        # models optional for free chat (executor invents Spanish)
-        if not try_prompt and card.move == "recast_retry":
-            errors.append("try_prompt_required")
-        if not try_prompt and card.phase != "chat_stretch":
-            # chat_stretch may use open try intent in reason only — still want try
-            if not (card.reason or "").startswith("free_chat"):
-                errors.append("try_prompt_required")
-        if card.move == "recast_retry" and not models:
-            errors.append("models_required")
-
-    if card.move == "recast_retry":
-        if not models:
-            errors.append("recast_needs_model")
-        if not try_prompt:
-            errors.append("recast_needs_try")
-
-    if card.phase == "diagnostic":
-        if card.scaffold not in ("en_rescue", "es_forward", "mostly_es"):
-            errors.append("diagnostic_scaffold")
-        # allow_new_topic OK on diagnostic — we probe in conversation, not worksheets
-
-    if card.max_sentences < 1 or card.max_sentences > 12:
-        errors.append("max_sentences_range")
-
-    if errors:
-        return GateResult(ok=False, errors=errors, card=card)
-
-    # Normalize
-    card.models = models
-    card.try_prompt = try_prompt
-    return GateResult(ok=True, errors=[], card=card)
-
-
-def fallback_diagnostic_card() -> PlanCard:
-    """Safe open when planner/gate fails — still a real Spanish question."""
-    return PlanCard(
-        phase="diagnostic",
-        move="model_try",
-        models=["¡Hola! Estoy bien.", "¿Cómo estás?"],
-        try_prompt="¿Cómo estás?",
-        english_frame="¡Hola! Short Spanish is fine — how are you?",
-        targets=PlanTargets(
-            form_id="present_estar_person",
-            can_do="IP-04",
-            concepts=["hola", "estoy_bien"],
-        ),
-        image_concept="hola",
-        scaffold="es_forward",
-        allow_new_topic=True,
-        max_sentences=6,
-        reason="fallback_comm_open",
-        sheet_update_hints=["observe_greeting", "observe_estoy"],
-    )

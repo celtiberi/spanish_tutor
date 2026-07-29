@@ -1,0 +1,88 @@
+{
+  "error": null,
+  "gate": {
+    "faults": [],
+    "ok": true,
+    "scaffold_saved": {}
+  },
+  "memory": {
+    "asked": [
+      "placement"
+    ],
+    "asked_topics": [],
+    "images_shown": [],
+    "intro_budget_remaining": 2,
+    "introduced_this_session": [],
+    "shown": [],
+    "turns": 0
+  },
+  "mode_state": {
+    "english_only_streak": 0,
+    "form_focus_cooldown": {},
+    "hard_breaks_this_session": 1,
+    "last_mode": "placement",
+    "last_resolved_form": null,
+    "learner_turn_index": 1,
+    "turns_since_hard_break": 0
+  },
+  "model_requests": 1,
+  "notes": [
+    "mode=placement",
+    "mode_reason=blank_open_placement",
+    "image_gen_disabled:hola",
+    "output_gate_ok",
+    "rules_backup",
+    "hard_observer",
+    "scaffold=ES-forward+EN-rescue",
+    "focus_async",
+    "structured_reply",
+    "pedagogy:ok",
+    "pedagogy:diagnostic_open",
+    "open_phase=diagnostic",
+    "activity=new_input",
+    "phase_consumed=False",
+    "hard_break=True",
+    "plan_source=mode_runtime",
+    "teacher_mode=planned",
+    "open_scenes=boat_likes,boat_meet_captain,boat_where_boat",
+    "mem_shown=—",
+    "mem_asked=placement",
+    "image_decision:diagnostic_open"
+  ],
+  "parts_keys": [
+    "image_decision",
+    "mode",
+    "mode_decision",
+    "model",
+    "open_phase",
+    "output_gate",
+    "pedagogy",
+    "plan",
+    "structured",
+    "teach_images",
+    "try"
+  ],
+  "phase": {
+    "activity": "new_input",
+    "frozen_turns": 1,
+    "index": 0,
+    "turns_in_phase": 0
+  },
+  "progress_events": [],
+  "reply": "**Hola** (hello). **Estoy bien** (I'm fine).\n\nSay **Hola** (hello) to me!",
+  "save_calls_init_plus_open": [
+    "__init__",
+    "_commit_sheet"
+  ],
+  "sheet": {
+    "lexicon:bien": null,
+    "lexicon:hola": null
+  },
+  "stop_reason": "end_turn",
+  "usage": {
+    "cached_input_tokens": 0,
+    "input_tokens": 120,
+    "output_tokens": 60,
+    "thinking_tokens": 0
+  }
+}

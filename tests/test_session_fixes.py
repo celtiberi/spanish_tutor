@@ -660,10 +660,12 @@ class TestPackTopics(unittest.TestCase):
 
 
 class TestModeImageAttachVisibility(unittest.TestCase):
-    """Incident 2026-07-28: session image generation looked dead (ledger had
-    prewarm-only entries) and mode-path cache misses were SILENT. The
-    session attach path must: generate on a cap-allowed miss (and record the
-    cost), and note capped/disabled/failed misses visibly."""
+    """Incident 2026-07-28 + audit (e): mode-path cache misses must never be
+    SILENT and must never generate on the reply thread (latency law, commits
+    2d160e0/7275bdc). A cap-allowed miss returns [] instantly, notes
+    image_gen_async, and a daemon warm thread generates into the cache
+    (costs recorded via _note_image_costs) so the image attaches on a LATER
+    turn via cache hit."""
 
     GEN_KEY = "zz_gen_probe"
 
@@ -722,7 +724,18 @@ class TestModeImageAttachVisibility(unittest.TestCase):
 
         return gen
 
-    def test_session_miss_generates_and_records_cost(self):
+    def _join_warm_threads(self, timeout: float = 5.0) -> None:
+        import threading
+
+        for t in threading.enumerate():
+            if t.name.startswith("image-warm-"):
+                t.join(timeout)
+
+    def test_session_miss_returns_fast_and_warms_async(self):
+        # Audit (e) 2026-07-28: a cap-allowed miss returns [] instantly with
+        # the async note; the daemon warm thread generates into the cache
+        # and records the cost through _note_image_costs; the image attaches
+        # on the NEXT call via cache hit.
         import json
 
         ta = self._ta
@@ -731,11 +744,10 @@ class TestModeImageAttachVisibility(unittest.TestCase):
         sess = self._session()
         notes: list[str] = []
         imgs = sess._attach_mode_image(self._decision(self.GEN_KEY), notes)
-        self.assertTrue(imgs)
-        self.assertEqual(imgs[0]["cache"], "miss_generated")
-        self.assertEqual(imgs[0]["concept"], self.GEN_KEY)
-        self.assertEqual(notes, [])
-        sess._note_image_costs(imgs)
+        self.assertEqual(imgs, [])  # never generated on the reply thread
+        self.assertEqual(notes, [f"image_gen_async:{self.GEN_KEY}"])
+        self._join_warm_threads()
+        self.assertIsNotNone(ta.cache_lookup(self.GEN_KEY))
         self.assertEqual(sess.pedagogy_memory.images_generated, 1)
         ledger = [
             json.loads(l)
@@ -744,6 +756,129 @@ class TestModeImageAttachVisibility(unittest.TestCase):
         self.assertTrue(
             any(r.get("category") == "image" for r in ledger), ledger
         )
+        # Later turn: the warmed image attaches from cache.
+        notes2: list[str] = []
+        imgs2 = sess._attach_mode_image(self._decision(self.GEN_KEY), notes2)
+        self.assertTrue(imgs2)
+        self.assertEqual(imgs2[0]["cache"], "hit")
+        self.assertEqual(imgs2[0]["concept"], self.GEN_KEY)
+        self.assertEqual(notes2, [])
+
+    def test_reply_path_never_blocks_on_generation(self):
+        # A SLOW generator must not delay the reply path: the attach returns
+        # immediately; generation happens on the daemon thread.
+        import threading
+        import time
+        from pathlib import Path
+
+        ta = self._ta
+        release = threading.Event()
+        calls: list[str] = []
+
+        def slow_gen(concept, prompt, dest):
+            calls.append(concept)
+            release.wait(5)
+            dest = Path(dest)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 200)
+            return True
+
+        ta.register_generator(slow_gen)
+        ta.GENERATE_ON_MISS = True
+        sess = self._session()
+        notes: list[str] = []
+        t0 = time.monotonic()
+        imgs = sess._attach_mode_image(self._decision(self.GEN_KEY), notes)
+        elapsed = time.monotonic() - t0
+        self.assertEqual(imgs, [])
+        self.assertLess(elapsed, 1.0)  # no image-API RTT on the reply path
+        release.set()
+        self._join_warm_threads()
+        self.assertEqual(calls, [self.GEN_KEY])
+
+    def test_warm_thread_respects_session_cap(self):
+        # Caps hold across the async handoff: at the session budget the miss
+        # notes image_gen_capped and NO warm thread spawns.
+        from tutor.conv_session import MAX_IMAGE_GENERATIONS_PER_SESSION
+
+        ta = self._ta
+        ta.register_generator(self._fake_generator())
+        ta.GENERATE_ON_MISS = True
+        sess = self._session()
+        sess.pedagogy_memory.images_generated = (
+            MAX_IMAGE_GENERATIONS_PER_SESSION
+        )
+        notes: list[str] = []
+        imgs = sess._attach_mode_image(
+            self._decision("zz_never_cached"), notes
+        )
+        self.assertEqual(imgs, [])
+        self.assertEqual(notes, ["image_gen_capped:zz_never_cached"])
+        self._join_warm_threads()
+        self.assertIsNone(ta.cache_lookup("zz_never_cached"))
+
+    def test_rb_downgrade_condition_holds_and_warm_still_runs(self):
+        # Audit (e) interaction: an R-B introduce plan rides this same
+        # attach path (decision.image_concept = plan.key). On a cache miss
+        # the attach returns [] — exactly the condition the R-B→R-D
+        # downgrade keys off (branch verified present; Phase 4 batch 3
+        # moved the deferred render to turn_pipeline.stage_introduce_render)
+        # — AND the async warm still runs so the image exists next time.
+        import inspect
+
+        import tutor.turn_pipeline as turn_pipeline
+
+        # Phase 3 batch 1: the note string renders from the typed event —
+        # the branch marker in source is the event kind, and the rendered
+        # legacy string is pinned in tutor.turn_events' render table.
+        self.assertIn(
+            "INTRODUCE_DOWNGRADED",
+            inspect.getsource(turn_pipeline.stage_introduce_render),
+        )
+        from tutor.turn_events import TurnEventKind, render_note
+
+        self.assertEqual(
+            render_note(
+                TurnEventKind.INTRODUCE_DOWNGRADED, key="k",
+                payload={"path": "R-B_to_R-D"},
+            ),
+            "introduce_downgraded:k:R-B_to_R-D",
+        )
+        ta = self._ta
+        ta.register_generator(self._fake_generator())
+        ta.GENERATE_ON_MISS = True
+        sess = self._session()
+        notes: list[str] = []
+        imgs = sess._attach_mode_image(self._decision(self.GEN_KEY), notes)
+        self.assertEqual(imgs, [])  # downgrade condition holds this turn
+        self._join_warm_threads()
+        notes2: list[str] = []
+        imgs2 = sess._attach_mode_image(self._decision(self.GEN_KEY), notes2)
+        self.assertTrue(imgs2)  # the image exists for the NEXT plan
+
+    def test_resolve_decision_assets_generate_false_never_generates(self):
+        # The AI-turn fallback + rules path pass generate=False: a wanted
+        # miss must return [] without ever invoking the generator.
+        from tutor.teach_assets import (
+            ImageDecision,
+            _resolve_decision_assets,
+        )
+
+        ta = self._ta
+        calls: list[str] = []
+
+        def gen(concept, prompt, dest):
+            calls.append(concept)
+            return True
+
+        ta.register_generator(gen)
+        ta.GENERATE_ON_MISS = True
+        decision = ImageDecision(
+            True, concept="zz_never_cached", reason="test"
+        )
+        out = _resolve_decision_assets(decision, generate=False)
+        self.assertEqual(out, [])
+        self.assertEqual(calls, [])
 
     def test_session_miss_disabled_notes_visible(self):
         ta = self._ta

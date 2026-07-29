@@ -16,6 +16,51 @@ from .character_sheet import (
 )
 from .pedagogy_contract import is_blank_learner
 
+# Historical home of word_present — the implementation now lives in
+# tutor/textnorm.py (Phase 2, docs/reviews-architecture-refactor.md);
+# re-exported here because conv_session/introduce_router/modes and tests
+# import it from observe. noqa: F401 (re-export façade).
+from .textnorm import (  # noqa: F401
+    SPANISH_LETTERS as _ES_LETTERS,
+    fold_lexical as _fold_lexical,
+    word_present,
+)
+
+
+# ---------------------------------------------------------------------------
+# topic_vocab signal — TABLE-DERIVED (Phase 5 batch 2 flip, CONSERVATIVE,
+# docs/reviews-architecture-refactor.md).  The signal gates guard-6's
+# _new_concrete_noun (routing), so membership stays the recorded legacy set
+# — now validated at import against the association table (all members must
+# be imageable table keys; the regex is built from key + accent-folded
+# variant, reproducing the historical accent-tolerant alternation).
+# ---------------------------------------------------------------------------
+
+_TOPIC_VOCAB_TABLE_KEYS: tuple[str, ...] = (
+    "café", "bote", "barco", "río", "comida", "música", "calor", "frío",
+)
+
+
+def _derived_topic_vocab_re() -> "re.Pattern[str]":
+    from .association_table import cached_default_table
+
+    table = cached_default_table()
+    variants: list[str] = []
+    for key in _TOPIC_VOCAB_TABLE_KEYS:
+        entry = table.get(key)
+        if not isinstance(entry, dict) or not entry.get("imageable"):
+            raise ValueError(
+                f"topic_vocab member {key!r} must be an imageable "
+                "association-table key"
+            )
+        for surface in (key, _fold_lexical(key)):
+            if surface not in variants:
+                variants.append(surface)
+    return re.compile(r"\b(" + "|".join(map(re.escape, variants)) + r")\b")
+
+
+_TOPIC_VOCAB_RE = _derived_topic_vocab_re()
+
 
 _QUOTED_SPANS = (
     re.compile(r"«[^»]{1,120}»"),
@@ -23,22 +68,6 @@ _QUOTED_SPANS = (
     re.compile(r'"[^"]{1,120}"'),
     re.compile(r"'[^']{4,120}'"),
 )
-
-
-_ES_LETTERS = "a-záéíóúüñ"
-
-
-def word_present(needle: str, text: str) -> bool:
-    """Spanish word-boundary containment, plural-tolerant.
-
-    Raw substring checks put a SUN image on «Hola Marisol» ('sol' inside the
-    name) and on «yo solo…». A needle only matches as a whole word (or its
-    simple plural): sol≠Marisol/solo, but gato→gatos still hits.
-    """
-    return bool(re.search(
-        rf"(?<![{_ES_LETTERS}]){re.escape((needle or '').lower())}(?:e?s)?(?![{_ES_LETTERS}])",
-        (text or "").lower(),
-    ))
 
 
 def strip_quoted(text: str) -> str:
@@ -112,7 +141,7 @@ def probe_signals(learner: str) -> set[str]:
         s.add("origin")
     if re.search(r"\b(gracias|por\s+favor|adi[oó]s|hasta\s+luego)\b", low):
         s.add("polite")
-    if re.search(r"\b(caf[eé]|bote|barco|r[ií]o|comida|m[uú]sica|calor|fr[ií]o)\b", low):
+    if _TOPIC_VOCAB_RE.search(low):
         s.add("topic_vocab")
     # Broader Spanish surface markers (include imperfect learner forms)
     es_hits = len(re.findall(

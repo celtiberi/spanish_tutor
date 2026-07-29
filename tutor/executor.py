@@ -7,16 +7,14 @@ The model is the teacher. Code supplies:
   - pedagogical *direction* (CLT, association, no loops, teach every turn)
 
 Code does **not** script a Hola→Estoy→Me llamo ladder. That flashcard feel
-came from rules_planner owning the agenda; that path is optional fallback only
-(TEACHER_MODE=rules).
+came from the old rules_planner PlanCard ladder — deleted outright (E4,
+docs/reviews-architecture-refactor.md, 2026-07-28).
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
-
 from . import config
 
 CONV_PROMPT = config.REPO_ROOT / "prompts" / "conversational_tutor.md"
@@ -37,6 +35,10 @@ Use the character sheet, session facts, and what they just said.
 ## Pedagogical direction (always)
 1. **CLT** — language for real communication, not worksheet lines.
 2. **Comprehensible input** — mostly clear Spanish; English is a lifeline only.
+   EXCEPTION — true-zero learner (blank sheet): the opening turns REQUIRE
+   English framing and a ≤6-word gloss on every Spanish item until the
+   learner produces any Spanish. That orientation is scaffold, not a wall —
+   long all-English walls stay banned in every state.
 3. **Association** — show Spanish freely (models are teaching, not cheating).
    Prefer context/image over dual-subtitle English walls (*X = Y* on every line).
 4. **Focus on form** — if they err on person/tense/construction, recast naturally
@@ -46,6 +48,8 @@ Use the character sheet, session facts, and what they just said.
    origin, do **not** re-ask. Advance the conversation.
 7. **Blank sheet** — you are placing them. Start simple and friendly; do not
    monologue intermediate Spanish. Feel out with real chat, not "Say: Hola."
+   When the mode marks a TRUE ZERO, obey its English-orientation
+   instructions (glossed tiny Spanish + one bilingual try IS placement).
 8. **next_best** on the sheet is a *guide*, not a railroad. Prefer reacting to
    what they just said first.
 9. **Teach every turn** — at least model and/or try (or recast+retry). Bare
@@ -288,7 +292,11 @@ def build_ai_tutor_user_message(
         "learner_personal_context": personal_context or None,
         "session_facts": {
             "skills_learner_already_showed": mem.get("shown") or [],
-            "topics_tutor_already_asked": mem.get("asked") or [],
+            # Semantic asked-topic registry (2026-07-28 repetition forensics):
+            # the old "topics_tutor_already_asked" carried MODE NAMES
+            # ("ask_how","association",…) — useless to the model. These are
+            # frame:concept keys ("size:ciudad") the tutor must not re-ask.
+            "do_not_re_ask": mem.get("asked_topics") or [],
             "images_already_shown": mem.get("images_shown") or [],
             "turn_index": mem.get("turns") or 0,
             "from_character_sheet": mem.get("sheet_seeded") or False,
@@ -317,77 +325,4 @@ def build_ai_tutor_user_message(
         "<tutor_turn_task>\n"
         + json.dumps(payload, ensure_ascii=False, indent=2)
         + "\n</tutor_turn_task>\n"
-    )
-
-
-# ---------------------------------------------------------------------------
-# Legacy PlanCard executor (TEACHER_MODE=rules only)
-# ---------------------------------------------------------------------------
-
-EXECUTOR_SYSTEM = """# You are a skilled conversational Spanish tutor (rules PlanCard mode)
-
-PlanCard is a soft constraint, not a flashcard script. Write natural Spanish chat.
-"""
-
-
-def build_executor_user_message(
-    card: Any,
-    *,
-    learner: str = "",
-    is_open: bool = False,
-    session_memory: dict | None = None,
-    teach_images: list | None = None,
-) -> str:
-    """Legacy: PlanCard-bound user message (rules mode)."""
-    mem = session_memory or {}
-    payload = {
-        "pedagogy_constraints": {
-            "phase": getattr(card, "phase", ""),
-            "move": getattr(card, "move", ""),
-            "reason": getattr(card, "reason", ""),
-            "targets": (
-                card.targets.as_dict()
-                if hasattr(card, "targets") and hasattr(card.targets, "as_dict")
-                else {}
-            ),
-            "example_models_optional": list(getattr(card, "models", None) or []),
-            "elicit_intent": getattr(card, "try_prompt", ""),
-            "meaning_hint_optional": getattr(card, "english_frame", ""),
-            "scaffold": getattr(card, "scaffold", "es_forward"),
-            "allow_new_topic": getattr(card, "allow_new_topic", True),
-            "avoid_loop": True,
-            "already_shown_by_learner": mem.get("shown") or [],
-            "already_asked_by_tutor": mem.get("asked") or [],
-            "image_concepts": [
-                (t.get("concept"), t.get("form"), t.get("caption"))
-                for t in (teach_images or [])
-            ],
-        },
-        "learner_said": (
-            learner if not is_open else "(session open — greet them and start a real chat)"
-        ),
-        "is_open": is_open,
-        "instructions": (
-            "Write a natural tutor turn. Do not re-ask already_asked topics. "
-            "Advance the conversation. Mostly Spanish."
-        ),
-    }
-    return (
-        "<tutor_turn_task>\n"
-        + json.dumps(payload, ensure_ascii=False, indent=2)
-        + "\n</tutor_turn_task>\n"
-    )
-
-
-def build_executor_system(
-    *,
-    sheet_summary: str = "",
-    pack_palette: str = "",
-    personal_context: str = "",
-) -> list[dict]:
-    """Legacy alias → AI tutor system (same stance either way)."""
-    return build_ai_tutor_system(
-        sheet_summary=sheet_summary,
-        pack_palette=pack_palette,
-        personal_context=personal_context,
     )

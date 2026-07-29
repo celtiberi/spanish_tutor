@@ -1,6 +1,6 @@
 # Planner–executor protocol: limited pedagogical controller
 
-**Status:** **TABLED** (2026-07-23) — code kept; not primary product path  
+**Status:** **RETIRED** (2026-07-28) — code deleted (`tutor/pedagogy_controller.py`, `tutor/planner.py`, `tutor/lesson_flow.py`, `evals/run_smoke.py`); git history is the archive  
 **See instead:** `docs/conversational-spanish-and-learner-model.md`  
 **Implemented:** `tutor/pedagogy_controller.py`, `--arch controller`  
 **Original date:** 2026-07-23  

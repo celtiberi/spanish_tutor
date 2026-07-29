@@ -18,17 +18,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from tutor.image_gen import install_teach_image_generator  # noqa: E402
 from tutor.costs import SessionCostTracker  # noqa: E402
-from tutor.modes import _form_for_concept  # noqa: E402
+from tutor.modes import (  # noqa: E402
+    NEW_CONCRETE_NOUNS,
+    NOUN_TEXT_PAIRS,
+    _form_for_concept,
+)
 from tutor.teach_assets import (  # noqa: E402
-    CONCEPT_LEXICON,
+    _lexicon,
     cache_lookup,
     ensure_asset,
     seed_index_from_disk,
 )
 
-# Concepts modes.py can request beyond the image lexicon (_noun_from_text pairs)
-EXTRA_CONCEPTS = (
-    "edificio", "casa", "playa", "perro", "gato", "agua", "sol", "calor", "frio",
+# Concepts modes.py can request beyond the sidecar lexicon: the table-derived
+# guard-6 lists (Phase 5 batch 2 — no more hand-copied stray list here).
+EXTRA_CONCEPTS = tuple(
+    {concept for _needle, concept in NOUN_TEXT_PAIRS} | set(NEW_CONCRETE_NOUNS)
 )
 
 
@@ -38,7 +43,7 @@ def main() -> int:
     if not dry and not install_teach_image_generator():
         print("Image generator unavailable (no GEMINI_API_KEY?) — aborting.")
         return 1
-    concepts = sorted(set(CONCEPT_LEXICON) | set(EXTRA_CONCEPTS))
+    concepts = sorted(set(_lexicon()) | set(EXTRA_CONCEPTS))
     tracker = SessionCostTracker(source="prewarm")
     hit = missing = generated = failed = 0
     for c in concepts:

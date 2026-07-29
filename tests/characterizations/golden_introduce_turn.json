@@ -1,0 +1,111 @@
+{
+  "error": null,
+  "gate": {
+    "faults": [],
+    "ok": true,
+    "scaffold_saved": {
+      "hola": "anchor"
+    }
+  },
+  "learner": "Muy bien, gracias.",
+  "memory": {
+    "asked": [
+      "conversation"
+    ],
+    "asked_topics": [],
+    "images_shown": [],
+    "intro_budget_remaining": 1,
+    "introduced_this_session": [
+      "hola"
+    ],
+    "shown": [
+      "greet",
+      "spanish_ok"
+    ],
+    "turns": 1
+  },
+  "mode_state": {
+    "english_only_streak": 0,
+    "form_focus_cooldown": {},
+    "hard_breaks_this_session": 0,
+    "last_mode": "conversation",
+    "last_resolved_form": null,
+    "learner_turn_index": 2,
+    "turns_since_hard_break": 999
+  },
+  "model_requests": 2,
+  "notes": [
+    "mode=conversation",
+    "mode_reason=default_conversation",
+    "introduce_planned:hola:R-E",
+    "output_gate_ok",
+    "rules_backup",
+    "hard_observer",
+    "can-dos=*",
+    "scaffold=ES-forward+EN-rescue",
+    "focus_async",
+    "structured_reply",
+    "pedagogy:ok",
+    "introduced:hola",
+    "progress_milestone:planted:hola",
+    "pedagogy:known_learner_open",
+    "phase=ai_tutor",
+    "activity=new_input",
+    "phase_consumed=True",
+    "hard_break=False",
+    "plan_source=mode_runtime",
+    "teacher_mode=planned",
+    "open_scenes=boat_likes,boat_meet_captain,boat_where_boat",
+    "mem_shown=greet,spanish_ok",
+    "mem_asked=conversation"
+  ],
+  "parts_keys": [
+    "acknowledge",
+    "mode",
+    "mode_decision",
+    "model",
+    "open_phase",
+    "output_gate",
+    "pedagogy",
+    "plan",
+    "structured",
+    "teach_images",
+    "try"
+  ],
+  "phase": {
+    "activity": "new_input",
+    "frozen_turns": 0,
+    "index": 0,
+    "turns_in_phase": 2
+  },
+  "progress_events": [
+    {
+      "key": "hola",
+      "kind": "planted",
+      "polarity": "up"
+    }
+  ],
+  "reply": "¡Muy bien!\n\nPara saludar decimos **hola** — like \"hello\" in English.\n\nDi **hola** para saludar.",
+  "save_sheet_calls": [
+    "_commit_sheet"
+  ],
+  "sheet": {
+    "lexicon:hola": {
+      "confidence": 0.0,
+      "interval_days": 1,
+      "introduced_at": "<TODAY>",
+      "next_due": "<TOMORROW>",
+      "scaffold": "keyword",
+      "status": "unknown",
+      "successive_successes": 0
+    },
+    "lexicon:muy bien": null
+  },
+  "stop_reason": "end_turn",
+  "usage": {
+    "cached_input_tokens": 0,
+    "input_tokens": 120,
+    "output_tokens": 60,
+    "thinking_tokens": 0
+  }
+}

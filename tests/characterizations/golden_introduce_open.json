@@ -1,0 +1,89 @@
+{
+  "error": null,
+  "gate": {
+    "faults": [],
+    "ok": true,
+    "scaffold_saved": {}
+  },
+  "memory": {
+    "asked": [
+      "conversation"
+    ],
+    "asked_topics": [],
+    "images_shown": [],
+    "intro_budget_remaining": 2,
+    "introduced_this_session": [],
+    "shown": [
+      "greet"
+    ],
+    "turns": 0
+  },
+  "mode_state": {
+    "english_only_streak": 0,
+    "form_focus_cooldown": {},
+    "hard_breaks_this_session": 0,
+    "last_mode": "conversation",
+    "last_resolved_form": null,
+    "learner_turn_index": 1,
+    "turns_since_hard_break": 999
+  },
+  "model_requests": 1,
+  "notes": [
+    "mode=conversation",
+    "mode_reason=known_open_from_sheet",
+    "introduce_planned:hola:R-E",
+    "output_gate_ok",
+    "rules_backup",
+    "hard_observer",
+    "can-dos=*",
+    "scaffold=ES-forward+EN-rescue",
+    "focus_async",
+    "structured_reply",
+    "pedagogy:ok",
+    "pedagogy:known_learner_open",
+    "open_phase=known",
+    "activity=new_input",
+    "phase_consumed=True",
+    "hard_break=False",
+    "plan_source=mode_runtime",
+    "teacher_mode=planned",
+    "open_scenes=boat_likes,boat_meet_captain,boat_where_boat",
+    "mem_shown=greet",
+    "mem_asked=conversation"
+  ],
+  "parts_keys": [
+    "acknowledge",
+    "mode",
+    "mode_decision",
+    "model",
+    "open_phase",
+    "output_gate",
+    "pedagogy",
+    "plan",
+    "structured",
+    "teach_images",
+    "try"
+  ],
+  "phase": {
+    "activity": "new_input",
+    "frozen_turns": 0,
+    "index": 0,
+    "turns_in_phase": 1
+  },
+  "progress_events": [],
+  "reply": "¡Empezamos!\n\n**Yo estoy muy contento hoy.**\n\n¿Estás contento hoy también?",
+  "save_sheet_calls": [
+    "__init__",
+    "_commit_sheet"
+  ],
+  "sheet": {
+    "lexicon:hola": null
+  },
+  "stop_reason": "end_turn",
+  "usage": {
+    "cached_input_tokens": 0,
+    "input_tokens": 120,
+    "output_tokens": 60,
+    "thinking_tokens": 0
+  }
+}

@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TEACHER_PATHS = frozenset(
     {
         "tutor/conv_session.py",
+        "tutor/turn_pipeline.py",
         "tutor/executor.py",
         "tutor/character_sheet.py",
         "tutor/config.py",
@@ -37,7 +38,6 @@ TEACHER_PATHS = frozenset(
         "tutor/output_gate.py",
         "tutor/scenes.py",
         "tutor/session_memory.py",
-        "tutor/rules_planner.py",
         "tutor/corpus.py",
         "tutor/plan_card.py",
         "tutor/pedagogy_contract.py",

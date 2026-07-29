@@ -419,5 +419,717 @@ class TestEmitWiring(LedgerBase):
         self.assertEqual(notes, ["progress_milestone:task_complete:scene1"])
 
 
+class TestRetraction(LedgerBase):
+    """Honesty correction path (2026-07-28 false-planted incident): retract
+    voids the pair for display AND dedupe; raw lines stay (append-only);
+    sheet correction clears ONLY introduce fields, never ability fields."""
+
+    def test_retract_excludes_pair_from_display_and_dedupe(self):
+        pl.record_milestone(
+            "planted", "buenas tardes", "Met «buenas tardes»",
+            session_id="s1", item_kind="lexicon",
+            ledger_path=self.path, now=T0,
+        )
+        pl.record_milestone(
+            "planted", "hola", session_id="s1", item_kind="lexicon",
+            ledger_path=self.path, now=T0,
+        )
+        pl.record_retraction(
+            "planted", "buenas tardes",
+            "Retracted planted «buenas tardes» — flawed key-presence rule",
+            session_id="corr", item_kind="lexicon",
+            ledger_path=self.path, now=T0 + datetime.timedelta(hours=1),
+        )
+        # Append-only law: all three raw lines remain on disk
+        self.assertEqual(len(self._lines()), 3)
+        # Display: neither the false milestone nor the correction row shows
+        clusters = pl.read_recent(ledger_path=self.path)
+        shown = [
+            (e["kind"], e["key"]) for c in clusters for e in c["events"]
+        ]
+        self.assertNotIn(("planted", "buenas tardes"), shown)
+        self.assertNotIn(("retracted", "buenas tardes"), shown)
+        self.assertIn(("planted", "hola"), shown)
+        # Dedupe: the voided milestone is re-earnable
+        self.assertFalse(
+            pl.has_milestone("planted", "buenas tardes", ledger_path=self.path)
+        )
+        self.assertNotIn(("planted", "buenas tardes"), pl.up_keys(self.path))
+        # The correction itself remains a queryable fact
+        self.assertTrue(
+            pl.has_milestone(
+                "retracted", "buenas tardes",
+                polarity="down", ledger_path=self.path,
+            )
+        )
+        # A later GENUINE introduction re-mints cleanly
+        pl.record_milestone(
+            "planted", "buenas tardes", session_id="s2", item_kind="lexicon",
+            ledger_path=self.path, now=T0 + datetime.timedelta(days=2),
+        )
+        self.assertTrue(
+            pl.has_milestone("planted", "buenas tardes", ledger_path=self.path)
+        )
+
+    def test_retraction_validation(self):
+        with self.assertRaises(ValueError):
+            pl.record_milestone(  # retracted must be polarity down
+                "retracted", "x", polarity="up", retracts="planted",
+                ledger_path=self.path,
+            )
+        with self.assertRaises(ValueError):
+            pl.record_retraction("nope", "x", ledger_path=self.path)
+        with self.assertRaises(ValueError):
+            pl.record_milestone(  # retracts illegal off kind=retracted
+                "planted", "x", retracts="planted", ledger_path=self.path,
+            )
+
+    def test_retract_introduction_clears_sheet_fields_only(self):
+        from tutor.retrieval_scheduler import retract_introduction
+
+        sheet = default_sheet()
+        # Key WITH real use evidence: introduce fields cleared, ability kept
+        sheet["lexicon"]["hola"] = {
+            "status": "emerging", "confidence": 0.4, "solid_uses": 1,
+        }
+        sheet = mark_introduced(sheet, "hola", "lexicon", "keyword", today=D0)
+        # Key with NO evidence: mark created the honest-zero shell
+        sheet = mark_introduced(
+            sheet, "buenas tardes", "lexicon", "keyword", today=D0
+        )
+        out = retract_introduction(sheet, "hola", "lexicon")
+        out = retract_introduction(out, "buenas tardes", "lexicon")
+        entry = out["lexicon"]["hola"]
+        for f in ("introduced_at", "scaffold", "next_due", "interval_days",
+                  "successive_successes"):
+            self.assertNotIn(f, entry)
+        # Confidence untouched (honesty law)
+        self.assertEqual(entry["confidence"], 0.4)
+        self.assertEqual(entry["status"], "emerging")
+        self.assertEqual(entry["solid_uses"], 1)
+        # The evidence-free shell is removed entirely (pre-introduce state)
+        self.assertNotIn("buenas tardes", out["lexicon"])
+        # Absent entry → no-op, no crash
+        out2 = retract_introduction(out, "no-such-key", "lexicon")
+        self.assertNotIn("no-such-key", out2["lexicon"])
+
+
+class TestLearnerEpoch(LedgerBase):
+    """Learner-epoch scope rotation (Phase 1 batch 2 declared delta 3,
+    docs/reviews-architecture-refactor.md): sheet_reset appends an epoch
+    mark; has_milestone/up_keys only consider events AFTER the latest mark
+    (fresh learner re-mints, nothing retracted — nothing was false);
+    display keeps pre-epoch history with the boundary row visible;
+    retraction filtering is unaffected."""
+
+    def test_epoch_rotates_dedupe_scope_and_reminits(self):
+        pl.record_milestone(
+            "planted", "bote", session_id="s1", item_kind="lexicon",
+            ledger_path=self.path, now=T0,
+        )
+        self.assertTrue(pl.has_milestone("planted", "bote", ledger_path=self.path))
+        ev = pl.record_epoch(
+            session_id="s1", ledger_path=self.path,
+            now=T0 + datetime.timedelta(hours=1),
+        )
+        self.assertEqual(ev["kind"], "epoch")
+        self.assertEqual(ev["polarity"], "epoch")
+        # Dedupe scope rotated: the crossing is re-earnable …
+        self.assertFalse(pl.has_milestone("planted", "bote", ledger_path=self.path))
+        self.assertEqual(pl.up_keys(self.path), set())
+        # … and genuinely re-mints for the fresh learner.
+        pl.record_milestone(
+            "planted", "bote", session_id="s2", item_kind="lexicon",
+            ledger_path=self.path, now=T0 + datetime.timedelta(hours=2),
+        )
+        self.assertTrue(pl.has_milestone("planted", "bote", ledger_path=self.path))
+        self.assertIn(("planted", "bote"), pl.up_keys(self.path))
+        # Append-only: all three raw lines remain
+        self.assertEqual(
+            [e["kind"] for e in self._lines()], ["planted", "epoch", "planted"]
+        )
+        # Only the LATEST epoch scopes: a second mark re-voids the scope
+        pl.record_epoch(
+            ledger_path=self.path, now=T0 + datetime.timedelta(hours=3)
+        )
+        self.assertFalse(pl.has_milestone("planted", "bote", ledger_path=self.path))
+
+    def test_display_keeps_history_and_shows_boundary(self):
+        pl.record_milestone(
+            "planted", "bote", session_id="s1", item_kind="lexicon",
+            ledger_path=self.path, now=T0,
+        )
+        pl.record_epoch(
+            session_id="s1", ledger_path=self.path,
+            now=T0 + datetime.timedelta(hours=1),
+        )
+        pl.record_milestone(
+            "planted", "bote", session_id="s2", item_kind="lexicon",
+            ledger_path=self.path, now=T0 + datetime.timedelta(hours=2),
+        )
+        days = pl.read_recent_days(ledger_path=self.path)
+        self.assertEqual(len(days), 1)
+        self.assertEqual(
+            [e["kind"] for e in days[0]["events"]],
+            ["planted", "epoch", "planted"],
+        )
+        payload = pl.build_progress_payload(
+            default_sheet(), ledger_path=self.path
+        )
+        events = payload["clusters"][0]["events"]
+        epoch_rows = [e for e in events if e["kind"] == "epoch"]
+        self.assertEqual(len(epoch_rows), 1)
+        self.assertEqual(epoch_rows[0]["display_state"], "boundary")
+        self.assertEqual(
+            epoch_rows[0]["display"], "Fresh start — progress reset"
+        )
+
+    def test_retraction_filtering_unaffected_by_epoch(self):
+        # False plant, retracted; then an epoch; then a genuine plant.
+        pl.record_milestone(
+            "planted", "leche", session_id="s1", item_kind="lexicon",
+            ledger_path=self.path, now=T0,
+        )
+        pl.record_retraction(
+            "planted", "leche", "Retracted planted «leche» — test incident",
+            ledger_path=self.path, now=T0 + datetime.timedelta(minutes=10),
+        )
+        pl.record_epoch(
+            ledger_path=self.path, now=T0 + datetime.timedelta(minutes=20),
+        )
+        pl.record_milestone(
+            "planted", "leche", session_id="s2", item_kind="lexicon",
+            ledger_path=self.path, now=T0 + datetime.timedelta(minutes=30),
+        )
+        # The retracted pre-epoch pair never displays; the post-epoch plant
+        # does; the correction stays a queryable fact (raw lines).
+        shown = [
+            (e["kind"], e["key"], e["session_id"])
+            for c in pl.read_recent(ledger_path=self.path)
+            for e in c["events"]
+            if e["kind"] != "epoch"
+        ]
+        self.assertEqual(shown, [("planted", "leche", "s2")])
+        self.assertTrue(
+            pl.has_milestone(
+                "retracted", "leche", polarity="down", ledger_path=self.path
+            )
+        )
+        self.assertTrue(pl.has_milestone("planted", "leche", ledger_path=self.path))
+
+    def test_epoch_is_not_a_milestone_kind(self):
+        # Emit sites can never mint an epoch as a milestone …
+        with self.assertRaises(ValueError):
+            pl.record_milestone("epoch", "learner", ledger_path=self.path)
+        # … and a retraction can never target one (nothing false to retract).
+        with self.assertRaises(ValueError):
+            pl.record_retraction("epoch", "learner", ledger_path=self.path)
+
+
+class TestGroupingAndDisplayState(LedgerBase):
+    """Rail grouping + single-state law (2026-07-28 rail incident): nodes
+    cluster by association-table theme; skills → Abilities, tasks → Tasks,
+    non-table keys → other; a node shows exactly ONE state."""
+
+    TABLE = {
+        "buenos días": {"theme": "greetings"},
+        "buenas tardes": {"theme": "greetings"},
+        "leche": {"theme": "drinks"},
+    }
+
+    def test_grouping_payload_shape(self):
+        for key in ("buenos días", "buenas tardes"):
+            pl.record_milestone(
+                "planted", key, session_id="s1", item_kind="lexicon",
+                ledger_path=self.path, now=T0,
+            )
+        pl.record_milestone(
+            "can_do_known", "IP-01", session_id="s1", item_kind="skill",
+            ledger_path=self.path, now=T0,
+        )
+        pl.record_milestone(
+            "task_complete", "scene1", session_id="s1", item_kind="task",
+            ledger_path=self.path, now=T0,
+        )
+        pl.record_milestone(
+            "planted", "zzz-off-table", session_id="s1", item_kind="lexicon",
+            ledger_path=self.path, now=T0,
+        )
+        payload = pl.build_progress_payload(
+            {"skills": {"IP-01": {"status": "known", "confidence": 0.9}}},
+            session_id="s1", table=self.TABLE,
+            ledger_path=self.path, today=D0,
+        )
+        (cluster,) = payload["clusters"]
+        groups = {g["theme"]: g for g in cluster["groups"]}
+        self.assertEqual(
+            set(groups), {"greetings", "abilities", "tasks", "other"}
+        )
+        g = groups["greetings"]
+        self.assertEqual(g["label"], "Greetings")
+        self.assertEqual(g["summary"], {"planted": 2})
+        self.assertEqual(
+            [e["key"] for e in g["events"]],
+            ["buenos días", "buenas tardes"],
+        )
+        self.assertEqual(groups["abilities"]["label"], "Abilities")
+        self.assertEqual(
+            [e["key"] for e in groups["abilities"]["events"]], ["IP-01"]
+        )
+        self.assertEqual(groups["tasks"]["label"], "Tasks")
+        self.assertEqual(
+            [e["key"] for e in groups["other"]["events"]], ["zzz-off-table"]
+        )
+        # Flat events retained for compat; every event carries display_state
+        self.assertEqual(len(cluster["events"]), 5)
+        for e in cluster["events"]:
+            self.assertIn(
+                e["display_state"], ("celebrated", "recheck", "down")
+            )
+
+    def test_single_state_per_node(self):
+        # Celebrated band the live sheet no longer supports → recheck ONLY
+        ev = {"kind": "can_do_known", "key": "IP-01", "polarity": "up",
+              "item_kind": "skill", "needs_recheck": True}
+        self.assertEqual(pl.display_state(ev), "recheck")
+        # Live state supports → celebrated (no badge)
+        ev2 = dict(ev, needs_recheck=False)
+        self.assertEqual(pl.display_state(ev2), "celebrated")
+        # Down events are never celebrated and never badged
+        ev3 = {"kind": "regression", "key": "bote", "polarity": "down",
+               "needs_recheck": False}
+        self.assertEqual(pl.display_state(ev3), "down")
+        # Payload path: the IP-01 case verbatim — known event, reset sheet
+        pl.record_milestone(
+            "can_do_known", "IP-01", session_id="s1", item_kind="skill",
+            ledger_path=self.path, now=T0,
+        )
+        payload = pl.build_progress_payload(
+            {"skills": {"IP-01": {"status": "unknown", "confidence": 0.0}}},
+            session_id="s1", ledger_path=self.path, today=D0,
+        )
+        (node,) = payload["clusters"][0]["events"]
+        self.assertTrue(node["needs_recheck"])
+        self.assertEqual(node["display_state"], "recheck")
+
+
+class TestDayClustering(LedgerBase):
+    """Day clustering (2026-07-28 journey-rail incident): the visual unit is
+    the LOCAL calendar day — sessions within a day merge into one cluster;
+    events keep session_id for tooltip/debug; midnight splits clusters."""
+
+    LOCAL_TZ = datetime.datetime.now().astimezone().tzinfo
+
+    def test_two_sessions_same_local_day_one_cluster(self):
+        t1 = datetime.datetime(2026, 7, 1, 10, 0, tzinfo=self.LOCAL_TZ)
+        pl.record_milestone(
+            "planted", "hola", session_id="sA", item_kind="lexicon",
+            ledger_path=self.path, now=t1,
+        )
+        pl.record_milestone(
+            "planted", "adiós", session_id="sB", item_kind="lexicon",
+            ledger_path=self.path, now=t1 + datetime.timedelta(minutes=5),
+        )
+        clusters = pl.read_recent_days(ledger_path=self.path)
+        self.assertEqual(len(clusters), 1)
+        c = clusters[0]
+        self.assertEqual(c["date"], "2026-07-01")
+        self.assertEqual(c["sessions"], ["sA", "sB"])
+        self.assertEqual(c["session_count"], 2)
+        # Sessions merged, chronological; each event keeps its session_id
+        self.assertEqual(
+            [(e["key"], e["session_id"]) for e in c["events"]],
+            [("hola", "sA"), ("adiós", "sB")],
+        )
+        self.assertEqual(c["summary"], {"planted": 2})
+
+    def test_cross_midnight_two_clusters_newest_first(self):
+        t1 = datetime.datetime(2026, 7, 1, 23, 50, tzinfo=self.LOCAL_TZ)
+        t2 = t1 + datetime.timedelta(minutes=20)  # crosses local midnight
+        pl.record_milestone(
+            "planted", "hola", session_id="sNight", item_kind="lexicon",
+            ledger_path=self.path, now=t1,
+        )
+        pl.record_milestone(
+            "planted", "adiós", session_id="sNight", item_kind="lexicon",
+            ledger_path=self.path, now=t2,
+        )
+        clusters = pl.read_recent_days(ledger_path=self.path)
+        self.assertEqual(len(clusters), 2)
+        self.assertEqual(
+            [c["date"] for c in clusters], ["2026-07-02", "2026-07-01"]
+        )
+        # Same session on both sides of midnight — day wins, session recorded
+        for c in clusters:
+            self.assertEqual(c["sessions"], ["sNight"])
+            self.assertEqual(len(c["events"]), 1)
+
+    def test_payload_uses_day_clusters(self):
+        t1 = datetime.datetime(2026, 7, 1, 10, 0, tzinfo=self.LOCAL_TZ)
+        for sid, key in (("sA", "hola"), ("sB", "adiós")):
+            pl.record_milestone(
+                "planted", key, session_id=sid, item_kind="lexicon",
+                ledger_path=self.path, now=t1,
+            )
+        payload = pl.build_progress_payload(
+            {}, session_id="sB", ledger_path=self.path, today=D0,
+        )
+        (c,) = payload["clusters"]
+        self.assertEqual(c["date"], "2026-07-01")
+        self.assertEqual(c["session_count"], 2)
+        self.assertIn("sB", c["sessions"])
+
+
+class TestHumanization(LedgerBase):
+    """Humanized display names (2026-07-28 rail incident: raw keys and
+    "Theme — N planted" rows said nothing): lexicon → the Spanish + gloss;
+    can-do id → statement snippet (mastery frame ONLY at known); task →
+    scene goal; unknown key → raw key fallback. Derived, never invented."""
+
+    TABLE = {"hola": {"gloss_en": "hi / hello", "theme": "greetings"}}
+
+    def test_lexicon_display_is_spanish_with_gloss(self):
+        out = pl.humanize_event(
+            {"kind": "planted", "key": "hola", "item_kind": "lexicon"},
+            self.TABLE,
+        )
+        self.assertEqual(out["display"], "hola")
+        self.assertEqual(out["gloss"], "hi / hello")
+
+    def test_unknown_key_raw_fallback(self):
+        out = pl.humanize_event(
+            {"kind": "planted", "key": "zzz-off-table", "item_kind": "lexicon"},
+            self.TABLE,
+        )
+        self.assertEqual(out["display"], "zzz-off-table")
+        self.assertEqual(out["gloss"], "")
+        # Unknown can-do id also falls back to the raw key
+        self.assertEqual(
+            pl.can_do_display("XX-99", "can_do_known"), "XX-99"
+        )
+
+    def test_can_do_statement_snippet_and_band_copy(self):
+        # Real can_dos.py statement: "I can greet a peer and respond to a
+        # simple greeting." — shortened sensibly, no id soup.
+        self.assertEqual(
+            pl.can_do_display("IP-01", "can_do_known"), "Can greet a peer"
+        )
+        # Sub-known band never wears the mastery frame ("Can ...")
+        emerging = pl.can_do_display("IP-01", "can_do_emerging")
+        self.assertEqual(emerging, "Greet a peer")
+        self.assertFalse(emerging.lower().startswith("can "))
+
+    def test_task_display_is_scene_goal(self):
+        goals = {"boat_meet_captain": "meet the captain"}
+        out = pl.humanize_event(
+            {"kind": "task_complete", "key": "boat_meet_captain",
+             "item_kind": "task"},
+            None, goals,
+        )
+        self.assertEqual(out["display"], "Meet the captain")
+        # No goal known → raw key fallback
+        out2 = pl.humanize_event(
+            {"kind": "task_complete", "key": "mystery_scene",
+             "item_kind": "task"},
+            None, {},
+        )
+        self.assertEqual(out2["display"], "mystery_scene")
+
+    def test_goal_short_derivation(self):
+        self.assertEqual(
+            pl._goal_short(
+                "Info-gap task: the learner meets the captain and must find "
+                "out the captain's name and how he is today."
+            ),
+            "meets the captain",
+        )
+
+    def test_payload_events_carry_display_fields(self):
+        pl.record_milestone(
+            "planted", "hola", session_id="s1", item_kind="lexicon",
+            ledger_path=self.path, now=T0,
+        )
+        pl.record_milestone(
+            "can_do_known", "IP-01", session_id="s1", item_kind="skill",
+            ledger_path=self.path, now=T0,
+        )
+        payload = pl.build_progress_payload(
+            {"skills": {"IP-01": {"status": "known", "confidence": 0.9}}},
+            session_id="s1", table=self.TABLE,
+            ledger_path=self.path, today=D0,
+        )
+        by_key = {
+            e["key"]: e for c in payload["clusters"] for e in c["events"]
+        }
+        self.assertEqual(by_key["hola"]["display"], "hola")
+        self.assertEqual(by_key["hola"]["gloss"], "hi / hello")
+        self.assertEqual(by_key["IP-01"]["display"], "Can greet a peer")
+
+
+class TestOperatorRetractionDisplay(LedgerBase):
+    """2026-07-28 operator-pollution incident: milestones minted by agent
+    verification chats are retracted via the append-only API — the raw lines
+    (false milestone + correction) stay on disk, and NEITHER appears in the
+    display payload; genuine learner events are untouched."""
+
+    def test_operator_retractions_raw_present_display_absent(self):
+        op = "20260728-999999-conversational-web"
+        pl.record_milestone(
+            "planted", "buenas noches", session_id=op, item_kind="lexicon",
+            ledger_path=self.path, now=T0,
+        )
+        pl.record_milestone(
+            "can_do_known", "IP-01", session_id=op, item_kind="skill",
+            ledger_path=self.path, now=T0,
+        )
+        pl.record_milestone(
+            "planted", "hola", session_id="learner-session",
+            item_kind="lexicon", ledger_path=self.path, now=T0,
+        )
+        for target, key, ik in (
+            ("planted", "buenas noches", "lexicon"),
+            ("can_do_known", "IP-01", "skill"),
+        ):
+            pl.record_retraction(
+                target, key,
+                "operator-verification pollution — one-turn automation "
+                "session, not the learner",
+                session_id="correction-op", item_kind=ik,
+                ledger_path=self.path,
+                now=T0 + datetime.timedelta(hours=1),
+            )
+        # Raw ledger keeps all five lines (append-only law)
+        raw = self._lines()
+        self.assertEqual(len(raw), 5)
+        self.assertEqual(
+            sum(1 for e in raw if e["kind"] == "retracted"), 2
+        )
+        # Display payload shows ONLY the learner's genuine event
+        payload = pl.build_progress_payload(
+            {}, ledger_path=self.path, today=D0,
+        )
+        shown = [
+            (e["kind"], e["key"])
+            for c in payload["clusters"]
+            for e in c["events"]
+        ]
+        self.assertEqual(shown, [("planted", "hola")])
+        # Dedupe: the retracted milestones are honestly re-earnable
+        self.assertNotIn(("planted", "buenas noches"), pl.up_keys(self.path))
+        self.assertNotIn(("can_do_known", "IP-01"), pl.up_keys(self.path))
+
+
+class TestProjectionContract(LedgerBase):
+    """Phase 1.5 batch 2: ledger-projection pins (adjudicated (b) law).
+
+    The progress ledger is a PROJECTION of selected machine crossings —
+    machine A (retrieval_scheduler schedule axis) and machine B
+    (character_sheet ability axis) own their sheet fields; the ledger NEVER
+    writes either machine's fields, and every milestone kind maps to a
+    named transition/crossing (mapping table in
+    docs/reviews-architecture-refactor.md, Phase 1.5 batch 2 runbook).
+    """
+
+    def test_record_functions_take_no_sheet_and_write_none(self):
+        import inspect
+
+        for fn in (pl.record_milestone, pl.record_epoch, pl.record_retraction):
+            self.assertNotIn("sheet", inspect.signature(fn).parameters)
+        sheet = default_sheet()
+        sheet["lexicon"]["hola"] = {
+            "status": "emerging", "confidence": 0.4,
+            "introduced_at": "2026-07-01", "next_due": "2026-07-05",
+            "interval_days": 3, "successive_successes": 2,
+        }
+        before = json.loads(json.dumps(sheet))
+        pl.record_milestone(
+            "planted", "hola", item_kind="lexicon",
+            ledger_path=self.path, now=T0,
+        )
+        pl.record_retraction(
+            "planted", "hola", "projection-contract probe",
+            ledger_path=self.path, now=T0,
+        )
+        pl.record_epoch(ledger_path=self.path, now=T0)
+        self.assertEqual(sheet, before)
+        self.assertEqual(len(self._lines()), 3)
+
+    def test_projection_functions_never_mutate_inputs(self):
+        sheet = default_sheet()
+        sheet["lexicon"]["pan"] = {
+            "status": "known", "confidence": 0.9, "solid_uses": 3,
+            "interval_days": 14, "next_due": "2026-08-01",
+        }
+        prev = json.loads(json.dumps(sheet))
+        cur = json.loads(json.dumps(sheet))
+        cur["skills"]["IP-01"] = {"status": "known", "confidence": 0.9}
+        prev_snap = json.loads(json.dumps(prev))
+        cur_snap = json.loads(json.dumps(cur))
+        pl.sheet_crossings(prev, cur, seen=set())
+        self.assertEqual(prev, prev_snap)
+        self.assertEqual(cur, cur_snap)
+        tr = {
+            "key": "pan", "kind": "lexicon", "success": True,
+            "interval_before": 1, "interval_after": 3,
+            "successes_before": 1, "successes_after": 2,
+        }
+        tr_snap = dict(tr)
+        pl.ladder_crossings(tr, seen=set())
+        self.assertEqual(tr, tr_snap)
+        pl.record_milestone(
+            "rooted", "pan", item_kind="lexicon",
+            ledger_path=self.path, now=T0,
+        )
+        sheet_snap = json.loads(json.dumps(cur))
+        pl.build_progress_payload(cur, ledger_path=self.path, today=D0)
+        self.assertEqual(cur, sheet_snap)
+        ev = {"kind": "rooted", "key": "pan", "item_kind": "lexicon"}
+        pl.live_state_supports(ev, cur)
+        self.assertEqual(cur, sheet_snap)
+
+    def test_ledger_module_holds_no_machine_writer(self):
+        """Namespace + import pin: the ledger never even references a
+        machine writer (grep proof recorded in the runbook)."""
+        import inspect
+        import re as _re
+
+        writers = (
+            "save_sheet", "mark_introduced", "mark_first_seen", "enqueue",
+            "record_outcome", "record_outcome_ex", "retract_introduction",
+            "ability_transition", "apply_delta", "apply_rule_updates",
+            "process_turn", "_bump_status", "_write",
+        )
+        for name in writers:
+            self.assertFalse(
+                hasattr(pl, name),
+                f"progress_ledger must not hold writer {name!r}",
+            )
+        import_lines = [
+            ln for ln in inspect.getsource(pl).splitlines()
+            if _re.search(r"^\s*(from|import)\b", ln)
+        ]
+        for name in writers:
+            for ln in import_lines:
+                self.assertIsNone(
+                    _re.search(rf"\b{name}\b", ln),
+                    f"progress_ledger imports writer {name!r}: {ln!r}",
+                )
+
+    def test_kind_vocabulary_matches_mapping_table(self):
+        """Every milestone kind has a named source (runbook mapping table)."""
+        self.assertEqual(
+            set(pl.KINDS),
+            {
+                "planted",          # machine A via="introduce"
+                "taking_root",      # machine A outcome data: interval >= 3
+                "rooted",           # machine A outcome data: interval >= 14
+                "regression",       # machine A outcome fail from >= 3d
+                "error_recovered",  # sheet healthy gate (count 0, streak >= 3)
+                "can_do_emerging",  # machine B conf crossing (EMERGING_CONF)
+                "can_do_known",     # machine B band edge * -> known
+                "task_complete",    # task_runtime verdict (neither machine)
+                "retracted",        # honesty correction (pairs machine A retract)
+            },
+        )
+        # Threshold pins share the machines' constants — never softer.
+        from tutor.character_sheet import EMERGING_MIN_CONF
+        from tutor.retrieval_scheduler import INTERVAL_CAP_DAYS
+
+        self.assertEqual(pl.EMERGING_CONF, EMERGING_MIN_CONF)
+        self.assertEqual(pl.ROOTED_DAYS, INTERVAL_CAP_DAYS)
+        self.assertEqual(pl.TAKING_ROOT_DAYS, 3)
+
+    def test_planted_maps_to_introduce_transition(self):
+        """planted ↔ machine A via="introduce" (absent/first_seen →
+        on_ladder); the ability axis stays untouched (introduction is never
+        knowledge) so sheet_crossings mints nothing from it."""
+        from tutor.retrieval_scheduler import item_state, transition
+
+        s = default_sheet()
+        before = json.loads(json.dumps(s))
+        s2, crossing = transition(
+            s, "bote", "lexicon", to_state="on_ladder", via="introduce",
+            evidence={"caller": "test"}, today=D0, scaffold="image",
+        )
+        self.assertEqual(crossing["via"], "introduce")
+        self.assertEqual(crossing["from_state"], "absent")
+        self.assertEqual(crossing["to_state"], "on_ladder")
+        self.assertEqual(item_state(s2["lexicon"]["bote"]), "on_ladder")
+        self.assertEqual(pl.sheet_crossings(before, s2, seen=set()), [])
+
+    def test_ladder_kinds_map_to_outcome_crossings(self):
+        """taking_root / rooted / regression ↔ machine A via="outcome"
+        interval telemetry at the pinned thresholds."""
+        s = default_sheet()
+        s["lexicon"]["pan"] = {
+            "status": "unknown", "confidence": 0.0,
+            "next_due": D0.isoformat(), "interval_days": 1,
+            "successive_successes": 1,
+        }
+        s2, tr = record_outcome_ex(s, "pan", "lexicon", True, today=D0)
+        self.assertEqual((tr["interval_before"], tr["interval_after"]), (1, 3))
+        evs = pl.ladder_crossings(tr, seen=set())
+        self.assertEqual([e["kind"] for e in evs], ["taking_root"])
+        s2["lexicon"]["pan"]["interval_days"] = 7
+        s2["lexicon"]["pan"]["successive_successes"] = 3
+        s3, tr = record_outcome_ex(s2, "pan", "lexicon", True, today=D0)
+        self.assertEqual(tr["interval_after"], pl.ROOTED_DAYS)
+        evs = pl.ladder_crossings(tr, seen={("taking_root", "pan")})
+        self.assertEqual([e["kind"] for e in evs], ["rooted"])
+        _s4, tr = record_outcome_ex(s3, "pan", "lexicon", False, today=D0)
+        evs = pl.ladder_crossings(tr, seen=set())
+        self.assertEqual(
+            [(e["kind"], e["polarity"]) for e in evs],
+            [("regression", "down")],
+        )
+
+    def test_can_do_known_is_the_band_edge(self):
+        """can_do_known fires IFF ability_band crosses * → known (machine B
+        edge), including out-of-vocabulary statuses (band unknown)."""
+        from tutor.character_sheet import ability_band
+
+        statuses = ("unknown", "emerging", "fragile", "known", "blocked",
+                    "Known", "durable", "")
+        for p_st in statuses:
+            for c_st in statuses:
+                prev = {"skills": {"IP-03": {
+                    "confidence": 0.6, "status": p_st,
+                }}}
+                cur = {"skills": {"IP-03": {
+                    "confidence": 0.85, "status": c_st,
+                }}}
+                evs = pl.sheet_crossings(prev, cur, seen=set())
+                minted = "can_do_known" in [e["kind"] for e in evs]
+                edge = (
+                    ability_band(cur["skills"]["IP-03"]) == "known"
+                    and ability_band(prev["skills"]["IP-03"]) != "known"
+                )
+                self.assertEqual(
+                    minted, edge,
+                    f"prev={p_st!r} cur={c_st!r}: crossing != band edge",
+                )
+
+    def test_error_recovered_maps_to_healthy_gate(self):
+        """error_recovered ↔ the character_sheet healthy gate (count == 0
+        AND resolved_streak >= ERROR_PATTERN_HEALTHY_STREAK), no other rule."""
+        gate = ERROR_PATTERN_HEALTHY_STREAK
+        prev = {"error_patterns": {"p1": {
+            "count": 1, "resolved_streak": 0, "label": "x",
+        }}}
+        for count, streak, expect in (
+            (0, gate, True),
+            (0, gate - 1, False),
+            (1, gate + 2, False),
+        ):
+            cur = {"error_patterns": {"p1": {
+                "count": count, "resolved_streak": streak, "label": "x",
+            }}}
+            evs = pl.sheet_crossings(prev, cur, seen=set())
+            self.assertEqual(
+                "error_recovered" in [e["kind"] for e in evs], expect,
+                f"count={count} streak={streak}",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

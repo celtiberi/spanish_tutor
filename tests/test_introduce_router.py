@@ -232,6 +232,140 @@ class TestCandidateKeys(TableCase):
         self.assertLess(cands.index("hasta luego"), cands.index("hola"))
 
 
+class TestSessionExclusion(TableCase):
+    """Audit (a1) 2026-07-28: covered_concepts ∪ images_shown are session
+    exposure — the router must not plan a second "first introduce" of them,
+    EVEN on an explicitly forced key (adjudicated: session-local honesty
+    beats caller convenience)."""
+
+    def _snap(self, **kw):
+        snap = _fresh_snap()
+        snap.update(kw)
+        return snap
+
+    def test_imaged_concept_not_in_candidates(self):
+        snap = self._snap(images_shown=["casa"])
+        self.assertIn("casa", candidate_keys(default_sheet(), self.table))
+        self.assertNotIn(
+            "casa",
+            candidate_keys(default_sheet(), self.table, session_snapshot=snap),
+        )
+
+    def test_covered_concept_not_in_candidates(self):
+        snap = self._snap(covered_concepts=["casa"])
+        self.assertNotIn(
+            "casa",
+            candidate_keys(default_sheet(), self.table, session_snapshot=snap),
+        )
+
+    def test_forced_key_still_excluded(self):
+        snap = self._snap(images_shown=["casa"], covered_concepts=["casa"])
+        self.assertIsNone(
+            plan_introduction(default_sheet(), self.table, snap, key="casa")
+        )
+
+    def test_unrelated_forced_key_still_plans(self):
+        snap = self._snap(images_shown=["casa"])
+        plan = plan_introduction(
+            default_sheet(), self.table, snap, key="hasta luego"
+        )
+        self.assertIsNotNone(plan)
+        self.assertEqual(plan.key, "hasta luego")
+
+    def test_real_session_snapshot_fields_exclude(self):
+        # conv_session passes pedagogy_memory.snapshot() — the shipped field
+        # names (sorted lists) must exclude through the same wiring.
+        from tutor.session_memory import SessionMemory
+
+        mem = SessionMemory()
+        mem.note_image("casa")
+        mem.note_concept_covered("ciudad")
+        snap = mem.snapshot()
+        cands = candidate_keys(
+            default_sheet(), self.table, session_snapshot=snap
+        )
+        self.assertNotIn("casa", cands)
+        self.assertNotIn("ciudad", cands)
+        self.assertIsNone(
+            plan_introduction(default_sheet(), self.table, snap, key="casa")
+        )
+
+
+class TestLapsedIntroFirstSeen(TableCase):
+    """Audit (a4) 2026-07-28 — Grok's encantado thrash proof as regression:
+    R-A plan + gloss-only reply → introduce_lapsed + scaffold_saved records
+    the planned key + first_seen sticks → next-turn bare use is CLEAN."""
+
+    def test_encantado_lapse_writes_first_seen_next_bare_clean(self):
+        from tutor.conv_session import introduce_scaffold_evidence
+        from tutor.output_gate import (
+            check_output_gate,
+            scan_unscaffolded_new_items,
+        )
+        from tutor.retrieval_scheduler import (
+            has_first_seen,
+            is_introduced,
+            mark_first_seen,
+        )
+
+        sheet = default_sheet()
+        plan = plan_introduction(
+            sheet, self.table, _fresh_snap(), key="encantado"
+        )
+        self.assertEqual(
+            (plan.rule_id, plan.scaffold_type), ("R-A", "cognate")
+        )
+        reply = "**encantado** (a short gloss)"
+        # Wrong-scaffold exposure: cognate anchor absent, gloss present.
+        self.assertFalse(introduce_scaffold_evidence(plan, reply))
+        updated, note = mark_introduced_if_visible(sheet, plan, reply)
+        self.assertEqual(note, "introduce_lapsed:encantado:no_scaffold")
+        self.assertIs(updated, sheet)  # budget unconsumed, no ledger write
+        # Gate scan WITH the planned key: no bare fault; scaffold recorded.
+        bare, _extras, _reglossed, saved = scan_unscaffolded_new_items(
+            {"model": reply, "try": "¿Puedes decirlo?", "structured": True},
+            f"{reply} ¿Puedes decirlo?",
+            table=self.table,
+            sheet=sheet,
+            introduce_key="encantado",
+        )
+        self.assertEqual(bare, [])
+        self.assertEqual(saved.get("encantado"), "gloss")
+        # conv_session's post-turn loop (intro_plan skip DROPPED): the
+        # lapsed-but-glossed exposure sticks as first_seen.
+        for fs_key, fs_kind in saved.items():
+            if is_introduced(sheet, fs_key, "lexicon"):
+                continue
+            if has_first_seen(sheet, fs_key, "lexicon"):
+                continue
+            sheet = mark_first_seen(sheet, fs_key, "lexicon", fs_kind)
+        self.assertTrue(has_first_seen(sheet, "encantado", "lexicon"))
+        self.assertFalse(is_introduced(sheet, "encantado", "lexicon"))
+        # Next turn: bare re-use is a re-encounter, not a fresh CRITICAL.
+        g = check_output_gate(
+            {"model": "Encantado.", "try": "¿Puedes decirlo?",
+             "structured": True},
+            "Encantado. ¿Puedes decirlo?",
+            is_open=False,
+            mode="conversation",
+            association_table=self.table,
+            sheet=sheet,
+        )
+        self.assertNotIn("gate:unscaffolded_new_item", g.faults)
+        self.assertNotIn("gate:unscaffolded_flood", g.faults)
+
+    def test_first_seen_loop_no_longer_skips_plan_key(self):
+        # The conv_session first_seen loop must not skip intro_plan.key
+        # (successful introduces already hit is_introduced upstream).
+        import inspect
+
+        import tutor.conv_session as conv_session
+
+        self.assertNotIn(
+            "fs_key == intro_plan.key", inspect.getsource(conv_session)
+        )
+
+
 class TestIntroduceBlockWiring(TableCase):
     """conv_session.introduce_block — the smallest wiring function."""
 
@@ -321,20 +455,26 @@ class TestIntroduceBlockWiring(TableCase):
 
 
 class TestMarkOnVisible(TableCase):
+    """Introduce-move EVIDENCE rule (2026-07-28 false-planted incident):
+    key presence alone is natural use, never an introduction. Marking
+    requires the plan's scaffold visibly in the reply (gloss parenthetical /
+    anchor text / attached image)."""
+
     def _plan(self, key: str):
         return plan_introduction(
             default_sheet(), self.table, _fresh_snap(), key=key
         )
 
-    def test_reply_with_key_marks_introduced_confidence_untouched(self):
+    def test_gloss_scaffold_marks_introduced_confidence_untouched(self):
         sheet = default_sheet()
-        sheet["lexicon"]["hola"] = {"status": "emerging", "confidence": 0.3}
-        plan = self._plan("hola")
+        sheet["lexicon"]["me llamo"] = {"status": "emerging", "confidence": 0.3}
+        plan = self._plan("me llamo")
+        self.assertEqual(plan.rule_id, "R-D")  # gloss scaffold
         updated, note = mark_introduced_if_visible(
-            sheet, plan, "¡Hola! ¿Cómo estás?"
+            sheet, plan, "**Me llamo** (my name is) Marisol. ¿Y tú?"
         )
-        self.assertEqual(note, "introduced:hola")
-        entry = updated["lexicon"]["hola"]
+        self.assertEqual(note, "introduced:me llamo")
+        entry = updated["lexicon"]["me llamo"]
         self.assertTrue(entry.get("introduced_at"))
         self.assertEqual(entry.get("scaffold"), plan.scaffold_type)
         self.assertTrue(entry.get("next_due"))  # R-H enqueue
@@ -342,26 +482,105 @@ class TestMarkOnVisible(TableCase):
         self.assertEqual(entry.get("confidence"), 0.3)
         self.assertEqual(entry.get("status"), "emerging")
 
-    def test_reply_without_key_lapses(self):
+    def test_buenas_tardes_natural_greeting_lapses(self):
+        """The user's live case verbatim (2026-07-28): plan for «buenas
+        tardes», tutor replies with it as a natural greeting — no keyword
+        anchor, no gloss. NO mark, NO milestone basis, budget unconsumed."""
+        sheet = default_sheet()
+        plan = self._plan("buenas tardes")
+        self.assertEqual(plan.rule_id, "R-E")  # keyword scaffold planned
+        updated, note = mark_introduced_if_visible(
+            sheet, plan, "¡Buenas tardes! ¿Cómo estás hoy?"
+        )
+        self.assertEqual(note, "introduce_lapsed:buenas tardes:no_scaffold")
+        self.assertIs(updated, sheet)  # untouched — budget not consumed
+        self.assertNotIn("buenas tardes", updated.get("lexicon") or {})
+
+    def test_keyword_anchor_present_marks(self):
+        plan = self._plan("hola")
+        self.assertEqual(plan.scaffold_type, "keyword")
+        updated, note = mark_introduced_if_visible(
+            default_sheet(), plan,
+            "¡**Hola**! Suena como 'hello' en inglés. ¿Cómo estás?",
+        )
+        self.assertEqual(note, "introduced:hola")
+        self.assertTrue(updated["lexicon"]["hola"].get("introduced_at"))
+
+    def test_keyword_anchor_missing_lapses(self):
         sheet = default_sheet()
         plan = self._plan("hola")
         updated, note = mark_introduced_if_visible(
-            sheet, plan, "Muy bien. ¿Y tú?"
+            sheet, plan, "¡Hola! ¿Cómo estás?"
         )
-        self.assertIsNone(note)
-        self.assertIs(updated, sheet)  # untouched — budget not consumed
-        self.assertNotIn("hola", updated.get("lexicon") or {})
+        self.assertEqual(note, "introduce_lapsed:hola:no_scaffold")
+        self.assertIs(updated, sheet)
+
+    def test_cognate_anchor_evidence(self):
+        plan = self._plan("gracias")
+        self.assertEqual(plan.rule_id, "R-A")
+        _u, note = mark_introduced_if_visible(
+            default_sheet(), plan,
+            "**Gracias** — como 'gratitude' en inglés. ¡Gracias!",
+        )
+        self.assertEqual(note, "introduced:gracias")
+        _u2, note2 = mark_introduced_if_visible(
+            default_sheet(), plan, "¡Gracias, amigo!"
+        )
+        self.assertEqual(note2, "introduce_lapsed:gracias:no_scaffold")
+
+    def test_image_plan_requires_attached_image(self):
+        plan = self._plan("hermano")
+        self.assertEqual(plan.rule_id, "R-B")
+        sheet = default_sheet()
+        # No teach_image attached this turn → lapse (belt-and-suspenders:
+        # conv_session already downgrades R-B→R-D pre-mark on a miss)
+        updated, note = mark_introduced_if_visible(
+            sheet, plan, "Mira: mi **hermano**.", teach_images=[]
+        )
+        self.assertEqual(note, "introduce_lapsed:hermano:no_scaffold")
+        self.assertIs(updated, sheet)
+        # Image actually attached → introduce move happened
+        updated2, note2 = mark_introduced_if_visible(
+            sheet, plan, "Mira: mi **hermano**.",
+            teach_images=[{"concept": "hermano", "path": "x.png"}],
+        )
+        self.assertEqual(note2, "introduced:hermano")
+        self.assertTrue(updated2["lexicon"]["hermano"].get("introduced_at"))
+
+    def test_downgraded_image_plan_requires_gloss(self):
+        """conv_session's R-B→R-D downgrade (image never attached) produces a
+        gloss plan — the mark then demands the gloss parenthetical."""
+        from tutor.introduce_router import IntroducePlan
+
+        gloss = self.table["hermano"]["gloss_en"]
+        plan = IntroducePlan(
+            key="hermano",
+            rule_id="R-D",
+            scaffold_type="gloss",
+            scaffold_payload={
+                "gloss": gloss, "format": f"**hermano** ({gloss})",
+            },
+        )
+        _u, note = mark_introduced_if_visible(
+            default_sheet(), plan, "Mi **hermano** está en casa."
+        )
+        self.assertEqual(note, "introduce_lapsed:hermano:no_scaffold")
+        _u2, note2 = mark_introduced_if_visible(
+            default_sheet(), plan, f"Mi **hermano** ({gloss}) está en casa."
+        )
+        self.assertEqual(note2, "introduced:hermano")
 
     def test_mwu_key_boundary_containment(self):
         plan = self._plan("hasta luego")
         updated, note = mark_introduced_if_visible(
-            default_sheet(), plan, "Perfecto. ¡Hasta luego, amigo!"
+            default_sheet(), plan,
+            "**Hasta luego** — como 'hasta la vista'. ¡Hasta luego, amigo!",
         )
         self.assertEqual(note, "introduced:hasta luego")
         self.assertTrue(
             updated["lexicon"]["hasta luego"].get("introduced_at")
         )
-        # A different farewell must NOT mark this key
+        # A different farewell must NOT mark (or lapse) this key
         _updated2, note2 = mark_introduced_if_visible(
             default_sheet(), plan, "¡Hasta mañana!"
         )
@@ -370,7 +589,7 @@ class TestMarkOnVisible(TableCase):
     def test_new_entry_created_at_honest_zero(self):
         plan = self._plan("me llamo")
         updated, note = mark_introduced_if_visible(
-            default_sheet(), plan, "Me llamo Marisol. ¿Y tú?"
+            default_sheet(), plan, "**Me llamo** (my name is) Marisol. ¿Y tú?"
         )
         self.assertEqual(note, "introduced:me llamo")
         entry = updated["lexicon"]["me llamo"]

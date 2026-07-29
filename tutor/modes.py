@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any
 
+from .association_table import cached_default_table
 from .character_sheet import (
     ERROR_PATTERN_CATALOG,
     active_error_patterns,
@@ -17,11 +18,92 @@ from .character_sheet import (
     detect_error_pattern_resolves,
 )
 from .pedagogy_contract import is_blank_learner
+from .textnorm import fold_asset_key
 
-# Concrete nouns we can associate with images (must stay in teach_assets lexicon)
-ASSOCIATION_NOUNS = frozenset({
-    "cafe", "café", "bote", "barco", "musica", "música", "comida", "rio", "río",
-})
+# ---------------------------------------------------------------------------
+# Guard-6 concept lists — TABLE-DERIVED (Phase 5 batch 2 flip, CONSERVATIVE,
+# docs/reviews-architecture-refactor.md).  ASSOCIATION_NOUNS (zero readers)
+# is DELETED.  Membership for _noun_from_text / _new_concrete_noun is the
+# recorded legacy set, validated at import against the association table
+# with the IMAGEABLE law enforced:
+#
+#   Image SELECTION for guard-6 / association (R-B dual-coding) derives from
+#   table entries with ``imageable: true`` — the table's `imageable` answers
+#   "can THIS concept be dual-coded for meaning".  The asset SIDECAR answers
+#   the different question "do we have an asset" and never widens selection.
+#   The one adjudicated exemption is the placement-open image: the blank
+#   open's ``decision.image_concept = "hola"`` (guard 2 below) is SCENE-
+#   SETTING for the true-zero opening — a code-owned decision channel with
+#   its own justification, NOT R-B meaning-binding — so it is exempt from
+#   the imageable filter (hola is imageable:false; its greeting illustration
+#   lives in the pack asset sidecar).
+#
+# Needle strings remain learner-surface DETECTION text (§1.1a allowed class
+# iv); their ORDER is behavior-bearing (first match wins in _noun_from_text)
+# and reproduces the legacy priority exactly, including the deliberate
+# split: «río dulce» (place name, most specific) outranks everything while
+# plain «río» ranks below the other nouns.  «barco» stays its own table key
+# (real distinct word, topic-palette member) but maps to the «bote» asset
+# id here — the sidecar alias collapse, kept deliberately (batch-1 flag).
+# ---------------------------------------------------------------------------
+
+# (needle surface, table key providing the concept id) — legacy priority
+# order, recorded.  Concept ids are fold_asset_key(table key).
+_GUARD6_NEEDLE_SPEC: tuple[tuple[str, str], ...] = (
+    ("río dulce", "río"), ("rio dulce", "río"),
+    ("café", "café"), ("cafe", "café"),
+    ("barco", "bote"), ("bote", "bote"),
+    ("música", "música"), ("musica", "música"),
+    ("comida", "comida"),
+    ("edificios", "edificio"), ("edificio", "edificio"),
+    ("casa", "casa"),
+    ("playa", "playa"),
+    ("perro", "perro"),
+    ("gato", "gato"),
+    ("agua", "agua"),
+    ("sol", "sol"),
+    ("río", "río"), ("rio", "río"),
+    ("calor", "calor"),
+    ("frío", "frío"), ("frio", "frío"),
+)
+
+# _new_concrete_noun candidate membership + order (recorded legacy).
+_NEW_CONCRETE_TABLE_KEYS: tuple[str, ...] = (
+    "café", "bote", "música", "comida", "río",
+)
+
+
+def _imageable_concept_id(table: dict, key: str, source: str) -> str:
+    entry = table.get(key)
+    if not isinstance(entry, dict):
+        raise ValueError(f"{source}: {key!r} is not an association-table key")
+    if not entry.get("imageable"):
+        raise ValueError(
+            f"{source}: {key!r} is imageable:false — guard-6/association "
+            "selection derives from imageable:true entries only (the "
+            "placement-open image_concept channel is the one exemption)"
+        )
+    return fold_asset_key(key)
+
+
+def _derived_noun_text_pairs() -> tuple[tuple[str, str], ...]:
+    table = cached_default_table()
+    return tuple(
+        (needle, _imageable_concept_id(table, key, "NOUN_TEXT_PAIRS"))
+        for needle, key in _GUARD6_NEEDLE_SPEC
+    )
+
+
+def _derived_new_concrete_nouns() -> tuple[str, ...]:
+    table = cached_default_table()
+    return tuple(
+        _imageable_concept_id(table, key, "NEW_CONCRETE_NOUNS")
+        for key in _NEW_CONCRETE_TABLE_KEYS
+    )
+
+
+NOUN_TEXT_PAIRS: tuple[tuple[str, str], ...] = _derived_noun_text_pairs()
+NEW_CONCRETE_NOUNS: tuple[str, ...] = _derived_new_concrete_nouns()
 
 HARD_BREAK_MODES = frozenset({
     "form_focus",
@@ -75,7 +157,9 @@ class ModeSessionState:
     form_focus_cooldown: dict[str, int] = field(default_factory=dict)  # pattern_id → turns left
     english_only_streak: int = 0
     open_scene_ids: list[str] = field(default_factory=list)
-    scene_modeled: set[str] = field(default_factory=set)  # scene ids that got first model
+    # scene_modeled DELETED (Proposal A, 2026-07-29): the prefer-unmodeled
+    # ledger predated phases/§1.1a and was unlawful when alive (CHAR-BUG-005
+    # RESOLVED-BY-DELETION — docs/reviews-architecture-refactor.md).
     last_mode: str | None = None
     last_resolved_form: str | None = None  # form just resolved → transfer next
     # Error patterns resolved at least once THIS session (close-phase summary)
@@ -136,12 +220,60 @@ class ModeSessionState:
             "form_focus_cooldown": dict(self.form_focus_cooldown),
             "english_only_streak": self.english_only_streak,
             "open_scene_ids": list(self.open_scene_ids),
-            "scene_modeled": sorted(self.scene_modeled),
             "last_mode": self.last_mode,
             "last_resolved_form": self.last_resolved_form,
             "resolved_this_session": list(self.resolved_this_session),
             "content_uptake_last_turn": self.content_uptake_last_turn,
         }
+
+    @classmethod
+    def from_snapshot(cls, data: dict | None) -> "ModeSessionState":
+        """Rebuild from ``snapshot()`` output — the E2 persistence restore
+        (Phase 1 batch 2, docs/reviews-architecture-refactor.md).
+
+        ``snapshot()`` alone is lossy (shape pinned by debug consumers):
+        learner_turn_index and last_error_hit_turn do not appear in it. The
+        SessionState aggregate supplies them as sibling keys in the same
+        dict; absent keys restore to their dataclass defaults.
+        """
+        d = data if isinstance(data, dict) else {}
+
+        def _num(key: str, default: int) -> int:
+            try:
+                v = d.get(key, default)
+                return default if v is None else int(v)
+            except (TypeError, ValueError):
+                return default
+
+        s = cls()
+        s.hard_breaks_this_session = _num("hard_breaks_this_session", 0)
+        s.turns_since_hard_break = _num("turns_since_hard_break", 999)
+        s.last_hard_mode = (
+            str(d["last_hard_mode"]) if d.get("last_hard_mode") else None
+        )
+        s.form_focus_cooldown = {
+            str(k): int(v)
+            for k, v in (d.get("form_focus_cooldown") or {}).items()
+        }
+        s.english_only_streak = _num("english_only_streak", 0)
+        s.open_scene_ids = [str(x) for x in d.get("open_scene_ids") or []]
+        # Legacy snapshots may carry a "scene_modeled" key — ignored
+        # (field deleted; Proposal A, 2026-07-29).
+        s.last_mode = str(d["last_mode"]) if d.get("last_mode") else None
+        s.last_resolved_form = (
+            str(d["last_resolved_form"])
+            if d.get("last_resolved_form") else None
+        )
+        s.resolved_this_session = [
+            str(x) for x in d.get("resolved_this_session") or []
+        ]
+        s.learner_turn_index = _num("learner_turn_index", 0)
+        s.last_error_hit_turn = {
+            str(k): int(v)
+            for k, v in (d.get("last_error_hit_turn") or {}).items()
+        }
+        s.content_uptake_last_turn = _num("content_uptake_last_turn", -999)
+        return s
 
 
 # Session-phase layer (Phase 2, tutor/session_phases.py): reasons that FREEZE
@@ -293,7 +425,7 @@ def _new_concrete_noun(
     lex = sheet.get("lexicon") or {}
     if "topic_vocab" not in set(signals):
         return None
-    for noun in ("cafe", "bote", "musica", "comida", "rio"):
+    for noun in NEW_CONCRETE_NOUNS:
         if noun in shown:
             continue
         entry = lex.get(noun) or {}
@@ -309,63 +441,43 @@ def _noun_from_text(
     *,
     images_shown: set[str] | None = None,
 ) -> str | None:
-    """First session mention of a concrete noun → associate (generate image if needed)."""
+    """First session mention of a concrete noun → associate (generate image if needed).
+
+    `images_shown` membership is AUTHORITATIVE dedup (2026-07-28 repetition
+    forensics): the old `conf < 0.25` escape hatch re-fired new_noun:casa on
+    every mention for a reset learner (empty lexicon ⇒ conf 0.0 forever),
+    producing byte-identical association turns. A concept already shown /
+    covered this session never re-fires here, whatever its confidence.
+    """
     from .observe import word_present
 
     low = (text or "").lower()
     shown = set(images_shown or [])
     # Known pairs first (longer needles first). Any concept can be generated.
-    pairs = [
-        ("río dulce", "rio"),
-        ("rio dulce", "rio"),
-        ("café", "cafe"),
-        ("cafe", "cafe"),
-        ("barco", "bote"),
-        ("bote", "bote"),
-        ("música", "musica"),
-        ("musica", "musica"),
-        ("comida", "comida"),
-        ("edificios", "edificio"),
-        ("edificio", "edificio"),
-        ("casa", "casa"),
-        ("playa", "playa"),
-        ("perro", "perro"),
-        ("gato", "gato"),
-        ("agua", "agua"),
-        ("sol", "sol"),
-        ("río", "rio"),
-        ("rio", "rio"),
-        ("calor", "calor"),
-        ("frío", "frio"),
-        ("frio", "frio"),
-    ]
-    for needle, concept in pairs:
-        if word_present(needle, low):
-            if concept not in shown:
-                return concept
-            entry = (sheet.get("lexicon") or {}).get(concept) or {}
-            conf = float(entry.get("confidence") or 0) if isinstance(entry, dict) else 0
-            if conf < 0.25:
-                return concept
+    for needle, concept in NOUN_TEXT_PAIRS:
+        if word_present(needle, low) and concept not in shown:
+            return concept
     return None
 
 
 def _scene_for_topic(
     open_scenes: list[dict],
-    state: ModeSessionState,
     *,
     learner: str = "",
     signals: set[str] | None = None,
 ) -> dict | None:
-    """Pick open scene matching live topic (boat/location/likes) before generic next_best."""
+    """Pick open scene matching live topic (boat/location/likes) before generic next_best.
+
+    Keyword scoring ONLY (Proposal A KEEP-5, 2026-07-29): passive /
+    live-topic scene pursuit is not covered by task bind order. The
+    prefer-unmodeled `+1` and the `_scene_needs_model` fallback were
+    DELETED with the scene_modeled ledger (CHAR-BUG-005
+    RESOLVED-BY-DELETION) — no topic match, no scene.
+    """
     low = (learner or "").lower()
     sigs = set(signals or [])
     scored: list[tuple[int, dict]] = []
     for sc in open_scenes or []:
-        sid = sc.get("id") or ""
-        if not sid or sid in state.scene_modeled:
-            # still allow modeled scenes if exit not done — soft prefer unmodeled
-            pass
         score = 0
         blob = json.dumps(sc, ensure_ascii=False).lower()
         if any(w in low for w in ("bote", "barco", "río", "rio", "guatemala", "dulce")):
@@ -377,28 +489,85 @@ def _scene_for_topic(
         if "estoy" in low or "dónde" in low or "donde" in low or "origin" in sigs:
             if "estar" in blob or "estoy" in blob or "ip-04" in blob or "ip-07" in blob:
                 score += 2
-        if sid and sid not in state.scene_modeled:
-            score += 1
         if score:
             scored.append((score, sc))
     if not scored:
-        return _scene_needs_model(open_scenes, state)
+        return None
     scored.sort(key=lambda x: -x[0])
     return scored[0][1]
 
 
-def _scene_needs_model(
-    open_scenes: list[dict],
-    state: ModeSessionState,
-) -> dict | None:
-    for sc in open_scenes or []:
-        sid = sc.get("id") or ""
-        if sid and sid not in state.scene_modeled:
-            return sc
-    return None
+# Appended to every non-open decision while the learner is still a TRUE ZERO
+# (blank sheet AND no successful Spanish this turn). Incident 2026-07-28:
+# a reset beginner got 100% Spanish — PEDAGOGY P1 (comprehensible meaning is
+# necessary raw material) + §2.3 (English scaffold jobs). The blank open
+# branch carries its own full true-zero text; this note keeps the register
+# consistent on the turns AFTER the open until any spanish_ok de-escalates.
+ZERO_REGISTER_NOTE = (
+    "TRUE-ZERO REGISTER (blank sheet, no successful Spanish from them yet): "
+    "English support is REQUIRED here, not banned — keep one short English "
+    "orientation sentence and put a ≤6-word English gloss on EVERY Spanish "
+    "item; at most 3 Spanish items this turn. This is the zero state only — "
+    "the moment they produce ANY Spanish, drop it and return to the standard "
+    "mostly-Spanish register."
+)
 
 
 def select_mode(
+    sheet: dict,
+    *,
+    observations: dict | None = None,
+    is_open: bool = False,
+    learner: str = "",
+    mode_state: ModeSessionState | None = None,
+    open_scenes: list[dict] | None = None,
+    images_shown: set[str] | list[str] | None = None,
+    session_memory: dict | None = None,
+    pack_topics: list[str] | None = None,
+    profile: dict | None = None,  # accepted for compat; personal data unused
+    activity_hint: str | None = None,  # session-phase layer; guards ignore it
+) -> ModeDecision:
+    """Mode selection + true-zero register overlay.
+
+    Routing lives in _select_mode_impl (frozen guard chain, first matching
+    guard wins). This wrapper appends ZERO_REGISTER_NOTE while the sheet is
+    blank AND the learner has not produced any successful Spanish this turn
+    (no spanish_ok signal) — graded de-escalation: the first spanish_ok turn
+    reverts to the standard mostly-Spanish register, and once the sheet has
+    ability evidence is_blank_learner turns the overlay off for good. The
+    blank open branch (blank_open_placement) already carries its own full
+    true-zero text and is skipped here.
+    """
+    decision = _select_mode_impl(
+        sheet,
+        observations=observations,
+        is_open=is_open,
+        learner=learner,
+        mode_state=mode_state,
+        open_scenes=open_scenes,
+        images_shown=images_shown,
+        session_memory=session_memory,
+        pack_topics=pack_topics,
+        profile=profile,
+        activity_hint=activity_hint,
+    )
+    obs = observations or {}
+    blank = bool(
+        obs.get("blank_sheet") if "blank_sheet" in obs else is_blank_learner(sheet)
+    )
+    signals = set(obs.get("signals") or [])
+    if (
+        blank
+        and "spanish_ok" not in signals
+        and decision.reason != "blank_open_placement"
+    ):
+        decision.instructions = (
+            (decision.instructions or "").rstrip() + "\n" + ZERO_REGISTER_NOTE
+        ).strip()
+    return decision
+
+
+def _select_mode_impl(
     sheet: dict,
     *,
     observations: dict | None = None,
@@ -417,7 +586,10 @@ def select_mode(
     See docs/teaching-system.md § Break-from-conversation policy.
     activity_hint (tutor/session_phases.py) flavors ONLY the known-open block
     and the default CONVERSATION fallthrough; every guard and intervention
-    branch ignores it (frozen guard chain has absolute priority).
+    branch ignores it (frozen guard chain has absolute priority) — with ONE
+    adjudicated exception: guard 7's topic scene pick is SUPPRESSED on
+    new_input/close activities (PHASE HOST rule 6, Proposal A 2026-07-29 —
+    introduce owns new_input, close owns close per PEDAGOGY §6.4).
     """
     obs = observations or {}
     mem = session_memory or {}
@@ -623,14 +795,41 @@ def select_mode(
 
     # 2) Placement / known open
     if is_open and blank:
+        # TRUE-ZERO opening (incident 2026-07-28: reset beginner got 100%
+        # Spanish). PEDAGOGY P1 + §2.3: for a zero, English orientation is a
+        # REQUIRED scaffold, not a banned wall — every item is first exposure
+        # (§2.2 R-D), so every item is glossed. Wide ceiling preserved: a
+        # stronger learner can answer past the scaffold and de-escalates it.
         return ModeDecision(
             Mode.PLACEMENT,
             reason="blank_open_placement",
             hard_break=True,
+            # Placement-open image ruling (Phase 5 batch 2): «hola» is
+            # imageable:false in the association table (it cannot be R-B
+            # meaning-bound), yet it IS the open-turn image — this is the
+            # decision.image_concept SCENE-SETTING channel (a friendly
+            # greeting illustration orienting a true-zero learner), exempt
+            # from the imageable selection filter by adjudicated ruling.
+            # The asset itself lives in the pack sidecar ("do we have an
+            # asset"), which never widens R-B/association SELECTION.
             image_concept="hola",
             instructions=(
-                "Wide-ceiling placement: short clear Spanish they can copy, but room for "
-                "a stronger learner to show multi-skill Spanish. Not a Hola worksheet."
+                "TRUE-ZERO OPENING (blank sheet — assume they may understand NO "
+                "Spanish yet; every Spanish item here is a first exposure). "
+                "REQUIRED shape: "
+                "(1) ONE warm English welcome sentence framing what will happen "
+                "— e.g. \"We'll go slowly — I'll always show you what things "
+                "mean.\" "
+                "(2) Tiny Spanish only: a greeting plus a name exchange — at "
+                "most 3 Spanish items this turn. "
+                "(3) EVERY Spanish item gets a short English gloss (≤6 words) "
+                "right where it appears — nothing unglossed. "
+                "(4) Make the try explicitly bilingual: «Try: Me llamo ___ — my "
+                "name is ___». "
+                "Wide-ceiling placement still applies: if they answer with more "
+                "Spanish than this, follow them up. The English orientation is "
+                "for the zero state ONLY — the moment they produce ANY Spanish, "
+                "drop it and return to the standard mostly-Spanish register."
             ),
             scene_ids=[s.get("id") for s in open_scenes if s.get("id")],
         )
@@ -789,9 +988,13 @@ def select_mode(
 
     # 4) Stuck English → association (picture kills English wall)
     #    Only after form-error handling so broken Spanish is not misrouted here.
+    #    CHAR-BUG-002 RESOLVED (Phase 4 batch 3): the streak has ONE owner —
+    #    conv_session's stage_english_streak, which counts the CURRENT turn
+    #    BEFORE select_mode runs.  Guard 4 reads the state only; the old
+    #    `+ 1` here double-counted the current turn, so the >=2 hard break
+    #    fired on the FIRST English-only turn.  A hard break now requires a
+    #    GENUINE streak (second consecutive English-only turn) or no_entiendo.
     eng_streak = state.english_only_streak
-    if "english_only" in signals:
-        eng_streak = eng_streak + 1
     no_entiendo = bool(
         learner and re_search_no_entiendo(learner)
     )
@@ -847,10 +1050,16 @@ def select_mode(
             ),
         )
 
-    # 7) Topic-matched open scene (before weak next_best)
-    sc = _scene_for_topic(
-        open_scenes, state, learner=learner, signals=signals,
-    ) or _scene_needs_model(open_scenes, state)
+    # 7) Topic-matched open scene (before weak next_best).
+    #    PHASE HOST rule 6 (Proposal A, 2026-07-29): the pick does NOT run
+    #    when the session phase is new_input or close — introduce owns
+    #    new_input and close owns close (PEDAGOGY §6.4); those turns fall
+    #    through to default_conversation so the flavorable content blocks
+    #    fire. The prefer-unmodeled fallback is DELETED (CHAR-BUG-005
+    #    RESOLVED-BY-DELETION): only a live topic match reaches a scene here.
+    sc = None
+    if activity_hint not in ("new_input", "close"):
+        sc = _scene_for_topic(open_scenes, learner=learner, signals=signals)
     if sc:
         goal = sc.get("goal") or {}
         inp = sc.get("input") or {}

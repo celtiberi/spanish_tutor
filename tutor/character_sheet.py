@@ -9,9 +9,8 @@ import copy
 import datetime
 import json
 import re
-import unicodedata
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from .can_dos import (
     CAN_DOS,
@@ -20,6 +19,21 @@ from .can_dos import (
     default_skills_block,
     migrate_skills,
 )
+# Phase 2 (docs/reviews-architecture-refactor.md): the fold policies live in
+# textnorm. fold_prose (imported as the historical local name `fold`) is the
+# NFD prose-scan fold for error-pattern/affect regexes; fold_id is the
+# folding step inside normalize_error_pattern_id (ids live in sheets on
+# disk — the policy is pinned byte-exact).
+from .textnorm import fold_id, fold_prose as fold  # noqa: F401
+# Typed turn events (Phase 3 batch 2 leaf push-down): the sheet-maintenance
+# change notes are minted here as (kind, key, payload) TRIPLES; the strings
+# process_turn returns are their render-table projection (byte-identical to
+# the historical f-strings). turn_events is stdlib-only — no import cycle.
+from .turn_events import TurnEventKind as _EVK, render_note as _render_note
+# Machine A (schedule axis) owns these fields; imported as the single source
+# so the two axes can never drift apart (retrieval_scheduler is stdlib-only,
+# so this import can never cycle).
+from .retrieval_scheduler import SCHEDULE_FIELDS
 
 STATUSES = ("unknown", "emerging", "fragile", "known", "blocked")
 
@@ -28,6 +42,10 @@ MAX_CONF_UP_PER_TURN = 0.25
 MAX_CONF_DOWN_PER_TURN = 0.35
 KNOWN_MIN_CONF = 0.80
 KNOWN_MIN_SOLID_USES = 2
+# Band boundaries inside _bump_status (Phase 1.5 batch 2: named so the
+# progress-ledger projection can pin them instead of re-hardcoding).
+EMERGING_MIN_CONF = 0.55
+FRAGILE_MIN_CONF = 0.25
 
 DEFAULT_COVERAGE = {
     "touched": [],
@@ -50,7 +68,6 @@ _GRAMMAR_COVERAGE = {
 
 _SHEET_DELTA_RE = re.compile(
     r"<sheet_delta>\s*(\{.*?\})\s*</sheet_delta>", re.S)
-_SURFACE_NOISE = re.compile(r"[\u0300-\u036f]|[¿¡\?\.!,;:\"']+")
 
 # Rough token → lexicon lemma + can-do id
 _LEXICON_PATTERNS = [
@@ -77,10 +94,10 @@ def today() -> str:
 # docs/build-plan-pedagogy-engine.md). Optional per-entry on lexicon /
 # grammar / skills. Introduction NEVER changes confidence/status (honesty
 # law) — enforced in tutor/retrieval_scheduler.py via a write allowlist.
-SCHEDULE_ENTRY_FIELDS = (
-    "introduced_at", "first_seen", "scaffold", "next_due", "interval_days",
-    "successive_successes",
-)
+# Phase 1.5 batch 2: derived from retrieval_scheduler.SCHEDULE_FIELDS (the
+# single source; machine A owns the axis). Tuple view kept for membership
+# callers; order is not load-bearing.
+SCHEDULE_ENTRY_FIELDS = tuple(sorted(SCHEDULE_FIELDS))
 
 
 def _normalize_schedule_entry(entry: dict) -> None:
@@ -291,9 +308,7 @@ def normalize_error_pattern_id(pattern_id: str) -> str:
         return pid
     if pid in ERROR_PATTERN_CATALOG:
         return pid
-    key = pid.lower().replace(" ", "_").replace("-", "_")
-    key = key.replace("á", "a").replace("é", "e").replace("í", "i")
-    key = key.replace("ó", "o").replace("ú", "u").replace("ñ", "n")
+    key = fold_id(pid)
     if key in ERROR_PATTERN_CATALOG:
         return key
     if key in ERROR_PATTERN_ALIASES:
@@ -463,13 +478,6 @@ def _deep_merge(base: dict, overlay: dict) -> dict:
         else:
             out[k] = copy.deepcopy(v)
     return out
-
-
-def fold(s: str) -> str:
-    s = (s or "").lower().strip()
-    s = unicodedata.normalize("NFD", s)
-    s = _SURFACE_NOISE.sub("", s)
-    return re.sub(r"\s+", " ", s)
 
 
 def compute_progress_score(sheet: dict | None) -> dict:
@@ -648,11 +656,213 @@ def format_sheet_human(sheet: dict) -> str:
     return "\n".join(lines)
 
 
+# --- Ability state machine (Phase 1.5 batch 2, machine B) --------------------
+#
+# docs/reviews-architecture-refactor.md, adjudicated round-1 (b): this is the
+# ABILITY axis of the two-axis item-lifecycle design — bands + confidence +
+# solid_uses, orthogonal to machine A (retrieval_scheduler schedule axis).
+# Introduction transitions MUST NOT write this axis (honesty law, enforced by
+# the scheduler's _write allowlist); ability transitions MUST NOT move
+# SCHEDULE_FIELDS (the mirror guard, enforced here in ability_transition).
+#
+# REAL band vocabulary, derived from the writers (not the round-1 sketch
+# "unknown/fragile/emerging/known"):
+#
+#   unknown    — no evidence, or a missing/invalid status (ability_band maps
+#                absent entries and out-of-vocabulary strings here; the
+#                honest-zero shells machine A creates land here too).
+#   emerging   — positive-evidence band. _bump_status on success goes
+#                unknown → emerging DIRECTLY (never through fragile): the
+#                bands below known are SIBLINGS colored by evidence
+#                direction, not ordered rungs of a ladder.
+#   fragile    — negative-evidence band at conf >= FRAGILE_MIN_CONF (a
+#                failure with less residual confidence lands on unknown).
+#                REAL (the sketch had it), but only ever entered on failure
+#                or by tool/model claim — never by a success bump.
+#   known      — gated band: conf >= KNOWN_MIN_CONF and solid_uses >=
+#                KNOWN_MIN_SOLID_USES. The gate arithmetic LIVES IN THE
+#                WRITERS (adjudication: "KNOWN-gate evidence stays a gate,
+#                not an enum") — the machine validates edges only, because
+#                legacy/seeded sheets legally hold known with solid_uses 0
+#                and _clamp_skill_entry preserves that claim (prev-known +
+#                conf >= gate keeps known without uses).
+#   blocked    — in the vocabulary (STATUSES, tool schema enum) but NOT
+#                producible by any code writer: only a tool/model delta can
+#                enter it; _bump_status ESCAPES it (success → emerging,
+#                fail → fragile/unknown). Divergence from the sketch, which
+#                omitted it.
+#
+# DOWN edges are real and everywhere: known → emerging (_cap_turn_confidence
+# re-gate demotion), known → fragile/unknown (_bump_status failure),
+# emerging → unknown, etc. known → known survives failure while conf/uses
+# hold the gate. The UNION graph is COMPLETE (every band reaches every
+# band, via "bump" evidence) — but the per-via tables below are where the
+# machine has real teeth: "cap" and "normalize" are narrow, "bump" cannot
+# mint blocked, the tool vias ("tool_merge"/"delta_lexicon") cannot land
+# unknown → known or blocked → known (CHAR-BUG-008/009 fix, 2026-07-29),
+# and EVERY via rejects cross-axis (schedule-field) writes.
+
+ABILITY_BANDS = STATUSES
+
+Band = Literal["unknown", "emerging", "fragile", "known", "blocked"]
+
+# Ability-axis fields (mirror of retrieval_scheduler._PROTECTED_FIELDS —
+# kept in sync by test, not import, so the scheduler stays stdlib-only).
+ABILITY_FIELDS = ("confidence", "status", "solid_uses")
+
+
+class IllegalAbilityTransition(ValueError):
+    """An ability-band move outside the legal edge set (rejected at write)."""
+
+
+def ability_band(entry: dict | None) -> Band:
+    """Ability band of one sheet entry (ability axis only; strict vocabulary).
+
+    Missing entries and out-of-vocabulary statuses are band "unknown" — the
+    ability axis has no "absent": an item never used is simply unknown.
+    """
+    if not isinstance(entry, dict):
+        return "unknown"
+    status = entry.get("status")
+    return status if status in STATUSES else "unknown"
+
+
+# Bands a code writer (_bump_status) can produce — blocked is tool-only.
+_CODE_BANDS = ("unknown", "emerging", "fragile", "known")
+
+# Edges a clamped tool/model claim can land (CHAR-BUG-008/009 fix,
+# 2026-07-29). Claims may move freely into the ungated bands (honest
+# demotion, blocked flags, evidence-direction siblings); promotion to
+# `known` requires prior known (legacy claim preserved) or a sub-known
+# EVIDENCE band with code-observed uses + conf at the gate — so
+# unknown → known and blocked → known are not writer-producible: routine
+# inflation is CLAMPED to emerging in the writer (the _cap_turn_confidence
+# philosophy); the machine raising on these two edges is the
+# production-unreachable regression backstop (mirror of the batch-1
+# double-introduce ruling).
+_TOOL_CLAIM_EDGES = frozenset(
+    {(f, t) for f in STATUSES
+     for t in ("unknown", "emerging", "fragile", "blocked")}
+    | {(f, "known") for f in ("emerging", "fragile", "known")}
+)
+
+# Per-operation legal edges. As in machine A, `to` alone under-determines
+# the write set, so legality is (via, from, to); ABILITY_TRANSITIONS is the
+# union view of the same graph.
+_ABILITY_VIA_EDGES: dict[str, frozenset] = {
+    # _bump_status: heuristic observer evidence (apply_rule_updates sites +
+    # note_error_pattern grammar mirror). Any band → any CODE band; blocked
+    # is escapable here, never enterable.
+    "bump": frozenset(
+        (f, t) for f in STATUSES for t in _CODE_BANDS
+    ),
+    # _clamp_skill_entry: tool/model delta merge for skills/grammar.
+    # TIGHTENED from edge-complete (CHAR-BUG-008 fix, 2026-07-29): the
+    # solid_uses claim is no longer trusted — code-observed evidence is the
+    # only source that increments uses, so the known gate (conf + observed
+    # uses) is uncrossable by claim alone. See _TOOL_CLAIM_EDGES.
+    "tool_merge": _TOOL_CLAIM_EDGES,
+    # apply_delta lexicon branches (dict merge + bare-string status): since
+    # the CHAR-BUG-009 fix (2026-07-29) BOTH route through
+    # _clamp_skill_entry (via="delta_lexicon") — no branch mints
+    # band/confidence unclamped; a new-word known-claim at conf 1.0 lands
+    # emerging at the +0.25 first-appearance ceiling. Same edge set as
+    # tool_merge.
+    "delta_lexicon": _TOOL_CLAIM_EDGES,
+    # _cap_turn_confidence: per-turn ceiling clips + the known re-gate.
+    # The genuinely narrow via: band self-loops (clips) plus the ONE
+    # demotion edge known → emerging.
+    "cap": frozenset(
+        {(s, s) for s in STATUSES} | {("known", "emerging")}
+    ),
+    # normalize_sheet: coercion of an AI full rewrite. Band self-loops only
+    # (an invalid status already IS band unknown, so coercing the string to
+    # "unknown" does not move the band).
+    "normalize": frozenset((s, s) for s in STATUSES),
+}
+
+# Union graph over all operations (the machine's band-level view). COMPLETE
+# — documented finding, not an oversight: see the block comment above.
+ABILITY_TRANSITIONS: dict[str, set[str]] = {
+    s: set(STATUSES) for s in STATUSES
+}
+
+
+def _check_ability_graph_sync() -> None:
+    derived: dict[str, set[str]] = {}
+    for edges in _ABILITY_VIA_EDGES.values():
+        for f, t in edges:
+            derived.setdefault(f, set()).add(t)
+    if derived != ABILITY_TRANSITIONS:
+        raise RuntimeError(
+            "character_sheet: ABILITY_TRANSITIONS out of sync with "
+            "_ABILITY_VIA_EDGES"
+        )
+
+
+_check_ability_graph_sync()
+
+
+def ability_transition(
+    entry: dict | None,
+    staged: dict,
+    *,
+    via: str,
+    evidence: dict | None = None,
+) -> dict:
+    """Central ability-axis write: validate the band edge, guard cross-axis.
+
+    Every band/confidence/solid_uses writer routes its result through here
+    (the writers stay the places that COMPUTE field values — same
+    signatures, same outcomes; this validates and returns `staged`
+    unchanged). Divergence from the sketched `(entry, *, evidence, via)`
+    signature: the pre-write entry is needed to know the from-band, so the
+    call is (pre, staged) — mirror of machine A's added `via` discriminator.
+
+    Rejections:
+    - unknown `via` → ValueError (programmer error);
+    - a band move outside _ABILITY_VIA_EDGES[via] → IllegalAbilityTransition;
+    - any move of a SCHEDULE_FIELDS member (added, removed, or changed
+      relative to the pre-write entry) → ValueError — the mirror image of
+      the scheduler `_write` allowlist: ability writers may never touch the
+      schedule axis (honesty law, both directions).
+
+    `evidence` is OPAQUE context for error messages — evidence QUALITY
+    stays with the gates (known gate, per-turn caps), never validated here.
+    """
+    if via not in _ABILITY_VIA_EDGES:
+        raise ValueError(f"unknown ability transition via {via!r}")
+    prev = entry if isinstance(entry, dict) else {}
+    from_band = ability_band(prev)
+    to_band = ability_band(staged)
+    if (
+        to_band not in ABILITY_TRANSITIONS.get(from_band, set())
+        or (from_band, to_band) not in _ABILITY_VIA_EDGES[via]
+    ):
+        raise IllegalAbilityTransition(
+            f"illegal {via!r} ability transition {from_band} -> {to_band} "
+            f"(evidence: {evidence!r})"
+        )
+    moved = [
+        f for f in sorted(SCHEDULE_FIELDS)
+        if (f in prev) != (f in staged) or prev.get(f) != staged.get(f)
+    ]
+    if moved:
+        raise ValueError(
+            f"ability writer may not move {moved} (honesty law; "
+            f"via {via!r}, evidence: {evidence!r})"
+        )
+    return staged
+
+
 def _bump_status(entry: dict, *, success: bool, amount: float = 0.15) -> dict:
     """Heuristic status bump with per-call cap and known-gate.
 
     The net per-turn ceiling is enforced in process_turn via
     _cap_turn_confidence — stacked calls here may not exceed it.
+    Thin wrapper over `ability_transition` (via="bump"; Phase 1.5 batch 2):
+    the band ladder below is unchanged; the machine validates the edge and
+    rejects cross-axis (schedule-field) writes.
     """
     e = dict(entry)
     prev_c = float(e.get("confidence") or 0.0)
@@ -673,9 +883,9 @@ def _bump_status(entry: dict, *, success: bool, amount: float = 0.15) -> dict:
         and success
     ) or (e.get("status") == "known" and conf >= KNOWN_MIN_CONF and uses >= KNOWN_MIN_SOLID_USES):
         e["status"] = "known"
-    elif conf >= 0.55:
+    elif conf >= EMERGING_MIN_CONF:
         e["status"] = "emerging" if success else "fragile"
-    elif conf >= 0.25:
+    elif conf >= FRAGILE_MIN_CONF:
         e["status"] = "fragile" if not success else "emerging"
     else:
         e["status"] = "emerging" if success else "unknown"
@@ -683,7 +893,10 @@ def _bump_status(entry: dict, *, success: bool, amount: float = 0.15) -> dict:
     if e["status"] == "known" and uses < KNOWN_MIN_SOLID_USES:
         e["status"] = "emerging"
         e["confidence"] = min(float(e["confidence"]), 0.75)
-    return e
+    return ability_transition(
+        entry, e, via="bump",
+        evidence={"success": success, "amount": amount},
+    )
 
 
 def _cap_turn_confidence(start: dict, staged: dict, final: dict) -> dict:
@@ -712,6 +925,7 @@ def _cap_turn_confidence(start: dict, staged: dict, final: dict) -> dict:
         for key, entry in fin.items():
             if not isinstance(entry, dict):
                 continue
+            pre_entry = dict(entry)  # machine B: pre-write snapshot
             st_e = st.get(key) if isinstance(st.get(key), dict) else {}
             stg_e = stg.get(key) if isinstance(stg.get(key), dict) else {}
             start_c = float(st_e.get("confidence") or 0.0)
@@ -751,11 +965,40 @@ def _cap_turn_confidence(start: dict, staged: dict, final: dict) -> dict:
                 conf_now = cur if cur is not None else float(entry.get("confidence") or 0.0)
                 if conf_now < KNOWN_MIN_CONF or cur_u < KNOWN_MIN_SOLID_USES:
                     entry["status"] = "emerging"
+            # Machine B (via="cap"): the narrow via — self-loops (clips)
+            # plus the one demotion edge known → emerging; in-place
+            # mutation retained, the machine validates the write.
+            ability_transition(
+                pre_entry, entry, via="cap",
+                evidence={"section": section, "key": key},
+            )
     return final
 
 
-def _clamp_skill_entry(prev: dict, incoming: dict) -> dict:
-    """Merge tool/model skill or grammar entry with honesty clamps."""
+def _clamp_skill_entry(
+    prev: dict, incoming: dict, *, via: str = "tool_merge"
+) -> dict:
+    """Merge a tool/model skills, grammar, or lexicon claim with honesty clamps.
+
+    CHAR-BUG-008/009 fix (2026-07-29) — the model's tool cannot inflate the
+    diagnosis (PEDAGOGY §3.2/P7: the sheet is the instrument; §4.5:
+    capability removal over instruction):
+
+    - confidence is rate-limited around prev (±MAX_CONF_UP/DOWN_PER_TURN);
+    - solid_uses: code-observed evidence (_bump_status on real learner
+      text) is the ONLY source that increments it. The merge starts from
+      the sheet's own recorded count, mints no uses of its own (the old
+      rose/promoted +1 heuristic is gone), and an incoming claim may LOWER
+      the observed count (honest demotion), never raise it — so the known
+      gate (KNOWN_MIN_CONF + KNOWN_MIN_SOLID_USES) is uncrossable by claim
+      alone;
+    - known promotion requires prior known (legacy claims on seeded sheets
+      stay honored) or a sub-known EVIDENCE band (emerging/fragile) with
+      observed uses + conf at the gate. Everything else claiming known is
+      clamped to emerging (conf capped 0.75): unknown → known and
+      blocked → known are not producible here — the machine's tightened
+      edge tables raise on them as the regression backstop.
+    """
     prev = prev or {}
     incoming = incoming or {}
     merged = {**prev, **incoming}
@@ -774,21 +1017,14 @@ def _clamp_skill_entry(prev: dict, incoming: dict) -> dict:
     else:
         new_c = prev_c
 
+    # CHAR-BUG-008 fix: uses = the sheet's own recorded (observed) count;
+    # a claim can only lower it. Never `max(uses, claim)`, never a merge
+    # heuristic +1.
     uses = int(prev.get("solid_uses") or 0)
-    rose = new_c > prev_c + 0.02
     status_in = incoming.get("status")
-    promoted = (
-        status_in in ("emerging", "fragile", "known")
-        and (prev.get("status") or "unknown") in ("unknown", None)
-    )
-    # At most +1 solid use per merge
-    if rose or promoted or (
-        status_in == "known" and prev.get("status") != "known"
-    ):
-        uses = uses + 1
     if "solid_uses" in incoming:
         try:
-            uses = max(uses, int(incoming["solid_uses"]))
+            uses = min(uses, max(0, int(incoming["solid_uses"])))
         except (TypeError, ValueError):
             pass
     merged["solid_uses"] = uses
@@ -796,11 +1032,16 @@ def _clamp_skill_entry(prev: dict, incoming: dict) -> dict:
     status = merged.get("status") if merged.get("status") in STATUSES else (
         prev.get("status") or "unknown"
     )
-    # Gate known: need prior known OR (enough uses + conf)
+    prev_band = ability_band(prev)
+    # Gate known: prior known, OR an evidence band with observed uses + conf.
     if status == "known":
-        if prev.get("status") == "known" and new_c >= KNOWN_MIN_CONF:
+        if prev_band == "known" and new_c >= KNOWN_MIN_CONF:
             pass
-        elif uses >= KNOWN_MIN_SOLID_USES and new_c >= KNOWN_MIN_CONF:
+        elif (
+            prev_band in ("emerging", "fragile")
+            and uses >= KNOWN_MIN_SOLID_USES
+            and new_c >= KNOWN_MIN_CONF
+        ):
             pass
         else:
             # Over-claim → emerging (positive evidence), not fragile
@@ -813,7 +1054,15 @@ def _clamp_skill_entry(prev: dict, incoming: dict) -> dict:
     if status not in STATUSES:
         status = "unknown"
     merged["status"] = status
-    return merged
+    # Machine B: the tool vias are TIGHTENED (see _TOOL_CLAIM_EDGES) — the
+    # clamps above are the protection; the machine adds the cross-axis
+    # guard (apply_delta strips SCHEDULE_ENTRY_FIELDS before this call, so
+    # a schedule-field move here is unreachable in production and raises at
+    # function level) and rejects the two impossible promotions.
+    return ability_transition(
+        prev, merged, via=via,
+        evidence={"status_in": status_in},
+    )
 
 
 def _touch_coverage(sheet: dict, topic: str) -> None:
@@ -1302,12 +1551,16 @@ def apply_delta(sheet: dict, delta: dict) -> dict:
                 if not isinstance(v, dict):
                     if section == "lexicon" and isinstance(v, str):
                         prev = base.get(k) or {}
-                        base[k] = {
-                            **prev,
-                            "status": v if v in STATUSES else prev.get(
-                                "status", "emerging"),
-                            "last_seen": today(),
-                        }
+                        # CHAR-BUG-009 fix (2026-07-29): bare-string status
+                        # claims route through the same clamp as every other
+                        # claim (an out-of-vocabulary string claims nothing).
+                        merged = _clamp_skill_entry(
+                            prev,
+                            {"status": v} if v in STATUSES else {},
+                            via="delta_lexicon",
+                        )
+                        merged["last_seen"] = today()
+                        base[k] = merged
                     continue
                 # Scheduler/ledger fields are CODE-owned (retrieval_scheduler):
                 # no tool/model delta may set due dates or introduce facts.
@@ -1325,16 +1578,17 @@ def apply_delta(sheet: dict, delta: dict) -> dict:
                     else:
                         touched_grammar.append(k)
                 else:
-                    merged = {**prev, **v}
-                    if "confidence" in v:
-                        try:
-                            merged["confidence"] = max(
-                                0.0, min(1.0, float(v["confidence"])))
-                        except (TypeError, ValueError):
-                            pass
-                    if merged.get("status") not in STATUSES and "status" in merged:
-                        merged["status"] = prev.get("status", "unknown")
-                    base[k] = merged
+                    # CHAR-BUG-009 fix (2026-07-29): the lexicon dict merge
+                    # routes through _clamp_skill_entry exactly like
+                    # skills/grammar — no branch mints band/confidence
+                    # unclamped. A new-word known-claim at conf 1.0 lands
+                    # emerging at the +0.25 first-appearance ceiling, and
+                    # uses claims cannot raise the observed count
+                    # (CHAR-BUG-008). Schedule fields were stripped from
+                    # `v` above, so they cannot move here.
+                    base[k] = _clamp_skill_entry(
+                        prev, v, via="delta_lexicon"
+                    )
 
     if "coverage" in delta and isinstance(delta["coverage"], dict):
         for topic in delta["coverage"].get("touched") or []:
@@ -1404,6 +1658,9 @@ UPDATE_CHARACTER_SHEET_TOOL = {
         "affect, error patterns, next stretch). Skip if nothing meaningful changed. "
         "Partial delta only — not the full sheet. Be conservative: prefer "
         "emerging/fragile over known; one good turn is not mastery. "
+        "Do not claim solid_uses; observation records it (claimed counts "
+        "are capped at the code-observed count, and 'known' requires "
+        "observed uses — it cannot be granted by claim). "
         "Limited time ≠ boredom (use energy=limited_time). "
         "For repeated construction errors (e.g. yo está), set error_patterns "
         "examples. Do not record learner names or personal facts; ability "
@@ -1438,7 +1695,8 @@ UPDATE_CHARACTER_SHEET_TOOL = {
                 "type": "object",
                 "description": (
                     "Can-do ids (IP-01…IP-08, IT-01, PR-01) → "
-                    "{status, confidence}. status: unknown|emerging|fragile|known|blocked"
+                    "{status, confidence}. status: unknown|emerging|fragile|known|blocked. "
+                    "Never solid_uses — observation records it."
                 ),
                 "additionalProperties": {
                     "type": "object",
@@ -1468,7 +1726,10 @@ UPDATE_CHARACTER_SHEET_TOOL = {
             },
             "lexicon": {
                 "type": "object",
-                "description": "Lemma → {status, confidence} for words they used",
+                "description": (
+                    "Lemma → {status, confidence} for words they used. "
+                    "Never solid_uses — observation records it."
+                ),
                 "additionalProperties": {
                     "type": "object",
                     "properties": {
@@ -1721,9 +1982,16 @@ def recompute_next_best(sheet: dict, *, preferred_name: str | None = None) -> di
     return s
 
 
-def summarize_sheet_changes(before: dict, after: dict) -> list[str]:
-    """Short human notes for the console."""
-    notes = []
+def summarize_sheet_change_events(
+    before: dict, after: dict
+) -> list[tuple]:
+    """Typed (kind, key, payload) triples for the console change notes.
+
+    Phase 3 batch 2 leaf push-down: this is the native emitter —
+    ``summarize_sheet_changes`` (the string surface) is its render-table
+    projection, and conv_session emits TurnEvents from these triples.
+    """
+    events: list[tuple] = []
     # Personal-data capture disabled 2026-07-28: never note a captured name.
     bumped = []
     for k, v in (after.get("skills") or {}).items():
@@ -1735,18 +2003,32 @@ def summarize_sheet_changes(before: dict, after: dict) -> list[str]:
         ):
             bumped.append(f"{k}:{pc:.2f}→{ac:.2f}/{v.get('status')}")
     if bumped:
-        notes.append("can-dos " + ", ".join(bumped[:6]))
+        events.append((_EVK.SHEET_CAN_DOS, ", ".join(bumped[:6]), {}))
     if json.dumps(before.get("next_best"), sort_keys=True) != json.dumps(
             after.get("next_best"), sort_keys=True):
         nb = after.get("next_best") or {}
-        notes.append(f"next={nb.get('can_do') or '—'} / {nb.get('activity')}")
+        events.append((
+            _EVK.SHEET_NEXT_BEST,
+            f"{nb.get('can_do') or '—'} / {nb.get('activity')}",
+            {},
+        ))
     rec = after.get("receptive") or {}
-    notes.append(
-        "scaffold=ES-forward+EN-rescue"
+    events.append((
+        _EVK.SHEET_SCAFFOLD,
+        "ES-forward+EN-rescue"
         if rec.get("needs_english_scaffold", True)
-        else "scaffold=mostly_ES"
-    )
-    return notes
+        else "mostly_ES",
+        {},
+    ))
+    return events
+
+
+def summarize_sheet_changes(before: dict, after: dict) -> list[str]:
+    """Short human notes for the console (render of the typed triples)."""
+    return [
+        _render_note(kind, key=key, payload=payload)
+        for kind, key, payload in summarize_sheet_change_events(before, after)
+    ]
 
 
 def normalize_sheet(sheet: dict) -> dict:
@@ -1758,6 +2040,7 @@ def normalize_sheet(sheet: dict) -> dict:
     merged["skills"] = migrate_skills(merged.get("skills") or {})
     for cid, entry in default_skills_block().items():
         merged["skills"].setdefault(cid, entry)
+        pre_entry = dict(merged["skills"][cid])  # machine B snapshot
         # re-stamp can-do metadata so AI can't drop statements
         meta = CAN_DOS[cid]
         merged["skills"][cid]["mode"] = meta["mode"]
@@ -1770,11 +2053,22 @@ def normalize_sheet(sheet: dict) -> dict:
             merged["skills"][cid]["confidence"] = max(0.0, min(1.0, c))
         except (TypeError, ValueError):
             merged["skills"][cid]["confidence"] = 0.0
+        # Machine B (via="normalize"): band self-loops only — an invalid
+        # status already IS band unknown, so the coercion never moves it.
+        ability_transition(
+            pre_entry, merged["skills"][cid], via="normalize",
+            evidence={"section": "skills", "key": cid},
+        )
     for fid, entry in default_grammar_block().items():
         g = merged.setdefault("grammar", {})
         g.setdefault(fid, entry)
+        pre_entry = dict(g[fid]) if isinstance(g[fid], dict) else {}
         if g[fid].get("status") not in STATUSES:
             g[fid]["status"] = "unknown"
+        ability_transition(
+            pre_entry, g[fid], via="normalize",
+            evidence={"section": "grammar", "key": fid},
+        )
     merged["version"] = max(int(merged.get("version") or 2), 2)
     merged["framework"] = base["framework"]
     # Defense in depth (personal-data capture disabled 2026-07-28): an AI
@@ -1806,6 +2100,7 @@ def process_turn(
     tool_delta: dict | None = None,
     revised_sheet: dict | None = None,
     profile: dict | None = None,
+    event_sink: list | None = None,
 ) -> tuple[dict, str, list[str]]:
     """Apply post-turn sheet maintenance.
 
@@ -1817,6 +2112,13 @@ def process_turn(
     `profile` is accepted for caller compatibility but IGNORED — personal-data
     capture is disabled (2026-07-28); the sheet stays ability-only.
     Returns (sheet, visible_tutor_text, change_notes).
+
+    Phase 3 batch 2 leaf push-down: the change notes are minted as typed
+    (kind, key, payload) triples; the returned strings are their render-table
+    projection (byte-identical to the historical f-strings). When
+    ``event_sink`` (a list) is given, the deduped triples are appended to it
+    1:1 with the returned notes so conv_session emits TurnEvents natively
+    instead of absorbing strings.
     """
     visible, inline_delta = extract_sheet_delta(tutor_reply)
     before = copy.deepcopy(sheet)
@@ -1837,31 +2139,34 @@ def process_turn(
                 sk[cid]["band"] = CAN_DOS[cid]["band"]
                 sk[cid]["statement"] = CAN_DOS[cid]["statement"]
         s = _preserve_identity(sheet, s)
-        notes = ["tool_update"]
+        events: list[tuple] = [(_EVK.SHEET_TOOL_UPDATE, "", {})]
         reason = tool_delta.get("reason") or tool_delta.get("notes")
         if isinstance(reason, str) and reason.strip():
-            notes.append(f"why={reason.strip()[:80]}")
+            events.append((_EVK.SHEET_WHY, reason.strip()[:80], {}))
         # Hard observer always runs (PR3): can-do/lexicon/error evidence is
         # code-owned — never depend only on tool compliance.
         staged = copy.deepcopy(s)
         s = apply_rule_updates(s, learner, visible, **_rule_kwargs)
         s = _cap_turn_confidence(before, staged, s)
-        notes.append("hard_observer")
+        events.append((_EVK.SHEET_HARD_OBSERVER, "", {}))
     elif revised_sheet is not None:
         s = normalize_sheet(revised_sheet)
         s = _preserve_identity(sheet, s)
-        notes = ["ai_update"]
+        events = [(_EVK.SHEET_AI_UPDATE, "", {})]
         staged = copy.deepcopy(s)
         s = apply_rule_updates(s, learner, visible, **_rule_kwargs)
         s = _cap_turn_confidence(before, staged, s)
-        notes.append("hard_observer")
+        events.append((_EVK.SHEET_HARD_OBSERVER, "", {}))
     else:
         # Backup: rules + optional inline delta (no second model call)
         s = apply_rule_updates(sheet, learner, visible, **_rule_kwargs)
-        notes = ["rules_backup", "hard_observer"]
+        events = [
+            (_EVK.SHEET_RULES_BACKUP, "", {}),
+            (_EVK.SHEET_HARD_OBSERVER, "", {}),
+        ]
         if inline_delta:
             s = apply_delta(s, inline_delta)
-            notes.append("inline_delta")
+            events.append((_EVK.SHEET_INLINE_DELTA, "", {}))
         # Cap after all staged work so inline cannot exceed the turn ceiling.
         s = _cap_turn_confidence(before, before, s)
         s = update_scaffold_flag(s, learner)
@@ -1869,16 +2174,21 @@ def process_turn(
         s = _preserve_identity(sheet, s)
     # Surface hot error patterns in console notes
     for ep in active_error_patterns(s):
-        notes.append(f"err×{ep['count']}:{ep['id']}")
+        events.append(
+            (_EVK.SHEET_ERROR_PATTERN, ep["id"], {"count": ep["count"]})
+        )
 
-    notes.extend(summarize_sheet_changes(before, s))
-    # de-dupe while preserving order
+    events.extend(summarize_sheet_change_events(before, s))
+    # de-dupe while preserving order (historical rule: on the rendered string)
     seen = set()
-    out_notes = []
-    for n in notes:
+    out_notes: list[str] = []
+    for kind, key, payload in events:
+        n = _render_note(kind, key=key, payload=payload)
         if n not in seen:
             seen.add(n)
             out_notes.append(n)
+            if event_sink is not None:
+                event_sink.append((kind, key, payload))
     return s, visible, out_notes
 
 

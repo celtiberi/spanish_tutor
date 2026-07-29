@@ -16,14 +16,22 @@ from tutor.character_sheet import (
 from tutor.conv_session import due_elicit_block
 from tutor.retrieval_scheduler import (
     INTERVAL_CAP_DAYS,
+    LEGAL_TRANSITIONS,
     DueItem,
+    IllegalTransition,
+    _VIA_EDGES,
+    _write,
     due_items,
     enqueue,
     has_first_seen,
     is_introduced,
+    item_state,
     mark_first_seen,
     mark_introduced,
     record_outcome,
+    record_outcome_ex,
+    retract_introduction,
+    transition,
 )
 from tutor.session_memory import INTRO_BUDGET_PER_SESSION, SessionMemory
 
@@ -304,6 +312,157 @@ class TestSessionBudgetAndMWU(unittest.TestCase):
         self.assertEqual(e["successive_successes"], 0)
         self.assertEqual(e["confidence"], 0.2)
         self.assertIsNone(e["first_seen"])
+
+
+class TestScheduleStateMachine(unittest.TestCase):
+    """Phase 1.5 batch 1 (machine A): explicit encounter/schedule machine.
+
+    Write-path formalization only — field outcomes are unchanged (goldens
+    pin them); illegal edges now raise IllegalTransition at write time.
+    """
+
+    def test_item_state_classification(self):
+        self.assertEqual(item_state(None), "absent")
+        # Ability-only entries: schedule axis unstarted.
+        self.assertEqual(
+            item_state({"status": "emerging", "confidence": 0.4}), "absent"
+        )
+        self.assertEqual(item_state({"first_seen": "2026-07-01"}), "first_seen")
+        # Degenerate external data: introduced_at without a parseable
+        # next_due (e.g. normalize_sheet coerced garbage to None). NOT
+        # producible by this module's writers — introduce/enqueue write
+        # introduced_at and next_due in the same call.
+        self.assertEqual(
+            item_state({"introduced_at": "2026-07-01", "next_due": None}),
+            "introduced",
+        )
+        s = mark_introduced(default_sheet(), "hola", "lexicon", "gloss", today=D0)
+        self.assertEqual(item_state(s["lexicon"]["hola"]), "on_ladder")
+
+    def test_double_introduce_raises(self):
+        s = mark_introduced(default_sheet(), "hola", "lexicon", "gloss", today=D0)
+        with self.assertRaises(IllegalTransition) as ctx:
+            mark_introduced(s, "hola", "lexicon", "gloss", today=D0)
+        msg = str(ctx.exception)
+        self.assertIn("on_ladder -> on_ladder", msg)
+        self.assertIn("lexicon:hola", msg)
+        # IllegalTransition is a ValueError (no caller contract broken).
+        self.assertIsInstance(ctx.exception, ValueError)
+
+    def test_introduce_from_first_seen_is_legal(self):
+        s = default_sheet()
+        s = mark_first_seen(s, "hola", "lexicon", "gloss", today=D0)
+        s = mark_introduced(s, "hola", "lexicon", "image", today=D0)
+        e = s["lexicon"]["hola"]
+        self.assertEqual(item_state(e), "on_ladder")
+        self.assertEqual(e["first_seen"], D0.isoformat())  # bit persists
+        self.assertEqual(e["introduced_at"], D0.isoformat())
+        self.assertEqual(e["scaffold"], "image")  # E0 scaffold overwrites
+
+    def test_first_seen_after_introduced_no_raise_callsite_guard_stays(self):
+        # Characterized CURRENT behavior (kept identical): the writer allows
+        # the self-loop and only adds the missing first_seen bit; the
+        # is_introduced/has_first_seen skip stays at the conv_session call
+        # site. State unchanged; ladder and scaffold untouched.
+        s = mark_introduced(default_sheet(), "hola", "lexicon", "gloss", today=D0)
+        before = dict(s["lexicon"]["hola"])
+        later = D0 + datetime.timedelta(days=2)
+        s2 = mark_first_seen(s, "hola", "lexicon", "anchor", today=later)
+        e = s2["lexicon"]["hola"]
+        self.assertEqual(item_state(e), "on_ladder")
+        self.assertEqual(e["first_seen"], later.isoformat())
+        self.assertEqual(e["scaffold"], before["scaffold"])  # not overwritten
+        for f in ("introduced_at", "next_due", "interval_days",
+                  "successive_successes"):
+            self.assertEqual(e[f], before[f])
+
+    def test_outcome_on_absent_key_creates_entry_without_introduced_at(self):
+        # Characterized CURRENT behavior (encoded as a legal edge): the API
+        # creates the entry (honest zero) and puts it on_ladder WITHOUT
+        # introduced_at (production only records outcomes for already-due
+        # items, but the write path permits this).
+        s, tr = record_outcome_ex(
+            default_sheet(), "sorpresa", "lexicon", True, today=D0
+        )
+        e = s["lexicon"]["sorpresa"]
+        self.assertEqual(item_state(e), "on_ladder")
+        self.assertNotIn("introduced_at", e)
+        self.assertNotIn("first_seen", e)
+        self.assertFalse(is_introduced(s, "sorpresa", "lexicon"))
+        self.assertEqual(e["status"], "unknown")
+        self.assertEqual(e["confidence"], 0.0)
+        # Exact historical telemetry shape (progress-ledger contract).
+        self.assertEqual(
+            sorted(tr),
+            ["interval_after", "interval_before", "key", "kind", "success",
+             "successes_after", "successes_before"],
+        )
+        self.assertEqual(tr["successes_after"], 1)
+
+    def test_retract_edges_back(self):
+        s = default_sheet()
+        # on_ladder WITH first_seen → first_seen (the bit survives)
+        s = mark_first_seen(s, "hola", "lexicon", "gloss", today=D0)
+        s = mark_introduced(s, "hola", "lexicon", "image", today=D0)
+        out = retract_introduction(s, "hola", "lexicon")
+        self.assertEqual(item_state(out["lexicon"]["hola"]), "first_seen")
+        self.assertTrue(has_first_seen(out, "hola", "lexicon"))
+        self.assertFalse(is_introduced(out, "hola", "lexicon"))
+        # honest-zero shell without first_seen → absent (entry removed)
+        s2 = mark_introduced(default_sheet(), "adiós", "lexicon", "gloss", today=D0)
+        out2 = retract_introduction(s2, "adiós", "lexicon")
+        self.assertNotIn("adiós", out2["lexicon"])
+        # absent → absent no-op stays legal (no crash, no entry)
+        out3 = retract_introduction(out2, "adiós", "lexicon")
+        self.assertNotIn("adiós", out3["lexicon"])
+
+    def test_enqueue_requeue_self_loop_is_legal(self):
+        s = mark_introduced(default_sheet(), "hola", "lexicon", "gloss", today=D0)
+        day = D0 + datetime.timedelta(days=1)
+        s = record_outcome(s, "hola", "lexicon", True, today=day)
+        successes = s["lexicon"]["hola"]["successive_successes"]
+        s = enqueue(s, "hola", "lexicon", today=day + datetime.timedelta(days=1))
+        e = s["lexicon"]["hola"]
+        self.assertEqual(item_state(e), "on_ladder")
+        self.assertEqual(e["interval_days"], 1)  # re-queue resets interval
+        self.assertEqual(e["successive_successes"], successes)  # kept
+        self.assertEqual(e["introduced_at"], D0.isoformat())  # kept
+
+    def test_cross_axis_write_still_raises_via_allowlist(self):
+        for illegal in (
+            {"confidence": 0.9}, {"status": "known"}, {"solid_uses": 3},
+        ):
+            with self.assertRaises(ValueError):
+                _write({"status": "unknown", "confidence": 0.0}, illegal)
+
+    def test_transition_rejects_unknown_via_state_kind(self):
+        s = default_sheet()
+        with self.assertRaises(ValueError):
+            transition(s, "hola", "lexicon", to_state="on_ladder",
+                       via="teleport", evidence={})
+        with self.assertRaises(ValueError):
+            transition(s, "hola", "lexicon", to_state="durable",
+                       via="enqueue", evidence={})
+        with self.assertRaises(ValueError):
+            transition(s, "hola", "nope", to_state="on_ladder",
+                       via="enqueue", evidence={})
+
+    def test_illegal_transition_message_carries_evidence(self):
+        s = mark_introduced(default_sheet(), "hola", "lexicon", "gloss", today=D0)
+        with self.assertRaises(IllegalTransition) as ctx:
+            transition(
+                s, "hola", "lexicon", to_state="on_ladder", via="introduce",
+                evidence={"caller": "test", "reply_excerpt": "hola otra vez"},
+                today=D0, scaffold="gloss",
+            )
+        self.assertIn("reply_excerpt", str(ctx.exception))
+
+    def test_legal_transitions_union_matches_via_edges(self):
+        derived: dict = {}
+        for edges in _VIA_EDGES.values():
+            for f, t in edges:
+                derived.setdefault(f, set()).add(t)
+        self.assertEqual(derived, LEGAL_TRANSITIONS)
 
 
 class TestDueElicitWiring(unittest.TestCase):

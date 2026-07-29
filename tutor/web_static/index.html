@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Spanish tutor</title>
-  <link rel="stylesheet" href="/static/styles.css?v=20260728c" />
+  <link rel="stylesheet" href="/static/styles.css?v=20260728f" />
 </head>
 <body>
   <div class="app">
@@ -119,6 +119,20 @@
 
       </aside>
     </main>
+
+    <!-- Debug box (local tool): the exact outbound AI tutor requests
+         (system blocks, mode instructions, task message, history) plus
+         response metadata. Collapsed by default; open state persists. -->
+    <section class="debug-box" id="debugBox">
+      <details id="debugDetails">
+        <summary class="debug-summary">Debug — AI tutor requests <span class="debug-count" id="debugCount"></span></summary>
+        <div class="debug-actions">
+          <button type="button" class="btn ghost" id="debugRefresh" title="Re-fetch the request ring buffer">Refresh</button>
+          <span class="muted debug-hint">Last 10 tutor calls of this session (in-memory only; newest first).</span>
+        </div>
+        <div id="debugBody" class="debug-body"><p class="muted">No requests captured yet — send a message.</p></div>
+      </details>
+    </section>
   </div>
 
   <!-- Full character sheet (modal — was buried under rail cards) -->
@@ -136,6 +150,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=20260728g"></script>
+  <script src="/static/app.js?v=20260728j"></script>
 </body>
 </html>

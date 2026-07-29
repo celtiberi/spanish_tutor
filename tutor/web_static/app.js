@@ -489,69 +489,115 @@ const JOURNEY_EMPTY_COPY =
   "Seeds plant today. Sprouts (3-day recall) and trees (2-week hold) " +
   "appear when you come back — that gap is how memory sticks.";
 
-function journeySummaryLine(summary) {
-  const orderedKinds = [
-    "planted", "taking_root", "rooted", "error_recovered",
-    "can_do_emerging", "can_do_known", "task_complete", "regression",
-  ];
-  const bits = [];
-  for (const k of orderedKinds) {
-    const n = Number(summary?.[k] || 0);
-    if (!n) continue;
-    const meta = JOURNEY_KINDS[k] || { label: k };
-    bits.push(k === "task_complete" && n === 1 ? "task done" : `${n} ${meta.label}`);
+/** Local YYYY-MM-DD for a Date (en-CA locale formats exactly that). */
+function localIsoDay(d) {
+  return d.toLocaleDateString("en-CA");
+}
+
+/** Day-chip label: "Today" / "Yesterday" / "Jul 26". */
+function journeyDayLabel(iso) {
+  const now = new Date();
+  if (iso === localIsoDay(now)) return "Today";
+  if (iso === localIsoDay(new Date(now.getTime() - 86400e3))) return "Yesterday";
+  const d = new Date(`${iso}T12:00:00`);
+  if (isNaN(d.getTime())) return iso || "";
+  const opts = { month: "short", day: "numeric" };
+  if (d.getFullYear() !== now.getFullYear()) opts.year = "numeric";
+  return d.toLocaleDateString(undefined, opts);
+}
+
+/** One milestone chip: icon + humanized display name. ONE state per chip
+ * (2026-07-28 rail incident): "recheck" REPLACES the celebration icon —
+ * history stays in the ledger, the display shows current truth. Hover/tap
+ * shows the full evidence sentence (+ gloss, + session id for debug). */
+function journeyChip(ev) {
+  const meta = JOURNEY_KINDS[ev.kind] || { icon: "•", label: ev.kind };
+  const state =
+    ev.display_state ||
+    (ev.polarity === "down" ? "down" : ev.needs_recheck ? "recheck" : "celebrated");
+  const name = ev.display || ev.key;
+  const tip = [ev.detail || ""];
+  if (ev.gloss) tip.push(`${ev.key} = ${ev.gloss}`);
+  let icon = meta.icon;
+  let badge = "";
+  if (state === "recheck") {
+    icon = "↺";
+    badge = `<span class="j-badge">re-check</span>`;
+    tip.push("The live sheet no longer holds this band — it will be re-checked in conversation");
+  } else {
+    tip.push(meta.label);
   }
-  return bits.join(" · ");
+  if (ev.session_id) tip.push(`session ${ev.session_id}`);
+  return (
+    `<li class="j-chip ${state}" title="${esc(tip.filter(Boolean).join("\n"))}">` +
+    `<span class="j-chip-icon" aria-hidden="true">${icon}</span>` +
+    `<span class="j-chip-name">${esc(name)}</span>${badge}</li>`
+  );
+}
+
+/** One day cluster: date chip on the rail spine + inline milestone chips.
+ * Theme grouping survives only as ordering + a tiny muted prefix, never as
+ * the only visible text (2026-07-28 rail incident: "Greetings — 1 planted"
+ * rows said nothing). */
+function journeyDay(c, isCurrent) {
+  const label = journeyDayLabel(c.date || "");
+  const nSess = Number(c.session_count || (c.sessions || []).length || 0);
+  const sess = nSess > 1 ? `<span class="j-sess">· ${nSess} sessions</span>` : "";
+  const groups =
+    c.groups && c.groups.length
+      ? c.groups
+      : [{ theme: "other", events: c.events || [] }];
+  const chips = groups
+    .map((g) => {
+      const theme = String(g.theme || "");
+      const prefix =
+        theme && !["abilities", "tasks", "other"].includes(theme)
+          ? `<li class="j-theme" aria-hidden="true">${esc((g.label || theme).toLowerCase())}</li>`
+          : "";
+      return prefix + (g.events || []).map(journeyChip).join("");
+    })
+    .join("");
+  const body = (c.events || []).length
+    ? `<ul class="j-chips">${chips}</ul>`
+    : `<p class="j-sum">quiet so far — seeds today, sprouts on return</p>`;
+  return (
+    `<section class="j-day${isCurrent ? " current" : ""}">` +
+    `<header class="j-date"><span class="j-dot" aria-hidden="true"></span>` +
+    `<span class="j-daylabel">${esc(label)}</span>${sess}</header>` +
+    body +
+    `</section>`
+  );
 }
 
 function renderJourney(progress) {
   if (!els.journeyBody) return;
-  const clusters = progress?.clusters || [];
+  const clusters = (progress?.clusters || []).slice();
   if (progress?.empty || !clusters.length) {
     els.journeyBody.innerHTML =
       `<p class="j-empty">${esc(JOURNEY_EMPTY_COPY)}</p>`;
   } else {
+    const todayIso = localIsoDay(new Date());
+    // A live session with no milestones yet still shows an honest, quiet
+    // "Today" stop on the path (amended (c): quiet sessions may exist).
+    if (progress?.session_id && !clusters.some((c) => c.date === todayIso)) {
+      clusters.unshift({
+        date: todayIso,
+        sessions: [progress.session_id],
+        session_count: 1,
+        events: [],
+        groups: [],
+      });
+    }
     const html = clusters
       .map((c) => {
         const isCurrent =
-          progress?.session_id && c.session_id === progress.session_id;
-        const dateChip =
-          `<header class="j-date">${esc(c.date || "")}` +
-          (isCurrent ? `<span class="j-now">this session</span>` : "") +
-          `</header>`;
-        const nodes = (c.events || [])
-          .map((ev) => {
-            const meta = JOURNEY_KINDS[ev.kind] || { icon: "•", label: ev.kind };
-            const cls =
-              `j-node ${ev.polarity === "down" ? "down" : "up"}` +
-              (ev.needs_recheck ? " recheck" : "");
-            const badge = ev.needs_recheck
-              ? `<span class="j-badge" title="The live sheet no longer holds this band — it will be re-checked in conversation">needs re-check</span>`
-              : "";
-            return (
-              `<li class="${cls}" title="${esc(ev.detail || "")}">` +
-              `<span class="j-icon" aria-hidden="true">${meta.icon}</span>` +
-              `<span class="j-label"><strong>${esc(ev.key)}</strong>` +
-              ` <span class="j-kind">${esc(meta.label)}</span>${badge}</span>` +
-              `</li>`
-            );
-          })
-          .join("");
-        const sum = journeySummaryLine(c.summary);
-        const quiet =
-          isCurrent && !(c.events || []).length
-            ? `<p class="j-sum">quiet so far — seeds today, sprouts on return</p>`
-            : "";
-        return (
-          `<section class="j-cluster${isCurrent ? " current" : ""}">` +
-          dateChip +
-          `<ul class="j-nodes">${nodes}</ul>` +
-          (sum ? `<p class="j-sum">${esc(sum)}</p>` : quiet) +
-          `</section>`
-        );
+          c.date === todayIso ||
+          (progress?.session_id &&
+            (c.sessions || []).includes(progress.session_id));
+        return journeyDay(c, isCurrent);
       })
       .join("");
-    els.journeyBody.innerHTML = html;
+    els.journeyBody.innerHTML = `<div class="j-rail">${html}</div>`;
   }
   if (els.journeyFoot) {
     const due = Number(progress?.due_soon || 0);
@@ -569,6 +615,149 @@ async function refreshProgress() {
   } catch (_) {
     /* rail is telemetry display — never break the chat over it */
   }
+}
+
+// ——— Debug box: outbound AI requests + response metadata ———
+// Local debug tool: GET /api/debug/requests (in-memory ring, newest first).
+// Collapsed by default; open state persists in localStorage; refreshed after
+// each chat turn while open.
+
+const LS_DEBUG_OPEN = "debugOpen";
+/** Latest entries (for the per-entry copy button). */
+let lastDebugEntries = [];
+
+function fmtTokens(u) {
+  const n = (x) => Number(x || 0);
+  return (
+    `in ${n(u.input_tokens)} (cache ${n(u.cached_input_tokens)}) / ` +
+    `out ${n(u.output_tokens)} / think ${n(u.thinking_tokens)}`
+  );
+}
+
+function dbgPre(text) {
+  return `<pre class="dbg-pre">${esc(text || "")}</pre>`;
+}
+
+function dbgSection(title, innerHtml, { open = false } = {}) {
+  return (
+    `<details class="dbg-sub"${open ? " open" : ""}>` +
+    `<summary>${esc(title)}</summary>${innerHtml}</details>`
+  );
+}
+
+function renderDebugEntry(e, idx) {
+  const u = e.response?.usage || {};
+  const summary =
+    `turn ${e.turn}${e.is_open ? " (open)" : ""} · ` +
+    `${e.mode || "?"}/${e.reason || "?"} · ${e.activity || "—"} · ` +
+    fmtTokens(u);
+  const sysBlocks = (e.system_blocks || [])
+    .map((b) =>
+      dbgSection(
+        `${b.label}${b.cached ? " · cache-marked" : ""} · ${(b.text || "").length} chars`,
+        dbgPre(b.text)
+      )
+    )
+    .join("");
+  const hist = e.history || [];
+  const histHtml = hist
+    .map(
+      (m) =>
+        `<div class="dbg-msg"><span class="dbg-role">${esc(m.role)}</span>` +
+        dbgPre(m.content) +
+        `</div>`
+    )
+    .join("");
+  const meta = {
+    model: e.model,
+    ts: e.ts,
+    stop_reason: e.response?.stop_reason || "",
+    usage: u,
+    gate_faults: e.response?.gate_faults || [],
+    gate_notes: e.response?.gate_notes || [],
+    notes: e.response?.notes || [],
+  };
+  const body =
+    `<div class="dbg-entry-head">` +
+    `<span class="dbg-model">${esc(e.model || "")} · ${esc(e.ts || "")}</span>` +
+    `<button type="button" class="btn ghost dbg-copy" data-idx="${idx}" title="Copy this entry as JSON">Copy</button>` +
+    `</div>` +
+    dbgSection(`SYSTEM BLOCKS · ${(e.system_blocks || []).length}`, sysBlocks) +
+    dbgSection("INSTRUCTIONS (mode decision)", dbgPre(e.instructions), {
+      open: true,
+    }) +
+    dbgSection("TASK MESSAGE", dbgPre(e.task_message)) +
+    dbgSection(`HISTORY · ${hist.length} messages`, histHtml || '<p class="muted">none</p>') +
+    dbgSection(
+      "RESPONSE META",
+      dbgPre(JSON.stringify(meta, null, 2)),
+    );
+  return (
+    `<details class="dbg-entry">` +
+    `<summary class="dbg-entry-sum">${esc(summary)}` +
+    ((e.response?.gate_faults || []).length
+      ? ` <span class="dbg-faults">gate: ${esc((e.response.gate_faults || []).join(", "))}</span>`
+      : "") +
+    `</summary>${body}</details>`
+  );
+}
+
+function renderDebug(entries) {
+  const body = document.getElementById("debugBody");
+  const count = document.getElementById("debugCount");
+  if (!body) return;
+  lastDebugEntries = entries || [];
+  if (count) count.textContent = lastDebugEntries.length ? `(${lastDebugEntries.length})` : "";
+  if (!lastDebugEntries.length) {
+    body.innerHTML =
+      '<p class="muted">No requests captured yet — send a message.</p>';
+    return;
+  }
+  body.innerHTML = lastDebugEntries.map(renderDebugEntry).join("");
+  body.querySelectorAll(".dbg-copy").forEach((btn) => {
+    btn.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const i = Number(btn.dataset.idx);
+      const entry = lastDebugEntries[i];
+      if (!entry) return;
+      navigator.clipboard
+        ?.writeText(JSON.stringify(entry, null, 2))
+        .then(() => {
+          btn.textContent = "Copied";
+          setTimeout(() => (btn.textContent = "Copy"), 1200);
+        })
+        .catch(() => {});
+    });
+  });
+}
+
+async function refreshDebug(force = false) {
+  const det = document.getElementById("debugDetails");
+  if (!det || (!det.open && !force)) return;
+  try {
+    const data = await api("/api/debug/requests");
+    renderDebug(data.entries || []);
+  } catch (_) {
+    /* debug box is telemetry — never break the chat over it */
+  }
+}
+
+function initDebugBox() {
+  const det = document.getElementById("debugDetails");
+  if (!det) return;
+  det.open = localStorage.getItem(LS_DEBUG_OPEN) === "1";
+  det.addEventListener("toggle", () => {
+    localStorage.setItem(LS_DEBUG_OPEN, det.open ? "1" : "0");
+    if (det.open) refreshDebug(true);
+  });
+  document
+    .getElementById("debugRefresh")
+    ?.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      refreshDebug(true);
+    });
+  if (det.open) refreshDebug(true);
 }
 
 function syncJourneyToggle() {
@@ -1138,7 +1327,18 @@ function scheduleRailRefresh() {
   railPollTimer = setTimeout(tick, delays[0]);
 }
 
+/**
+ * Session-lifecycle single-flight (2026-07-28 reset-race forensics): a reset
+ * and a start must NEVER run concurrently — the later Set-Cookie orphans the
+ * earlier session server-side. Every session-creating call (start, new chat,
+ * hard reset) claims this flag and AWAITS its response (and Set-Cookie)
+ * before any other lifecycle call may begin.
+ */
+let sessionFlowInFlight = false;
+
 async function startSession() {
+  if (sessionFlowInFlight) return;
+  sessionFlowInFlight = true;
   setBusy(true);
   els.statusLine.textContent = "Connecting…";
   // Every full page load (including Ctrl/Cmd+Shift+R) starts a clean chat.
@@ -1155,12 +1355,14 @@ async function startSession() {
     lastFocusVersion = data.sheet?.focus_version ?? null;
     scheduleRailRefresh();
     refreshProgress();
+    refreshDebug();
     els.statusLine.textContent = `Model ${data.model || "tutor"} · new chat`;
     if (data.reply) speak(data.reply, data.parts);
   } catch (e) {
     addBubble("system", `Could not start: ${e.message}`);
     els.statusLine.textContent = "Error — check API keys / server logs";
   } finally {
+    sessionFlowInFlight = false;
     setBusy(false);
     els.input.focus();
   }
@@ -1209,6 +1411,7 @@ async function sendMessage(text, inputMode = "text", opts = {}) {
     lastFocusVersion = data.sheet?.focus_version ?? lastFocusVersion;
     scheduleRailRefresh(); // focus LLM finishes async → pull updated rail
     refreshProgress(); // journey rail: nodes appear as milestones fire
+    refreshDebug(); // debug box: pull the new request entry when open
     // Start voice ASAP (browser TTS); don't block UI on server TTS RTT
     speak(data.reply, data.parts);
     setMicStatus("idle", micIdleHint);
@@ -1867,7 +2070,12 @@ document.addEventListener("keydown", (e) => {
 });
 
 els.newChat.addEventListener("click", async () => {
-  if (busy || turnInFlight) return;
+  if (busy || turnInFlight || sessionFlowInFlight) return;
+  // SEQUENCE, never race (2026-07-28 forensics): the reset response carries
+  // the new session + Set-Cookie and is fully AWAITED under the lifecycle
+  // lock — no startSession may fire until it lands (the reset reply IS the
+  // new session's opening turn; no separate start call happens).
+  sessionFlowInFlight = true;
   setBusy(true);
   try {
     const data = await api("/api/session/reset", {
@@ -1878,17 +2086,19 @@ els.newChat.addEventListener("click", async () => {
     setNotes(data.notes);
     renderSheet(data.sheet);
     refreshProgress();
+    refreshDebug();
     setMicStatus("idle", "New chat — same learner sheet");
     speak(data.reply, data.parts);
   } catch (e) {
     addBubble("system", e.message);
   } finally {
+    sessionFlowInFlight = false;
     setBusy(false);
   }
 });
 
 async function hardResetLearner() {
-  if (busy || turnInFlight) {
+  if (busy || turnInFlight || sessionFlowInFlight) {
     addBubble("system", "Wait for the current turn to finish, then Reset learner again.");
     return;
   }
@@ -1899,6 +2109,11 @@ async function hardResetLearner() {
   ) {
     return;
   }
+  // SEQUENCE, never race (2026-07-28 forensics: reset raced startSession →
+  // stale cookie → orphaned session 20260728-120331): the reset response
+  // (and its Set-Cookie) is fully AWAITED under the lifecycle lock before
+  // any other session-creating call may run.
+  sessionFlowInFlight = true;
   setBusy(true);
   setSheetOpen(false);
   try {
@@ -1921,6 +2136,7 @@ async function hardResetLearner() {
     );
     renderSheet(data.sheet);
     refreshProgress();
+    refreshDebug();
     els.statusLine.textContent = data.fresh_learner
       ? `Fresh learner · model ${data.model || "tutor"}`
       : `Model ${data.model || "tutor"} · character sheet live`;
@@ -1935,6 +2151,7 @@ async function hardResetLearner() {
   } catch (e) {
     addBubble("system", `Reset failed: ${e.message}`);
   } finally {
+    sessionFlowInFlight = false;
     setBusy(false);
     els.input.focus();
   }
@@ -1951,4 +2168,5 @@ if (window.speechSynthesis) {
 initSpeech();
 // Discover server Gemini TTS, then open session (opening line uses AI voice)
 initJourney();
+initDebugBox();
 initTtsPolicy().finally(() => startSession());

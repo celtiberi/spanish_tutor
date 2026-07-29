@@ -121,7 +121,7 @@ class TestSelfFlagUptakeBlock(unittest.TestCase):
     def test_fires_on_conversation_turn_with_note(self):
         state = ModeSessionState()
         state.learner_turn_index = 5
-        txt, note = self_flag_uptake_block(
+        txt, token = self_flag_uptake_block(
             "No uvia (rain) hoy",
             mode="conversation",
             reason="default_conversation",
@@ -130,7 +130,15 @@ class TestSelfFlagUptakeBlock(unittest.TestCase):
         self.assertIn("UPTAKE (§2.1a)", txt)
         self.assertIn("«uvia»", txt)
         self.assertIn("pack-legal", txt)
-        self.assertEqual(note, "uptake_flagged:uvia")
+        # Phase 3 batch 2 push-down: the RAW token returns; the caller emits
+        # the typed UPTAKE_FLAGGED event whose render is the legacy note.
+        self.assertEqual(token, "uvia")
+        from tutor.turn_events import TurnEventKind, render_note
+
+        self.assertEqual(
+            render_note(TurnEventKind.UPTAKE_FLAGGED, key=token),
+            "uptake_flagged:uvia",
+        )
         self.assertEqual(state.content_uptake_last_turn, 5)
 
     def test_budget_blocks_second_consecutive_offer(self):
@@ -154,14 +162,14 @@ class TestSelfFlagUptakeBlock(unittest.TestCase):
         self.assertEqual((txt2, note2), ("", ""))
         # Budget recovers after the 3-turn rate window.
         state.learner_turn_index = 8
-        txt3, note3 = self_flag_uptake_block(
+        txt3, token3 = self_flag_uptake_block(
             "Yo hacer (I am making?) deysayunas",
             mode="conversation",
             reason="default_conversation",
             mode_state=state,
         )
         self.assertIn("«hacer»", txt3)
-        self.assertEqual(note3, "uptake_flagged:hacer")
+        self.assertEqual(token3, "hacer")
 
     def test_guard_turns_do_not_fire(self):
         # Help/topic/grammar guards already perform uptake; repair keeps its

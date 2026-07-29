@@ -64,8 +64,6 @@ def _apply_mode_state(session: ConversationalSession, seed: dict | None) -> None
     for k, v in seed.items():
         if k == "form_focus_cooldown" and isinstance(v, dict):
             ms.form_focus_cooldown = dict(v)
-        elif k == "scene_modeled" and isinstance(v, (list, set, tuple)):
-            ms.scene_modeled = set(v)
         elif hasattr(ms, k):
             setattr(ms, k, v)
 
@@ -152,6 +150,13 @@ def run_conv_trajectory(
             "reply": tr.reply or "",
             "error": tr.error,
             "notes": list(tr.notes or []),
+            # Typed turn events (Phase 3 batch 2): the serialized timeline —
+            # conv_checks consumes these first; the notes list above is their
+            # chronological string projection (kept for replay/display).
+            "events": [
+                e.as_dict() if hasattr(e, "as_dict") else e
+                for e in (tr.events or [])
+            ],
             "usage": dict(tr.usage or {}),
             "stop_reason": tr.stop_reason,
             "parts": parts,

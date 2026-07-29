@@ -551,6 +551,44 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
         self.assertIn("mucho gusto", g.repair_instruction)
         self.assertNotIn("gate:unscaffolded_flood", g.faults)
 
+    def test_lapsed_planned_intro_records_scaffold_saved_not_bare(self):
+        # Audit (a4) 2026-07-28 (Grok's encantado proof): an R-A cognate
+        # plan whose reply delivers a GLOSS instead of the anchor must still
+        # record scaffold_saved for the planned key (no bare fault) — the
+        # session writes first_seen on the lapse so the glossed exposure is
+        # not forgotten. Previously introduce_key was skipped entirely and
+        # BOTH ledgers stayed blind → critical thrash on next bare use.
+        from tutor.character_sheet import default_sheet
+        from tutor.output_gate import scan_unscaffolded_new_items
+
+        reply = "**encantado** (a short gloss)"
+        bare, extras, _reglossed, saved = scan_unscaffolded_new_items(
+            self._parts(reply),
+            f"{reply} ¿Puedes decirlo?",
+            table=self.table,
+            sheet=default_sheet(),
+            introduce_key="encantado",
+        )
+        self.assertEqual(bare, [])
+        self.assertEqual(extras, [])
+        self.assertEqual(saved.get("encantado"), "gloss")
+
+    def test_planned_key_bare_stays_out_of_bare_and_saved(self):
+        # Planned key with NO scaffold at all: the introduce path owns the
+        # lapse — the scan neither faults it bare nor records a scaffold.
+        from tutor.character_sheet import default_sheet
+        from tutor.output_gate import scan_unscaffolded_new_items
+
+        bare, _extras, _reglossed, saved = scan_unscaffolded_new_items(
+            self._parts("Encantado."),
+            "Encantado. ¿Puedes decirlo?",
+            table=self.table,
+            sheet=default_sheet(),
+            introduce_key="encantado",
+        )
+        self.assertEqual(bare, [])
+        self.assertNotIn("encantado", saved)
+
     def test_mucho_gusto_glossed_in_acknowledge_is_clean(self):
         # Same incident shape WITH the ≤6-word gloss — clean, and the key
         # earns its scaffold-saved first_seen credit.
@@ -568,6 +606,338 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
         )
         self.assertNotIn("gate:unscaffolded_new_item", g.faults)
         self.assertEqual(g.scaffold_saved.get("mucho gusto"), "gloss")
+
+
+class TestEnglishWallZeroExemption(unittest.TestCase):
+    """2026-07-28 zero-English incident: a COMPLIANT true-zero opening
+    (English framing + glossed tiny Spanish, tl_ratio 0.32-0.40) tripped
+    gate:english_wall, whose forced "Rewrite Spanish-forward" re-ask
+    reproduced the 100%-Spanish opening. Placement mode and blank_zero
+    overlay turns use min_ratio 0.25; genuine all-English still faults."""
+
+    # Measured ratio 0.35, alpha 34 (fixture arithmetic asserted below).
+    ZERO_OPEN_PARTS = {
+        "acknowledge": (
+            "Welcome! We will go slowly and I will always show you what "
+            "things mean."
+        ),
+        "model": "Hola (hello). Estoy bien (I am fine). Me llamo Marisol "
+                 "(my name is Marisol).",
+        "try": "Try: Me llamo ___ — my name is ___",
+        "structured": True,
+    }
+
+    def _blob(self, parts):
+        return " ".join(
+            str(parts.get(k) or "")
+            for k in ("acknowledge", "recast", "explain", "model", "try",
+                      "continue")
+        )
+
+    def test_fixture_ratio_is_in_the_zero_band(self):
+        from tutor.output_gate import ratio_blob_with_sandwich_exempt
+
+        parts = self.ZERO_OPEN_PARTS
+        r = spanish_token_ratio(
+            ratio_blob_with_sandwich_exempt(parts, self._blob(parts))
+        )
+        self.assertGreaterEqual(r, 0.32)
+        self.assertLessEqual(r, 0.40)
+        self.assertGreaterEqual(
+            alphabetic_token_count(self._blob(parts)), MIN_ALPHA_TOKENS
+        )
+
+    def test_compliant_zero_open_passes_in_placement(self):
+        parts = self.ZERO_OPEN_PARTS
+        g = check_output_gate(
+            parts, self._blob(parts), is_open=True, mode="placement",
+        )
+        self.assertNotIn("gate:english_wall", g.faults)
+
+    def test_compliant_zero_turn_passes_with_blank_zero_flag(self):
+        # Post-open overlay turns run as conversation/repair modes where the
+        # placement exemption cannot reach — blank_zero (threaded from
+        # conv_session) applies the same 0.25 floor.
+        parts = self.ZERO_OPEN_PARTS
+        g = check_output_gate(
+            parts, self._blob(parts), is_open=False, mode="conversation",
+            blank_zero=True,
+        )
+        self.assertNotIn("gate:english_wall", g.faults)
+
+    def test_same_turn_without_blank_zero_still_walls(self):
+        # Normal-learner thresholds unchanged: ratio 0.35 < 0.50 faults in a
+        # plain conversation turn.
+        parts = self.ZERO_OPEN_PARTS
+        g = check_output_gate(
+            parts, self._blob(parts), is_open=False, mode="conversation",
+        )
+        self.assertIn("gate:english_wall", g.faults)
+
+    def test_all_english_still_faults_everywhere(self):
+        # Genuine all-English (ratio 0.0) faults in placement AND blank_zero.
+        parts = {
+            "acknowledge": "Good job you nailed it!",
+            "model": "That means my name is.",
+            "try": "Please say your name in Spanish now.",
+            "structured": True,
+        }
+        blob = self._blob(parts)
+        self.assertEqual(spanish_token_ratio(blob), 0.0)
+        g1 = check_output_gate(parts, blob, is_open=True, mode="placement")
+        self.assertIn("gate:english_wall", g1.faults)
+        g2 = check_output_gate(
+            parts, blob, is_open=False, mode="conversation", blank_zero=True,
+        )
+        self.assertIn("gate:english_wall", g2.faults)
+
+    def test_wall_repair_copy_is_mode_aware(self):
+        # Audit (b1) 2026-07-28: under placement/blank_zero the repair keeps
+        # the zero register (orientation line + glosses, raise Spanish above
+        # the 0.25 floor) — "Rewrite Spanish-forward" there re-fought the
+        # register the floor exemption had just permitted. Normal register
+        # keeps the Spanish-forward instruction.
+        parts = {
+            "acknowledge": "Good job you nailed it!",
+            "model": "That means my name is.",
+            "try": "Please say your name in Spanish now.",
+            "structured": True,
+        }
+        blob = self._blob(parts)
+        g1 = check_output_gate(parts, blob, is_open=True, mode="placement")
+        self.assertIn("gate:english_wall", g1.faults)
+        self.assertIn("True-zero / placement register", g1.repair_instruction)
+        self.assertIn("orientation", g1.repair_instruction)
+        self.assertIn("0.25", g1.repair_instruction)
+        self.assertNotIn("Rewrite Spanish-forward", g1.repair_instruction)
+        g2 = check_output_gate(
+            parts, blob, is_open=False, mode="conversation", blank_zero=True,
+        )
+        self.assertIn("True-zero / placement register", g2.repair_instruction)
+        self.assertNotIn("Rewrite Spanish-forward", g2.repair_instruction)
+        g3 = check_output_gate(parts, blob, is_open=False, mode="conversation")
+        self.assertIn("gate:english_wall", g3.faults)
+        self.assertIn("Rewrite Spanish-forward", g3.repair_instruction)
+        self.assertNotIn("True-zero", g3.repair_instruction)
+
+
+class TestProbeLoopTopicRegistry(unittest.TestCase):
+    """2026-07-28 repetition forensics: gate:probe_loop generalized past the
+    4 hardcoded social regexes via the asked-topic registry (same extractor
+    that writes SessionMemory.asked_topics)."""
+
+    # Verbatim session 20260728-120335 turn-3 try (the city-size question the
+    # learner complained was re-asked: "didnt you just ask this?").
+    CITY_TRY = "¿Y tu casa? ¿Está en una ciudad grande o en una ciudad pequeña?"
+
+    def _parts(self, try_text):
+        return {
+            "acknowledge": "¡Muy bien!",
+            "model": "Mi casa está en una ciudad pequeña.",
+            "try": try_text,
+            "structured": True,
+        }
+
+    def test_second_identical_city_size_try_faults(self):
+        from tutor.session_memory import SessionMemory, topic_key_for_try
+
+        mem = SessionMemory()
+        frame, concept = topic_key_for_try(self.CITY_TRY)
+        key = mem.note_asked_topic(frame, concept)
+        self.assertEqual(key, "size:ciudad")
+        # Turn 5 re-asks the same size:ciudad question verbatim → fault.
+        g = check_output_gate(
+            self._parts(self.CITY_TRY),
+            self.CITY_TRY,
+            is_open=False,
+            asked_topics=mem.asked_topics,
+        )
+        self.assertIn("gate:probe_loop", g.faults)
+        self.assertTrue(
+            any("topic:size:ciudad" in n for n in g.notes), g.notes
+        )
+        self.assertIn("DIFFERENT question", g.repair_instruction)
+
+    def test_new_frame_on_same_concept_does_not_fault(self):
+        # A NEW frame on the same concept ("what's IN your house" after
+        # location:casa) is a legitimate follow-up, not a loop.
+        g = check_output_gate(
+            self._parts("¿Qué hay en tu casa?"),
+            "¿Qué hay en tu casa?",
+            is_open=False,
+            asked_topics={"location:casa"},
+        )
+        self.assertNotIn("gate:probe_loop", g.faults)
+
+    def test_registry_check_uses_try_not_model(self):
+        # The registry key comes from the composed TRY; a model sentence
+        # mentioning the noun must not fault the turn.
+        g = check_output_gate(
+            self._parts("¿Te gusta el café?"),
+            "Mi casa está en una ciudad pequeña. ¿Te gusta el café?",
+            is_open=False,
+            asked_topics={"size:ciudad"},
+        )
+        self.assertNotIn("gate:probe_loop", g.faults)
+
+    def _due_sheet(self, key):
+        s = default_sheet()
+        s["lexicon"][key] = {
+            "status": "emerging",
+            "confidence": 0.3,
+            "next_due": "2020-01-01",
+            "interval_days": 1,
+        }
+        return s
+
+    def test_due_concept_exempt_from_topic_probe_loop(self):
+        # Audit (a2) 2026-07-28: retrieval outranks anti-repeat (P3 spacing
+        # is law; do_not_re_ask is a courtesy) — a currently-due «casa» may
+        # be re-elicited even with location:casa already in the registry.
+        g = check_output_gate(
+            self._parts("¿Dónde está tu casa?"),
+            "¿Dónde está tu casa?",
+            is_open=False,
+            asked_topics={"location:casa"},
+            sheet=self._due_sheet("casa"),
+        )
+        self.assertNotIn("gate:probe_loop", g.faults)
+        self.assertTrue(
+            any("probe_loop_due_exempt:location:casa" in n for n in g.notes),
+            g.notes,
+        )
+
+    def test_same_topic_without_due_still_faults(self):
+        # Control for the (a2) exemption: same registry hit, no due «casa».
+        g = check_output_gate(
+            self._parts("¿Dónde está tu casa?"),
+            "¿Dónde está tu casa?",
+            is_open=False,
+            asked_topics={"location:casa"},
+            sheet=default_sheet(),
+        )
+        self.assertIn("gate:probe_loop", g.faults)
+        self.assertTrue(
+            any("topic:location:casa" in n for n in g.notes), g.notes
+        )
+
+    def test_due_exemption_matches_accented_ledger_key(self):
+        # Ledger keys keep accents («café»); the extractor deaccents its
+        # concept ("cafe") — the exemption compares through the same
+        # _deaccent transform, exact key match otherwise.
+        g = check_output_gate(
+            self._parts("¿Dónde está el café?"),
+            "¿Dónde está el café?",
+            is_open=False,
+            asked_topics={"location:cafe"},
+            sheet=self._due_sheet("café"),
+        )
+        self.assertNotIn("gate:probe_loop", g.faults)
+
+    def test_social_fast_path_still_fires_without_registry(self):
+        # Regression: the 4 social regexes keep working with no registry.
+        parts = {
+            "acknowledge": "¡Hola!",
+            "model": "Me llamo Sofía.",
+            "try": "¿Cómo te llamas?",
+            "structured": True,
+        }
+        g = check_output_gate(
+            parts,
+            "¿Cómo te llamas?",
+            already_asked={"ask_name"},
+            already_shown={"name"},
+        )
+        self.assertIn("gate:probe_loop", g.faults)
+
+
+class TestGateContextParity(unittest.TestCase):
+    """E3 (Phase 4 batch 3): check_output_gate(GateContext) is the new
+    surface; the legacy 18-argument kwarg call is a thin shim building the
+    same context.  Parity: both paths must return identical results on
+    identical inputs — including a fault-rich case exercising the r7 S3
+    table/sheet checks, the registry probe-loop and the recast demand."""
+
+    def _inputs(self):
+        from pathlib import Path
+
+        from tutor.association_table import load_association_table
+
+        root = Path(__file__).resolve().parents[1]
+        table = load_association_table(root / "course_packs" / "spanish_a1")
+        parts = {
+            "acknowledge": "Good job you nailed it, that was really great!",
+            "model": "Hasta luego.",
+            "try": "¿Qué te gusta?",
+            "structured": True,
+        }
+        visible = (
+            "Good job you nailed it, that was really great! "
+            "Hasta luego. ¿Qué te gusta?"
+        )
+        kwargs = dict(
+            is_open=False,
+            already_asked={"ask_gusta"},
+            already_shown={"gusta"},
+            mode="cf_recast",
+            image_present=False,
+            require_recast=True,
+            raw="<tutor>" + visible + "</tutor>",
+            truncated=True,
+            association_table=table,
+            sheet=default_sheet(),
+            introduce_key=None,
+            retrieval_failed_keys={"agua"},
+            learner_text="see you later",
+            blank_zero=False,
+            asked_topics=set(),
+            topic_nouns=[],
+        )
+        return parts, visible, kwargs
+
+    def test_shim_path_equals_context_path(self):
+        from tutor.output_gate import GateContext
+
+        parts, visible, kwargs = self._inputs()
+        legacy = check_output_gate(parts, visible, **kwargs)
+        via_ctx = check_output_gate(
+            GateContext(parts=parts, visible=visible, **kwargs)
+        )
+        self.assertEqual(legacy.as_dict(), via_ctx.as_dict())
+        # The case is fault-rich on purpose — parity on a trivial OK turn
+        # would prove nothing.  Four distinct check families trip: the
+        # truncation flag, the recast demand, the r7 S3 table/sheet scan
+        # («hasta luego» bare + unglossed) and the probe-loop registry.
+        for fault in (
+            "gate:truncated", "gate:missing_recast",
+            "gate:unscaffolded_new_item", "gate:probe_loop",
+        ):
+            self.assertIn(fault, legacy.faults)
+
+    def test_context_defaults_match_shim_defaults(self):
+        from tutor.output_gate import GateContext
+
+        parts = {"model": "Estoy bien.", "try": "¿Y tú?", "structured": True}
+        legacy = check_output_gate(parts, "Estoy bien. ¿Y tú?")
+        via_ctx = check_output_gate(
+            GateContext(parts=parts, visible="Estoy bien. ¿Y tú?")
+        )
+        self.assertEqual(legacy.as_dict(), via_ctx.as_dict())
+
+    def test_context_field_census_covers_the_18_arg_seam(self):
+        # The dataclass carries EXACTLY what the historical signature
+        # encoded: 2 positionals + 16 keyword-only = 18.
+        from tutor.output_gate import GateContext
+
+        assert sorted(GateContext.__dataclass_fields__) == sorted([
+            "parts", "visible",
+            "is_open", "already_asked", "already_shown", "mode",
+            "image_present", "require_recast", "raw", "truncated",
+            "association_table", "sheet", "introduce_key",
+            "retrieval_failed_keys", "learner_text", "blank_zero",
+            "asked_topics", "topic_nouns",
+        ])
+        assert len(GateContext.__dataclass_fields__) == 18
 
 
 class TestHardObserver(unittest.TestCase):

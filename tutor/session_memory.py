@@ -9,12 +9,189 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from .association_table import cached_default_table, content_topic_keys
 from .observe import probe_signals
+# Phase 2 (docs/reviews-architecture-refactor.md): fold_lexical is the named
+# home of the old local _deaccent — 6-vowel fold (incl. ü), KEEPS ñ, keeps
+# spaces. Registry keys and output_gate's due-exemption share this policy.
+from .textnorm import SPANISH_LETTERS, fold_asset_key, fold_lexical
 
 # r7 §5 precondition: max 2 new-item introductions per session at A1
 # (docs/pedagogy-research-r7-association-intro.md; stopgap owner until the
 # Phase-2 SessionPhaseController takes over budgets).
 INTRO_BUDGET_PER_SESSION = 2
+
+
+# --- Asked-topic registry (2026-07-28 repetition forensics) -----------------
+# The old `asked` set stored MODE NAMES (note_plan_try recorded
+# decision.mode.value → "conversation", "association" …), which told the
+# model nothing about WHAT was asked. The registry stores semantic keys
+# derived from the composed try: "<frame>:<concept>" ("size:ciudad",
+# "location:casa") or a bare frame ("wellbeing"). Surface-form spotting only
+# — the legitimate §4.2 regex use; imperfect coverage is fine.
+TOPIC_FRAME_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("wellbeing", re.compile(r"c[oó]mo\s+est[aá]s|how\s+are\s+you", re.I)),
+    ("name", re.compile(r"c[oó]mo\s+te\s+llamas|your\s+name", re.I)),
+    ("location", re.compile(r"\bd[oó]nde\b|\bwhere\b", re.I)),
+    ("size", re.compile(r"\bgrande\b|pequeñ|\bsize\b|\bbig\b|\bsmall\b", re.I)),
+]
+_WHAT_VERB_RE = re.compile(rf"(?:¿\s*|\b)qu[eé]\s+([{SPANISH_LETTERS}]+)", re.I)
+
+# ---------------------------------------------------------------------------
+# Topic-concept palette — TABLE-DERIVED (Phase 5 batch 2 flip, BROADENED,
+# docs/reviews-architecture-refactor.md).  The old hardcoded 21-string list
+# is gone; membership now comes from the association table.  Two tiers:
+#   1. Priority tier: the recorded legacy priority ORDER (incident nouns
+#      ciudad/casa lead) — order is behavior-bearing because
+#      topic_key_for_try binds the FIRST palette noun present in the try
+#      («¿Está en una ciudad grande tu casa?» must stay size:ciudad).
+#      Surfaces = table key + its accent-folded variant (word_present does
+#      no accent folding; tutor tries may be typed unaccented).
+#   2. Tail: every OTHER content table key (content_topic_keys — structural
+#      themes/keys excluded), table order.
+# Declared deltas vs the legacy production palette (conv_session._topic_nouns
+# = 21 strings + ALL table keys): (a) pronouns / question words / copulas /
+# numbers / hay no longer bind as topic concepts — CHAR-BUG-007 RESOLVED
+# («¿Dónde estás tú?» → location, not location:tu); (b) the module default
+# now EQUALS the production palette (the old module constant was a narrower
+# divergent default used only when callers passed no nouns).
+# ---------------------------------------------------------------------------
+
+# Legacy priority membership + order (recorded, validated against the table).
+_TOPIC_PRIORITY_KEYS: tuple[str, ...] = (
+    "ciudad", "casa", "playa", "bote", "barco", "café", "música", "comida",
+    "río", "edificio", "perro", "gato", "agua", "sol", "trabajo", "familia",
+    "desayuno", "pan",
+)
+
+
+def topic_palette(table: dict | None) -> list[str]:
+    """Topic-concept palette for ``table``: priority tier first (legacy
+    order, accent variants included), then the table's remaining content
+    keys.  ONE derivation for the module default AND the per-session
+    palette (conv_session._topic_nouns) — no second list."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for key in _TOPIC_PRIORITY_KEYS:
+        for surface in (key, fold_lexical(key)):
+            if surface not in seen:
+                seen.add(surface)
+                out.append(surface)
+    for key in content_topic_keys(table):
+        if key not in seen:
+            seen.add(key)
+            out.append(key)
+    return out
+
+
+def _derived_topic_concept_nouns() -> tuple[str, ...]:
+    table = cached_default_table()
+    missing = [k for k in _TOPIC_PRIORITY_KEYS if k not in table]
+    if missing:
+        raise ValueError(
+            f"topic priority keys not in association table: {missing}"
+        )
+    return tuple(topic_palette(table))
+
+
+TOPIC_CONCEPT_NOUNS: tuple[str, ...] = _derived_topic_concept_nouns()
+
+# ---------------------------------------------------------------------------
+# _concepts_from_spanish needle→concept pairs — TABLE-DERIVED (Phase 5
+# batch 2 flip, CONSERVATIVE).  Membership = the recorded legacy repair-
+# concept set, validated against the table; concept ids = fold_asset_key of
+# the table key (the asset/sidecar id, so repair images keep resolving).
+# Needle strings remain learner/tutor-surface DETECTION text (§1.1a allowed
+# class iv): key + accent-folded variant, plus the recorded authored extras.
+# Deliberate keeps (batch-1 flags): «barco» stays its own TABLE key but maps
+# to the «bote» asset id here (sidecar alias — one referent, one image);
+# «estoy» stays a detection needle for the «estoy bien» formula (any
+# estoy-sentence marks the wellbeing concept, exactly as before).
+# This list feeds comprehension-repair image concepts (routing) → the brief
+# prefers conservative: membership unchanged, now table-validated.
+# ---------------------------------------------------------------------------
+
+_REPAIR_CONCEPT_SPEC: tuple[tuple[str, str], ...] = (
+    # (table key providing the concept id, table key/surface it rides on)
+    ("río", "río"),
+    ("bote", "bote"), ("bote", "barco"),
+    ("café", "café"),
+    ("música", "música"),
+    ("comida", "comida"),
+    ("hola", "hola"),
+    ("estoy bien", "estoy bien"),
+)
+# Authored detection extras (§1.1a class iv — surface text, not inventory).
+_REPAIR_AUTHORED_NEEDLES: dict[str, tuple[str, ...]] = {
+    "estoy bien": ("estoy",),
+}
+
+
+def _derived_spanish_concept_pairs() -> tuple[tuple[str, str], ...]:
+    table = cached_default_table()
+    pairs: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for concept_key, surface_key in _REPAIR_CONCEPT_SPEC:
+        if concept_key not in table or surface_key not in table:
+            raise ValueError(
+                "repair concept spec references non-table keys: "
+                f"{concept_key!r}/{surface_key!r}"
+            )
+        concept = fold_asset_key(concept_key)
+        needles = [surface_key, fold_lexical(surface_key)]
+        needles += list(_REPAIR_AUTHORED_NEEDLES.get(surface_key, ()))
+        for needle in needles:
+            if (needle, concept) not in seen:
+                seen.add((needle, concept))
+                pairs.append((needle, concept))
+    return tuple(pairs)
+
+
+SPANISH_CONCEPT_PAIRS: tuple[tuple[str, str], ...] = (
+    _derived_spanish_concept_pairs()
+)
+
+
+def compose_topic_key(frame: str, concept: str = "") -> str:
+    """Canonical registry key: "<frame>:<concept>" or the bare frame."""
+    f = fold_lexical((frame or "").strip())
+    if not f:
+        return ""
+    c = fold_lexical((concept or "").strip())
+    return f"{f}:{c}" if c else f
+
+
+def topic_key_for_try(
+    try_text: str, nouns=None
+) -> tuple[str, str]:
+    """(frame, concept) semantic key for a composed tutor try, or ("", "").
+
+    Question-frame patterns: dónde/where→location, grande|pequeñ|size→size,
+    cómo estás→wellbeing, cómo te llamas→name, qué+verb→what:<verb>.
+    Concept = first pack/table noun present via textnorm.word_present.
+    """
+    from .textnorm import word_present
+
+    low = (try_text or "").lower()
+    if not low.strip():
+        return "", ""
+    frame = ""
+    for name, pat in TOPIC_FRAME_PATTERNS:
+        if pat.search(low):
+            frame = name
+            break
+    if not frame:
+        m = _WHAT_VERB_RE.search(low)
+        if m:
+            frame = f"what:{fold_lexical(m.group(1))}"
+    if not frame:
+        return "", ""
+    concept = ""
+    for n in (nouns if nouns is not None else TOPIC_CONCEPT_NOUNS):
+        if n and word_present(str(n), low):
+            concept = fold_lexical(str(n))
+            break
+    return frame, concept
 
 
 @dataclass
@@ -23,6 +200,14 @@ class SessionMemory:
 
     shown: set[str] = field(default_factory=set)  # skills learner demonstrated
     asked: set[str] = field(default_factory=set)  # probe keys we already tried
+    # Semantic asked-topic registry ("size:ciudad", "location:casa", …) —
+    # 2026-07-28 repetition forensics; feeds do_not_re_ask + gate:probe_loop.
+    asked_topics: set[str] = field(default_factory=set)
+    # Concepts guard 6 (new_noun) already fired on THIS session — recorded
+    # even when no image/lexicon write happened, so the same concept cannot
+    # re-fire (the old conf<0.25 escape hatch re-fired new_noun:casa forever
+    # on a reset sheet).
+    covered_concepts: set[str] = field(default_factory=set)
     images_shown: set[str] = field(default_factory=set)  # teach-image concepts shown
     last_image_turn: int = -999  # session turn index when last image shown
     # Generation budget (novel images bill $0.039 each; caps in conv_session)
@@ -154,6 +339,19 @@ class SessionMemory:
         if "gusta" in flat or "like" in flat or "preference" in flat:
             self.asked.add("ask_gusta")
 
+    def note_asked_topic(self, frame: str, concept: str = "") -> str:
+        """Record a semantic asked-topic key ("size:ciudad"); returns it."""
+        key = compose_topic_key(frame, concept)
+        if key:
+            self.asked_topics.add(key)
+        return key
+
+    def note_concept_covered(self, concept: str) -> None:
+        """Mark a guard-6 concept as covered for the rest of the session."""
+        c = (concept or "").strip().lower()
+        if c:
+            self.covered_concepts.add(c)
+
     def clear_comprehension_hold(self) -> None:
         self.await_comprehension = False
         self.await_comprehension_ttl = 0
@@ -240,6 +438,8 @@ class SessionMemory:
         return {
             "shown": sorted(self.shown),
             "asked": sorted(self.asked),
+            "asked_topics": sorted(self.asked_topics),
+            "covered_concepts": sorted(self.covered_concepts),
             "images_shown": sorted(self.images_shown),
             "turns_since_image": self.turns_since_image,
             "last_image_turn": self.last_image_turn,
@@ -254,6 +454,52 @@ class SessionMemory:
             "intro_budget_remaining": self.intro_budget_remaining(),
         }
 
+    @classmethod
+    def from_snapshot(cls, data: dict | None) -> "SessionMemory":
+        """Rebuild from ``snapshot()`` output — the E2 persistence restore
+        (Phase 1 batch 2, docs/reviews-architecture-refactor.md).
+
+        ``snapshot()`` alone is lossy (its shape is pinned by prompt/debug
+        consumers): last_learner, last_tutor_ack, images_generated,
+        images_declared_generated and declared_image_cooldown do not appear
+        in it. The SessionState aggregate supplies those as sibling keys in
+        the same dict; absent keys restore to their dataclass defaults.
+        Derived keys (turns_since_image, intro_budget_remaining) are
+        ignored — they recompute from the restored fields.
+        """
+        d = data if isinstance(data, dict) else {}
+
+        def _num(key: str, default: int) -> int:
+            try:
+                v = d.get(key, default)
+                return default if v is None else int(v)
+            except (TypeError, ValueError):
+                return default
+
+        m = cls()
+        m.shown = {str(x) for x in d.get("shown") or []}
+        m.asked = {str(x) for x in d.get("asked") or []}
+        m.asked_topics = {str(x) for x in d.get("asked_topics") or []}
+        m.covered_concepts = {str(x) for x in d.get("covered_concepts") or []}
+        m.images_shown = {str(x) for x in d.get("images_shown") or []}
+        m.last_image_turn = _num("last_image_turn", -999)
+        m.images_generated = _num("images_generated", 0)
+        m.images_declared_generated = _num("images_declared_generated", 0)
+        m.declared_image_cooldown = _num("declared_image_cooldown", 0)
+        m.turns = _num("turns", 0)
+        m.last_learner = str(d.get("last_learner") or "")
+        m.last_tutor_try = str(d.get("last_tutor_try") or "")
+        m.last_tutor_model = str(d.get("last_tutor_model") or "")
+        m.last_tutor_ack = str(d.get("last_tutor_ack") or "")
+        m.last_concepts = [str(c) for c in d.get("last_concepts") or []]
+        m.await_comprehension = bool(d.get("await_comprehension"))
+        m.await_comprehension_ttl = _num("await_comprehension_ttl", 0)
+        m.sheet_seeded = bool(d.get("sheet_seeded"))
+        m.introduced_this_session = [
+            str(k) for k in d.get("introduced_this_session") or []
+        ]
+        return m
+
 
 def re_search_origin(low: str) -> bool:
     return bool(
@@ -263,21 +509,12 @@ def re_search_origin(low: str) -> bool:
 
 
 def _concepts_from_spanish(text: str) -> list[str]:
-    from .observe import word_present
+    from .textnorm import word_present
 
     low = (text or "").lower()
     out: list[str] = []
-    mapping = [
-        ("río", "rio"), ("rio", "rio"),
-        ("bote", "bote"), ("barco", "bote"),
-        ("café", "cafe"), ("cafe", "cafe"),
-        ("música", "musica"), ("musica", "musica"),
-        ("comida", "comida"),
-        ("hola", "hola"),
-        ("estoy", "estoy_bien"),
-    ]
     seen: set[str] = set()
-    for needle, concept in mapping:
+    for needle, concept in SPANISH_CONCEPT_PAIRS:
         # Word-boundary match: 'rio' must not fire inside 'serio'/'vario'
         if word_present(needle, low) and concept not in seen:
             seen.add(concept)

@@ -78,6 +78,21 @@ def _next_best_blob(sheet: dict) -> str:
     return " ".join(str(v) for v in nb.values() if isinstance(v, str)).lower()
 
 
+def _session_excluded(session_snapshot: dict | None) -> set[str]:
+    """Session-covered concepts the router must never plan a first introduce
+    for (audit (a1) 2026-07-28): images_shown ∪ covered_concepts — a guard-6
+    cover or a shown teach image is session exposure even when no ledger
+    write landed. Applies even to an explicitly forced ``key=`` (adjudicated:
+    session-local honesty beats caller convenience)."""
+    snap = session_snapshot or {}
+    return {
+        str(x).strip().lower()
+        for x in list(snap.get("images_shown") or [])
+        + list(snap.get("covered_concepts") or [])
+        if str(x).strip()
+    }
+
+
 def _eligible(sheet: dict, table: dict, key: str) -> bool:
     """Introducible: in the table, in the pack, unintroduced, not confident."""
     entry = table.get(key)
@@ -97,6 +112,7 @@ def candidate_keys(
     table: dict,
     *,
     pack_topics: list[str] | None = None,
+    session_snapshot: dict | None = None,
 ) -> list[str]:
     """Introducible table keys, teach-order first.
 
@@ -104,14 +120,18 @@ def candidate_keys(
     text) first, then the greetings/farewells/courtesy openers, then the
     rest — each bucket in table order. ``pack_topics`` is accepted for API
     stability (future in-topic filtering); the thin ship orders from
-    next_best + themes only.
+    next_best + themes only. ``session_snapshot`` excludes concepts the
+    session already covered/imaged (audit (a1) 2026-07-28).
     """
+    exclude = _session_excluded(session_snapshot)
     blob = _next_best_blob(sheet)
     related: list[str] = []
     priority: list[str] = []
     rest: list[str] = []
     for key, entry in table.items():
         if not _eligible(sheet, table, key):
+            continue
+        if key in exclude or key.lower() in exclude:
             continue
         theme = str(entry.get("theme") or "")
         if blob and (
@@ -148,11 +168,16 @@ def plan_introduction(
     if remaining <= 0 or len(introduced) >= SESSION_INTRO_BUDGET:
         return None
 
+    exclude = _session_excluded(snap)
     if key is not None:
         if not _eligible(sheet, table, key):
             return None
+        # Audit (a1) 2026-07-28, adjudicated choice: session cover/image
+        # exclusion applies EVEN when the key is explicitly forced.
+        if key in exclude or key.lower() in exclude:
+            return None
     else:
-        candidates = candidate_keys(sheet, table)
+        candidates = candidate_keys(sheet, table, session_snapshot=snap)
         if not candidates:
             return None
         key = candidates[0]

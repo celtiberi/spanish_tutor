@@ -199,5 +199,31 @@
   "sensible": {"gloss_en": "sensitive", "cognate_en": null, "false_friend": "NOT sensible; means sensitive", "keyword_en": null, "imageable": false, "theme": "descriptions", "in_pack": false},
   "largo": {"gloss_en": "long", "cognate_en": null, "false_friend": "NOT large; means long", "keyword_en": null, "imageable": true, "theme": "descriptions", "in_pack": false},
 
-  "hay": {"gloss_en": "there is / there are", "cognate_en": null, "false_friend": null, "keyword_en": null, "imageable": false, "theme": "function"}
+  "hay": {"gloss_en": "there is / there are", "cognate_en": null, "false_friend": null, "keyword_en": null, "imageable": false, "theme": "function"},
+
+  "bote": {"gloss_en": "small boat", "cognate_en": "boat", "false_friend": null, "keyword_en": null, "imageable": true, "theme": "vehicles", "in_pack": false},
+  "barco": {"gloss_en": "boat / ship", "cognate_en": null, "false_friend": null, "keyword_en": "embark (board a boat)", "imageable": true, "theme": "vehicles", "in_pack": false},
+
+  "música": {"gloss_en": "music", "cognate_en": "music", "false_friend": null, "keyword_en": null, "imageable": true, "theme": "arts", "in_pack": false},
+
+  "comida": {"gloss_en": "food / meal", "cognate_en": null, "false_friend": null, "keyword_en": "comestible (edible)", "imageable": true, "theme": "food", "in_pack": false},
+  "desayuno": {"gloss_en": "breakfast", "cognate_en": null, "false_friend": null, "keyword_en": "break the ayuno (fast)", "imageable": true, "theme": "food", "in_pack": false},
+
+  "río": {"gloss_en": "river", "cognate_en": null, "false_friend": null, "keyword_en": "Rio Grande (big river)", "imageable": true, "theme": "nature", "in_pack": false},
+  "playa": {"gloss_en": "beach", "cognate_en": null, "false_friend": null, "keyword_en": null, "imageable": true, "theme": "nature", "in_pack": false},
+  "sol": {"gloss_en": "sun", "cognate_en": "solar", "false_friend": null, "keyword_en": null, "imageable": true, "theme": "nature", "in_pack": false},
+
+  "edificio": {"gloss_en": "building", "cognate_en": "edifice", "false_friend": null, "keyword_en": null, "imageable": true, "theme": "places", "in_pack": false},
+
+  "perro": {"gloss_en": "dog", "cognate_en": null, "false_friend": null, "keyword_en": null, "imageable": true, "theme": "animals", "in_pack": false},
+  "gato": {"gloss_en": "cat", "cognate_en": null, "false_friend": null, "keyword_en": null, "imageable": true, "theme": "animals", "in_pack": false},
+
+  "calor": {"gloss_en": "heat (hace calor)", "cognate_en": "calorie", "false_friend": null, "keyword_en": null, "imageable": true, "theme": "weather", "in_pack": false},
+  "frío": {"gloss_en": "cold", "cognate_en": "frigid", "false_friend": null, "keyword_en": null, "imageable": true, "theme": "weather", "in_pack": false},
+
+  "me gusta": {"gloss_en": "I like", "cognate_en": null, "false_friend": null, "keyword_en": "gusto (enjoyment)", "imageable": true, "theme": "preferences", "in_pack": false},
+
+  "soy de": {"gloss_en": "I am from", "cognate_en": null, "false_friend": null, "keyword_en": null, "imageable": false, "theme": "introductions"},
+
+  "estoy bien": {"gloss_en": "I am fine", "cognate_en": null, "false_friend": null, "keyword_en": null, "imageable": false, "theme": "how_are_you"}
 }

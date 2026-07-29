@@ -20,6 +20,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from .textnorm import SPANISH_LETTERS
+
 # Ordered for composition (how the student should read the turn)
 PART_ORDER = (
     "acknowledge",  # meaning received / rapport
@@ -53,7 +55,8 @@ _OUTER_RE = re.compile(r"</?tutor\s*>", re.I)
 # Concept token FAILS CLOSED (Grok countersign 2026-07-28): full-token match
 # only — 'sol2', 'el-sol', 'http://…' must not silently truncate into a
 # billable generate. Quoted attr required; body form may join two words.
-_CONCEPT_TOKEN = r"[a-záéíóúüñ_]{1,24}"
+# Letter class from textnorm (Phase 2) + underscore for concept ids.
+_CONCEPT_TOKEN = rf"[{SPANISH_LETTERS}_]{{1,24}}"
 _IMAGE_SELF_RE = re.compile(
     rf"<image\b[^>]*\bconcept\s*=\s*[\"']({_CONCEPT_TOKEN})[\"'][^>]*/?>"
     rf"(?:\s*</image>)?",

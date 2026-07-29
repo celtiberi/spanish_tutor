@@ -39,7 +39,11 @@ from . import tts as tts_mod
 
 STATIC_DIR = Path(__file__).resolve().parent / "web_static"
 COOKIE = "ml_teacher_sid"
-SESSION_TTL_SEC = 60 * 60 * 8  # 8h
+SESSION_TTL_SEC = 60 * 60 * 8  # 8h (cookie max_age)
+# Orphan reaper (2026-07-28 reset-race forensics: session 20260728-120331
+# leaked with no session_end): any session with no activity for 2h is
+# close()d — writing its session_end — and dropped.
+IDLE_REAP_SEC = 60 * 60 * 2  # 2h
 
 # Stale-process detection: a long-lived `python -m tutor.web_app` keeps OLD
 # code no matter what lands on disk (2026-07-28 incident: a July-26 process
@@ -103,20 +107,39 @@ class SpeakIn(BaseModel):
     rate: float | None = Field(default=None, ge=0.7, le=1.2)
 
 
+def _close_meta(meta: dict, *, persist_sheet: bool = True) -> None:
+    """Close one session meta record (session_end written; never raises)."""
+    sess: ConversationalSession | None = (meta or {}).get("session")
+    if sess:
+        try:
+            sess.close(persist_sheet=persist_sheet)
+        except Exception:
+            pass
+
+
 def _purge_stale() -> None:
+    """Reap idle sessions: no activity for IDLE_REAP_SEC → close (writes
+    session_end) and drop. Guard against orphan leaks (2026-07-28)."""
     now = time.time()
     dead = [
         sid for sid, meta in _sessions.items()
-        if now - meta.get("touched", 0) > SESSION_TTL_SEC
+        if now - meta.get("touched", 0) > IDLE_REAP_SEC
     ]
     for sid in dead:
-        sess: ConversationalSession | None = _sessions[sid].get("session")
-        if sess:
-            try:
-                sess.close()
-            except Exception:
-                pass
-        del _sessions[sid]
+        _close_meta(_sessions.pop(sid))
+
+
+def _reap_all_locked(*, persist_sheet: bool = True) -> int:
+    """Close and drop EVERY live session (assumes _lock held). Used when a
+    new session replaces all previous ones (reset / dead cookie): a local
+    single-user app has one browser cookie jar, so sessions the cookie no
+    longer points at are unreachable orphans that would otherwise leak
+    without a session_end (2026-07-28: session 20260728-120331)."""
+    n = 0
+    for sid in list(_sessions):
+        _close_meta(_sessions.pop(sid), persist_sheet=persist_sheet)
+        n += 1
+    return n
 
 
 def _get_or_create(sid: str | None, *, model: str | None = None) -> tuple[str, ConversationalSession]:
@@ -125,6 +148,11 @@ def _get_or_create(sid: str | None, *, model: str | None = None) -> tuple[str, C
         if sid and sid in _sessions:
             _sessions[sid]["touched"] = time.time()
             return sid, _sessions[sid]["session"]
+        if sid:
+            # Dead cookie (2026-07-28 reset race): the browser's sid points
+            # nowhere, so every remaining session is an unreachable orphan —
+            # close them (session_end) before creating the replacement.
+            _reap_all_locked()
         new_id = secrets.token_urlsafe(16)
         session = ConversationalSession(
             model=model or config.MODEL,
@@ -436,11 +464,12 @@ def create_app() -> FastAPI:
         except Exception:
             pass
 
-        # Always open a new tutor turn on fresh page load
-        session.history = []
-        session.messages_for_ui = []
-        session._focus_panel = None
-        session._focus_key = None
+        # Always open a new tutor turn on page load. Both branches route
+        # through the unified new-chat reset inside open_session() (Phase 1
+        # batch 2, SessionState.reset("new_chat")): transcript, focus
+        # fields, session memory, mode/phase/task state, debug ring and the
+        # per-chat cost tracker all reset there — no inline partial clears
+        # (the batch-1 census leak).
         turn = session.open_session()
         if turn.error:
             raise HTTPException(status_code=502, detail=turn.error)
@@ -491,8 +520,11 @@ def create_app() -> FastAPI:
 
     @app.get("/api/progress")
     def get_progress(request: Request):
-        """Journey rail: session-clustered milestone events + live-state join
-        + countable header (docs/design-progression-view.md, as amended)."""
+        """Journey rail: DAY-clustered milestone events (sessions merged;
+        session_id kept per event for tooltip/debug) + humanized display
+        names + live-state join + countable header
+        (docs/design-progression-view.md, as amended; day clustering and
+        humanization per the 2026-07-28 rail incident)."""
         sid = request.cookies.get(COOKIE)
         _, session, _ = _require(sid)
         from .progress_ledger import build_progress_payload
@@ -500,28 +532,58 @@ def create_app() -> FastAPI:
         return build_progress_payload(
             session.sheet,
             session_id=getattr(session, "progress_session_id", ""),
+            table=getattr(session, "association_table", None),
         )
+
+    @app.get("/api/debug/requests")
+    def debug_requests(request: Request):
+        """Debug box (local app, no auth): the current session's last
+        outbound tutor requests + response metadata, NEWEST FIRST. Served
+        from the in-memory ring buffer only — these payloads are never
+        written to disk logs. No session → empty list (valid JSON always)."""
+        sid = request.cookies.get(COOKIE)
+        if not sid or sid not in _sessions:
+            return {"entries": [], "count": 0, "session": False}
+        with _lock:
+            meta = _sessions.get(sid)
+            if not meta:
+                return {"entries": [], "count": 0, "session": False}
+            meta["touched"] = time.time()
+            session = meta["session"]
+        entries = list(getattr(session, "debug_requests", None) or [])
+        entries.reverse()  # newest first
+        return {
+            "entries": entries,
+            "count": len(entries),
+            "session": True,
+            "ring_size": len(entries),
+        }
 
     @app.post("/api/session/reset")
     def reset(body: ResetIn, request: Request, response: Response):
         sid = request.cookies.get(COOKIE)
-        # New session id; optionally wipe character sheet
+        # FULL REPLACE (2026-07-28 reset-race forensics): reset closes the
+        # cookie's session AND every other live session (all become
+        # unreachable once the new sid cookie is set), so nothing can leak
+        # without a session_end. Then one new session is created and opened.
         old_sid = sid
         old_sheet_path = None
-        if old_sid and old_sid in _sessions:
-            with _lock:
-                old = _sessions.pop(old_sid, None)
-            if old and old.get("session"):
-                try:
-                    old_sheet_path = getattr(old["session"], "sheet_path", None)
-                    if body.reset_sheet:
-                        # Wipe disk first; do not let close() re-save stale memory
-                        old["session"].reset_sheet()
-                        old["session"].close(persist_sheet=False)
-                    else:
-                        old["session"].close(persist_sheet=True)
-                except Exception:
-                    pass
+        with _lock:
+            old = _sessions.pop(old_sid, None) if old_sid else None
+            orphans = [_sessions.pop(k) for k in list(_sessions)]
+        if old and old.get("session"):
+            try:
+                old_sheet_path = getattr(old["session"], "sheet_path", None)
+                # On reset_sheet: close WITHOUT persisting (no stale re-save
+                # possible); the disk wipe rides the nuclear-wipe block
+                # below and the NEW session's reset_sheet() below appends
+                # the single learner-epoch mark (Phase 1 batch 2 — calling
+                # the old session's reset_sheet here would double-mark).
+                old["session"].close(persist_sheet=not body.reset_sheet)
+            except Exception:
+                pass
+        for meta in orphans:
+            _close_meta(meta, persist_sheet=True)
         # Nuclear wipe even if no live session (stale cookie / cold start)
         if body.reset_sheet:
             from .conv_session import DEFAULT_SHEET_PATH

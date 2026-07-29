@@ -104,7 +104,7 @@ def _taking_root_seed() -> dict:
 CONV_TRAJECTORIES: list[dict[str, Any]] = [
     {
         "id": "c01_placement_open",
-        "description": "Blank sheet open → placement mode + teach move.",
+        "description": "Blank sheet open → placement mode + teach move + English orientation (true-zero, incident 2026-07-28).",
         "seed_sheet": None,  # blank
         "turns": [],
         "expect": {
@@ -117,11 +117,15 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
             "gate": [
                 {"forbid_faults": ["gate:sheet_leak"]},
             ],
+            # True-zero open must carry English support: at least one English
+            # lexicon hit or a gloss parenthetical in the visible open reply.
+            "open_english": True,
             "sheet_final": {},
         },
         "mechanical": [
             "mode_sequence",
             "teach_moves",
+            "open_english_orientation",
             "gate_contract",
             "no_empty_reply",
             "no_turn_error",

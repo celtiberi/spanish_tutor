@@ -19,6 +19,78 @@ class TestSelectMode(unittest.TestCase):
         # Placement's hola image belongs to the true session-open turn only
         self.assertEqual(d.image_concept, "hola")
 
+    def test_blank_open_requires_english_orientation(self):
+        # Incident 2026-07-28: reset beginner got 100% Spanish on open.
+        # PEDAGOGY P1 + §2.3: a true-zero open must carry English scaffold.
+        d = select_mode(
+            default_sheet(),
+            is_open=True,
+            observations={"blank_sheet": True, "signals": []},
+        )
+        self.assertEqual(d.reason, "blank_open_placement")
+        instr = d.instructions
+        self.assertIn("TRUE-ZERO OPENING", instr)
+        self.assertIn("English welcome sentence", instr)
+        self.assertIn("English gloss (≤6 words)", instr)
+        self.assertIn("most 3 Spanish items", instr)
+        self.assertIn("Try: Me llamo ___ — my name is ___", instr)
+        # De-escalation is in the same instructions: zero state only
+        self.assertIn("ANY Spanish", instr)
+        self.assertIn("mostly-Spanish register", instr)
+        # Wide ceiling (placement still probes) survives the rewrite
+        self.assertIn("Wide-ceiling", instr)
+
+    def test_known_open_has_no_english_orientation(self):
+        # The zero-register text must not leak to known learners' opens.
+        sheet = default_sheet()
+        sheet["skills"]["IP-01"] = {"status": "emerging", "confidence": 0.4}
+        d = select_mode(
+            sheet,
+            is_open=True,
+            observations={"blank_sheet": False, "signals": []},
+        )
+        self.assertEqual(d.reason, "known_open_from_sheet")
+        self.assertNotIn("TRUE-ZERO", d.instructions)
+        self.assertNotIn("English welcome sentence", d.instructions)
+        # Standard known-open register unchanged
+        self.assertIn("Warm SIMPLE A1 Spanish only", d.instructions)
+
+    def test_blank_nonopen_carries_zero_register_note(self):
+        # Blank persists after the open until spanish_ok — the English
+        # authorization rides every decision meanwhile (graded de-escalation).
+        d = select_mode(
+            default_sheet(),
+            is_open=False,
+            learner="what?",
+            observations={"blank_sheet": True, "signals": ["english_only"]},
+            mode_state=ModeSessionState(),
+        )
+        self.assertNotEqual(d.reason, "blank_open_placement")
+        self.assertIn("TRUE-ZERO REGISTER", d.instructions)
+        self.assertIn("English gloss", d.instructions)
+
+    def test_blank_nonopen_spanish_ok_drops_zero_register(self):
+        # First successful Spanish reverts to the standard register even if
+        # the sheet has not yet accrued evidence.
+        d = select_mode(
+            default_sheet(),
+            is_open=False,
+            learner="hola, estoy bien",
+            observations={"blank_sheet": True, "signals": ["spanish_ok"]},
+            mode_state=ModeSessionState(),
+        )
+        self.assertNotIn("TRUE-ZERO REGISTER", d.instructions)
+
+    def test_nonblank_never_carries_zero_register(self):
+        d = select_mode(
+            default_sheet(),
+            is_open=False,
+            learner="what?",
+            observations={"blank_sheet": False, "signals": ["english_only"]},
+            mode_state=ModeSessionState(),
+        )
+        self.assertNotIn("TRUE-ZERO REGISTER", d.instructions)
+
     def test_bote_triggers_association_image(self):
         sheet = default_sheet()
         sheet["skills"]["IP-01"] = {"status": "emerging", "confidence": 0.4}
@@ -215,6 +287,62 @@ class TestSelectMode(unittest.TestCase):
         self.assertEqual(d.reason, "boredom_new_topic")
 
 
+class TestGuardSixEscapeHatchClosed(unittest.TestCase):
+    """2026-07-28 repetition forensics: guard 6 (concrete noun first-time)
+    had a conf<0.25 escape hatch overriding the images_shown dedup — on a
+    reset sheet (empty lexicon, conf 0.0 forever) every learner mention of
+    «casa» re-fired new_noun:casa with byte-identical targets/instructions/
+    image (session 20260728-120335 turns 4-5). Shown/covered membership is
+    now authoritative."""
+
+    def _sheet(self):
+        sheet = default_sheet()
+        sheet["skills"]["IP-01"] = {"status": "emerging", "confidence": 0.4}
+        return sheet
+
+    def test_shown_concept_never_refires_even_at_zero_conf(self):
+        # Reset learner: casa has NO lexicon evidence (conf 0.0). The old
+        # hatch returned casa anyway; shown membership must now win.
+        d = select_mode(
+            self._sheet(),
+            learner="mi casa es pequena",
+            observations={"blank_sheet": False, "signals": ["spanish_ok"]},
+            images_shown={"casa"},
+            mode_state=ModeSessionState(),
+        )
+        self.assertNotEqual(d.reason, "new_noun:casa")
+        self.assertNotEqual(d.image_concept, "casa")
+
+    def test_first_mention_still_fires(self):
+        # Control: with nothing shown, guard 6 still associates on first use.
+        d = select_mode(
+            self._sheet(),
+            learner="mi casa es pequena",
+            observations={"blank_sheet": False, "signals": ["spanish_ok"]},
+            images_shown=set(),
+            mode_state=ModeSessionState(),
+        )
+        self.assertEqual(d.reason, "new_noun:casa")
+        self.assertEqual(d.image_concept, "casa")
+
+    def test_covered_concepts_union_blocks_refire(self):
+        # conv_session passes images_shown | covered_concepts: a guard-6
+        # concept recorded as covered (no image/lexicon write needed) cannot
+        # re-fire this session.
+        from tutor.session_memory import SessionMemory
+
+        mem = SessionMemory()
+        mem.note_concept_covered("casa")
+        d = select_mode(
+            self._sheet(),
+            learner="mi casa es pequena",
+            observations={"blank_sheet": False, "signals": ["spanish_ok"]},
+            images_shown=mem.images_shown | mem.covered_concepts,
+            mode_state=ModeSessionState(),
+        )
+        self.assertNotEqual(d.reason, "new_noun:casa")
+
+
 class TestScenes(unittest.TestCase):
     def test_load_boat_scenes(self):
         scenes = load_scenes()
@@ -404,6 +532,68 @@ class TestRepairImageRelevance(unittest.TestCase):
         )
         self.assertEqual(d.mode, Mode.COMPREHENSION_REPAIR)
         self.assertEqual(d.image_concept, "hola")
+
+
+class TestSceneHostRules(unittest.TestCase):
+    """PHASE HOST rules (Proposal A micro-batch, 2026-07-29 —
+    docs/reviews-architecture-refactor.md policy round, CHAR-BUG-005
+    RESOLVED-BY-DELETION): guard-7's topic scene pick is suppressed on
+    new_input/close activities (introduce owns new_input, close owns close
+    per PEDAGOGY §6.4); topic-matched scene_goal stays reachable on
+    task/free/retrieval; the prefer-unmodeled/needs-model fallback is
+    deleted — no topic match, no scene capture."""
+
+    def _sheet(self):
+        s = default_sheet()
+        s["skills"]["IP-01"].update(
+            {"confidence": 0.6, "status": "known", "evidence": ["said hola"]}
+        )
+        return s
+
+    def _decide(self, activity_hint, learner="Me gusta mucho el pan."):
+        sheet = self._sheet()
+        return select_mode(
+            sheet,
+            is_open=False,
+            learner=learner,
+            observations={"blank_sheet": False, "signals": ["spanish_ok"]},
+            mode_state=ModeSessionState(),
+            open_scenes=open_scenes_for_sheet(sheet),
+            activity_hint=activity_hint,
+        )
+
+    def test_scene_goal_reachable_on_task_free_retrieval(self):
+        # KEEP-5: live-topic passive scene pursuit survives the deletion on
+        # every activity that may host it (golden_due_turn's retrieval case
+        # end-to-end; task/free/None here).
+        for hint in ("task", "free", "retrieval", None):
+            d = self._decide(hint)
+            self.assertEqual(d.mode, Mode.CONVERSATION, hint)
+            self.assertTrue(
+                d.reason.startswith("scene_goal:"), (hint, d.reason)
+            )
+
+    def test_scene_pick_suppressed_on_new_input(self):
+        # Rule 6: introduce owns new_input — the same topic match falls
+        # through to default_conversation so the INTRODUCE block can fire.
+        d = self._decide("new_input")
+        self.assertEqual(d.reason, "default_conversation")
+        self.assertIn("SESSION PHASE: NEW INPUT", d.instructions)
+
+    def test_scene_pick_suppressed_on_close(self):
+        # Rule 6: close owns close — fallthrough keeps the CLOSE prefix and
+        # summary path reachable (the batch-4 stopped-note's lost
+        # close_phase_offered must not recur).
+        d = self._decide("close")
+        self.assertEqual(d.reason, "default_conversation")
+        self.assertIn("SESSION PHASE: CLOSE", d.instructions)
+
+    def test_no_topic_match_no_scene_capture(self):
+        # The deleted _scene_needs_model fallback used to force the FIRST
+        # unmodeled scene onto any zero-score turn (fresh state = nothing
+        # marked). Now a turn without a live topic match falls through.
+        d = self._decide("free", learner="Sí, hablo con mi familia cada día.")
+        self.assertEqual(d.reason, "default_conversation")
 
 
 if __name__ == "__main__":

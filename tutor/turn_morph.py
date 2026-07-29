@@ -25,6 +25,10 @@ from __future__ import annotations
 
 import re
 
+# Phase 2 (docs/reviews-architecture-refactor.md): the one Spanish letter
+# class lives in textnorm; historical local name kept for the token scan.
+from .textnorm import SPANISH_LETTERS as _ES
+
 # A1 present-tense mini-breakdowns (4 canonical persons — never full
 # six-person / multi-tense dumps; that is untaught territory at A1).
 A1_VERB_MORPH: dict[str, dict] = {
@@ -173,8 +177,6 @@ _EN_TO_LEMMA: dict[str, str] = {
     "want": "querer", "wanting": "querer",
     "have": "tener", "having": "tener",
 }
-
-_ES = "a-záéíóúüñ"
 
 # Grammar/meta engagement markers — the learner is asking ABOUT language.
 _META_MARKERS = re.compile(

@@ -7,7 +7,7 @@ pip install -e ".[web]"   # or: pip install fastapi uvicorn
 python -m tutor.web_app   # http://127.0.0.1:8765
 ```
 
-Env: same as CLI (`GEMINI_API_KEY` / `GROK_API_KEY` / `ANTHROPIC_API_KEY`, `TUTOR_MODEL`).
+Env: `GEMINI_API_KEY` / `GROK_API_KEY` / `ANTHROPIC_API_KEY`, `TUTOR_MODEL`.
 
 ## Architecture
 
@@ -37,7 +37,6 @@ Focus enrich runs after turns (and when stretch/`next_best` changes). It never i
 
 | Surface | Module |
 |---------|--------|
-| CLI | `python -m tutor.conversational` |
 | Web | `python -m tutor.web_app` |
 | Engine | `tutor.conv_session.ConversationalSession` |
 
@@ -111,28 +110,10 @@ Do **not** put API keys in the browser; STT/TTS keys stay server-side.
 
 ## Product notes
 
-- Character sheet panel = same living model as CLI `/sheet`.
+- Character sheet panel = the living ability-sheet model.
 - Tool updates still run after turns; notes appear under the chat.
 - Multi-user production would need real auth + per-user sheet storage (today: cookie session + shared default sheet path).
 
 ## AI student simulation (testing)
 
-Run a Grok-powered learner against the tutor on a **separate** sheet:
-
-```sh
-# requires GROK_API_KEY (+ tutor GEMINI_API_KEY by default)
-python -m tutor.ai_student --turns 6 --persona alex_boat
-python -m tutor.ai_student --persona maya_shy --keep-sheet --turns 4
-python -m tutor.ai_student --level intermediate_low --persona jordan_travel --turns 6
-python -m tutor.ai_student --json-out logs/ai_student_report.json
-```
-
-- Sheet: `logs/ai_student_sheet.json` (not Patrick’s live sheet)
-- Student model: `AI_STUDENT_MODEL` (default `grok-4.5`)
-- Teacher model: `TUTOR_MODEL`
-- Personas: `alex_boat` (yo/está), `maya_shy` (ser/estar), `jordan_travel` (stronger)
-- Ability bands (`--level`): `novice_low`, `novice_mid`, `intermediate_low`
-- Student keeps structured `learner_state` each turn (forms, confidence, can_try_now) + full chat memory
-- Prints turn log + verification checks (error tracking, learning, recasts)
-
-See `tutor/ai_student.py` and `prompts/ai_student.md`.
+Deleted 2026-07-28 with the legacy stack (`tutor/ai_student.py`; git history is the archive).

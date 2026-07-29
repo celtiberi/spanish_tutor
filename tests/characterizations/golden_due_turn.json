@@ -1,0 +1,113 @@
+{
+  "error": null,
+  "gate": {
+    "faults": [],
+    "ok": true,
+    "scaffold_saved": {}
+  },
+  "learner": "Me gusta mucho el pan.",
+  "memory": {
+    "asked": [
+      "ask_gusta",
+      "conversation"
+    ],
+    "asked_topics": [],
+    "images_shown": [],
+    "intro_budget_remaining": 2,
+    "introduced_this_session": [],
+    "shown": [
+      "greet",
+      "gusta",
+      "spanish_ok"
+    ],
+    "turns": 1
+  },
+  "mode_state": {
+    "english_only_streak": 0,
+    "form_focus_cooldown": {},
+    "hard_breaks_this_session": 0,
+    "last_mode": "conversation",
+    "last_resolved_form": null,
+    "learner_turn_index": 2,
+    "turns_since_hard_break": 999
+  },
+  "model_requests": 2,
+  "notes": [
+    "due_outcome_success:pan",
+    "mode=conversation",
+    "mode_reason=scene_goal:boat_likes",
+    "due_elicit_offered:agua",
+    "image_gen_disabled:cafe",
+    "output_gate_ok",
+    "rules_backup",
+    "hard_observer",
+    "can-dos=*",
+    "scaffold=ES-forward+EN-rescue",
+    "focus_async",
+    "structured_reply",
+    "pedagogy:ok",
+    "pedagogy:known_learner_open",
+    "phase=ai_tutor",
+    "activity=retrieval",
+    "phase_consumed=True",
+    "hard_break=False",
+    "plan_source=mode_runtime",
+    "teacher_mode=planned",
+    "open_scenes=boat_likes,boat_meet_captain,boat_where_boat",
+    "mem_shown=greet,gusta,spanish_ok",
+    "mem_asked=ask_gusta,conversation",
+    "image_decision:no_pedagogy_trigger"
+  ],
+  "parts_keys": [
+    "acknowledge",
+    "image_decision",
+    "mode",
+    "mode_decision",
+    "model",
+    "open_phase",
+    "output_gate",
+    "pedagogy",
+    "plan",
+    "structured",
+    "teach_images",
+    "try"
+  ],
+  "phase": {
+    "activity": "retrieval",
+    "frozen_turns": 0,
+    "index": 0,
+    "turns_in_phase": 2
+  },
+  "progress_events": [],
+  "reply": "¡Qué rico el pan!\n\n**Yo bebo agua con el pan.**\n\n¿Bebes mucha agua?",
+  "save_sheet_calls": [
+    "_commit_sheet"
+  ],
+  "sheet": {
+    "lexicon:agua": {
+      "confidence": 0.3,
+      "interval_days": 1,
+      "introduced_at": "<SEED_DAY>",
+      "next_due": "<YESTERDAY>",
+      "scaffold": "gloss",
+      "status": "fragile",
+      "successive_successes": 0
+    },
+    "lexicon:pan": {
+      "confidence": 0.3,
+      "interval_days": 1,
+      "introduced_at": "<SEED_DAY>",
+      "next_due": "<TOMORROW>",
+      "scaffold": "gloss",
+      "status": "fragile",
+      "successive_successes": 1
+    }
+  },
+  "stop_reason": "end_turn",
+  "usage": {
+    "cached_input_tokens": 0,
+    "input_tokens": 120,
+    "output_tokens": 60,
+    "thinking_tokens": 0
+  }
+}

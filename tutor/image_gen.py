@@ -12,7 +12,9 @@ from pathlib import Path
 from typing import Any
 
 from . import config
-from .teach_assets import CONCEPT_LEXICON, _default_prompt, register_generator
+# Phase 5 batch 2: CONCEPT_LEXICON is deleted — the pack asset sidecar is
+# the sole metadata source, read through teach_assets._lexicon().
+from .teach_assets import _default_prompt, _lexicon, register_generator
 
 log = logging.getLogger(__name__)
 
@@ -88,7 +90,7 @@ def generate_image_bytes(prompt: str, *, model: str | None = None) -> bytes | No
 
 def gemini_teach_generator(concept: str, prompt: str, dest: Path) -> bool:
     """teach_assets.register_generator callback: (concept, prompt, dest) -> ok."""
-    meta = CONCEPT_LEXICON.get(concept) or {}
+    meta = _lexicon().get(concept) or {}
     form = meta.get("form") or concept
     p = prompt or meta.get("prompt") or _default_prompt(concept, form)
     data = generate_image_bytes(str(p))

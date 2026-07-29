@@ -1,0 +1,3 @@
+{
+  "_comment": "Phase 5 §1.1a migration deprecation list (docs/reviews-architecture-refactor.md). Concepts referenced by the legacy inventories that are DELIBERATELY not association-table keys yet, each with a recorded reason. tests/test_inventory_coverage.py enforces: every legacy-list concept is a table key OR listed here. EMPTY since Phase 5 batch 2 (2026-07-29): the one deferred entry, 'estoy bien', became a real in-pack table key (it IS pack content — the U2 estar wellbeing exchange) with its gate-scan delta DECLARED and golden_blank_zero_register_turn re-pinned (the longest-match overlap filter now keeps the 'estoy bien' MWU span over bare 'bien' — correct behavior per the longest-match law)."
+}

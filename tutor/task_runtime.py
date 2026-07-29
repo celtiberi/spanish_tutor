@@ -18,35 +18,14 @@ loop happens in a later pass.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from .observe import word_present
-
-_ES_LETTERS = "a-záéíóúüñ"
-
-
-def phrase_present(needle: str, text: str) -> bool:
-    """Word/phrase-boundary containment with tutor/observe.py discipline.
-
-    Single words delegate to observe.word_present (whole-word match with
-    simple plural tolerance; no accent folding — evidence lists carry
-    unaccented variants explicitly). Multi-word phrases match each word at
-    the same boundaries, joined by whitespace, with the plural tolerance on
-    the final word — «leche» must never match inside «lechero», and «cómo
-    estás» must match inside «Hola, ¿cómo estás hoy?».
-    """
-    words = [w for w in (needle or "").lower().split() if w]
-    if not words:
-        return False
-    if len(words) == 1:
-        return word_present(words[0], text)
-    body = r"\s+".join(re.escape(w) for w in words)
-    return bool(re.search(
-        rf"(?<![{_ES_LETTERS}]){body}(?:e?s)?(?![{_ES_LETTERS}])",
-        (text or "").lower(),
-    ))
+# Historical home of phrase_present — the implementation now lives in
+# tutor/textnorm.py (Phase 2, docs/reviews-architecture-refactor.md);
+# re-exported here because tests and callers import it from task_runtime.
+# noqa: F401 (re-export façade).
+from .textnorm import phrase_present  # noqa: F401
 
 
 @dataclass

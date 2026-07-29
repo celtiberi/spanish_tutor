@@ -76,11 +76,13 @@ PERSONA_ENABLED = TUTOR_PERSONA not in ("off", "0", "false", "no", "none")
 # Override with CONTROLLER_PLANNER / CONTROLLER_EXECUTOR or CLI flags.
 CONTROLLER_PLANNER = os.environ.get("CONTROLLER_PLANNER", "grok-4.5")
 CONTROLLER_EXECUTOR = os.environ.get("CONTROLLER_EXECUTOR", MODEL)
-# Teacher path:
-#   planned|ai (default) — AI tutor with sheet + memory + pedagogy direction
-#   rules — optional PlanCard ladder (flashcard-prone; experiments only)
-#   legacy — single harness LLM without structured plan notes
+# Teacher path: planned|plan|new|ai (aliases of the ONE runtime — AI tutor
+# with sheet + memory + pedagogy direction). The former "rules" PlanCard
+# ladder and "legacy" harness were DELETED (E4/E4b,
+# docs/reviews-architecture-refactor.md, 2026-07-28); any other value is a
+# hard ValueError at session construction.
 TEACHER_MODE = (os.environ.get("TEACHER_MODE", "planned") or "planned").strip().lower()
+PLANNED_TEACHER_MODES = ("planned", "plan", "new", "ai")
 # Teach images: cache-first; on miss generate same-turn when enabled + generator.
 # Empty/unset = auto-on when GEMINI_API_KEY or GOOGLE_API_KEY is present.
 def _teach_image_generate_default() -> bool:
@@ -292,10 +294,10 @@ def make_client_for(model: str):
         venv_py = REPO_ROOT / ".venv" / "bin" / "python"
         hint = (
             f"\nUse the project venv instead of system Python:\n"
-            f"  {venv_py} -m tutor.pedagogy_controller session\n"
+            f"  {venv_py} -m tutor.web_app\n"
             f"Or:\n"
             f"  source .venv/bin/activate\n"
-            f"  python -m tutor.pedagogy_controller session\n"
+            f"  python -m tutor.web_app\n"
             f"If the venv is missing deps:  {venv_py} -m pip install -e ."
         )
         raise ModuleNotFoundError(
