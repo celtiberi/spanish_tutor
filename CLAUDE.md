@@ -11,6 +11,8 @@ Testing mode sends the AI teacher **full** sheet / pack / stance / chat history.
 
 ## System map
 Canonical product/architecture/pedagogy overview: `docs/system-overview.md`.
+Earned agent-engineering practices (ours + elfric survey, incident-backed):
+`docs/ai-agent-best-practices.md`.
 
 ## Cross-project: the stocks repo's method
 `docs/from-the-stocks-repo-2026-07-28.md` — a note from the sibling project's Claude
