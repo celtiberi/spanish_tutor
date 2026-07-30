@@ -1,86 +1,119 @@
-# Pre-registration: intent-signal classifier, shadow → blocking (§4.3 gate)
+# Pre-registration v2: intent-signal classifier, shadow → blocking (§4.3 gate)
 
-**Opened:** 2026-07-30 · **Author:** ⬛ Claude · **Status:** CRITERIA FROZEN — no results collected at write time
+**Opened:** 2026-07-30 · **Author:** ⬛ Claude · **v2 after ⬛ Grok countersign — all AMENDs adopted, no counters**
+**Status:** CRITERIA RE-FROZEN 2026-07-30 — v1 was REJECTED as unfit before any measurement ran; **no promotion numbers have been collected against either version.**
+
 **Trigger:** live incident 2026-07-30 session 133545 — a learner wrote "I do
-not understand what you are asking. Too advanced for me", the regex
-intent detector missed it (it matched only the contracted "don't"), the
-turn routed to ordinary conversation, and the gate held the reply: the
-learner got SILENCE. The repair I shipped first was MORE REGEX — a §4.2
-violation ("regex for judgment is a smell"; user directive 2026-07-28)
-patching an instance while the lawful generator (tutor/signal_classifier.py,
-built, working, shadow-only since 2026-07-28) sat one flag away.
+not understand what you are asking. Too advanced for me", the regex intent
+detector missed it (its pattern was contraction-shaped), the turn routed to
+ordinary conversation, and the gate held the reply: the learner got SILENCE.
+My first repair was MORE REGEX — a §4.2 violation patching an instance while
+the lawful generator (tutor/signal_classifier.py, shadow-only since
+2026-07-28) sat one flag away.
+
+**Why v1 was rejected (recorded so the failure is auditable):**
+1. **Sole-Grok gold** = single-annotator capture; the promotion would have
+   been Grok-vs-Grok agreement laundered as measurement.
+2. **Precision 0.85 was CRITERION DRIFT** — PEDAGOGY §8 E-CLASSIFIER SHADOW
+   already froze P/R ≥ **0.90**; I silently loosened a frozen bar without a
+   §7.3 reopen. That is precisely what §4.3 forbids, committed by the author
+   of the §4.3 paragraph.
+3. **The eval set could not answer the incident's question:** 15 real + 336
+   AI-student utterances, with the English-distress class at ~1 item
+   (0.3%). Both detectors could score "no regression" at zero coverage of
+   the exact failure mode that started this.
 
 ## What is being decided
 
-Whether `SIGNAL_CLASSIFIER_BLOCKING=true` for the INTENT signal family —
-i.e. the LLM classifier's labels become authoritative for routing, with
-regex demoted to fallback when the classifier is unavailable.
+Whether `SIGNAL_CLASSIFIER_BLOCKING=true` for the INTENT signal family — the
+LLM classifier's labels become authoritative for routing; regex demoted to
+fallback for classifier timeout/failure only.
 
 **In scope (intent — judgment):** help_request, topic_request,
 meta_comprehension, non_understanding, boredom.
-**Out of scope (surface — legitimately regex, §4.2):** greet, estoy, name,
-gusta, origin, polite, topic_vocab, spanish_ok, english_only, and every
-pack-key surface scan. These stay pattern-matched and are NOT part of this
-decision.
-**Stays shadow regardless:** content_offer, self_flagged_form
-(OBSERVATIONAL_SIGNALS — §2.1a architecture clause holds them out).
+**Out of scope (surface — legitimately regex per §4.2, countersigned):**
+word/phrase boundary membership (textnorm), pack-key and topic_vocab scans,
+greet/estoy/name/gusta/origin/polite markers, and all wire-format parsing.
+**Stays shadow regardless:** content_offer, self_flagged_form (§2.1a).
+**Flagged for later demotion (Grok 2.3, not this gate):** spanish_ok /
+english_only function-word counters are pseudo-judgment; they stay
+non-blocking features until a separate round.
 
-## Frozen criteria (written before any measurement)
+## Frozen criteria v2
 
-**Evaluation set (frozen construction rule, not cherry-picked):** every
-learner utterance from the last 20 real session logs under logs/sessions/
-(chronological, no filtering, deduplicated verbatim), PLUS the AI-student
-transcripts from the referee run. Utterances are labeled by ⬛ Grok in
-`blind-score` mode — it sees the utterance and the label vocabulary ONLY,
-never the regex output, never the classifier output, never this document's
-hypothesis. Grok's labels are the reference standard.
+**Reference labels (frozen procedure):** Dual-annotator gold.
+(A) Primary labeler: a non-Grok model in blind mode (utterance + label
+vocabulary ONLY — no regex output, no classifier output, not this document).
+(B) Secondary: **human labels** (the USER) on a stratified subset of ≥40
+utterances including ALL real-session positives for the five in-scope
+signals plus a random real-session negative sample. Disagreements
+adjudicated by a third pass (human wins on the human subset; otherwise mark
+UNCERTAIN and exclude from the primary-gate denominator). Grok may run a
+parallel blind audit for calibration but **Grok labels are NOT the reference
+standard for promotion arithmetic.** Report Cohen's κ (or raw agreement) on
+the dual-labeled subset; **κ < 0.60 → do not promote** (fix the vocabulary
+first).
+
+**Metric definitions (frozen, anti-gaming):**
+- Multi-label: each in-scope signal scored independently (TP/FP/FN per label).
+- Report BOTH macro-recall (unweighted mean over labels with support ≥ N_min)
+  and micro-recall (pooled). **Primary gate uses macro**; micro is diagnostic
+  (micro can pass while a rare label is dead).
+- Parse failures / timeouts are NOT scored as empty-label successes; they
+  count only toward the failure-path test.
+- **N_min = 15** gold positives per signal for that signal to enter the
+  primary gate; below that: "insufficient support — cannot promote that
+  signal alone," and it stays shadow even if the aggregate passes.
 
 **Primary gate (all must hold):**
-1. **Recall on intent signals ≥ 0.90** for the classifier, measured
-   against the blind reference, AND **strictly greater than the regex
-   detector's recall** on the same set.
-2. **Precision ≥ 0.85** for the classifier (a false "they're confused"
-   derails a healthy turn; this is the cost of over-firing).
-3. **No regression on any single signal:** for every in-scope signal, the
-   classifier's recall ≥ regex recall − 0.05 (no signal may get worse by
-   more than noise while the aggregate improves).
-4. **Latency:** classifier p90 ≤ 1500 ms measured on the eval set; the
-   existing 8 s timeout stays as the hard ceiling.
+1. **Macro-recall ≥ 0.90** for the classifier against the dual/human gold,
+   AND strictly greater than regex macro-recall on the same set.
+2. **Precision ≥ 0.90** on the union of in-scope intent labels. Rationale: a
+   false intent arms §2.1 preemption and derails a healthy turn; aligned
+   with §8 E-CLASSIFIER SHADOW. Lowering this requires a §7.3 reopen naming
+   the new number **before** data.
+3. **No per-signal regression:** for every in-scope signal with support ≥
+   N_min, classifier recall ≥ regex recall − 0.05.
+4. **Latency:** classifier p90 ≤ 1500 ms on the eval set; 8 s timeout stays
+   the hard ceiling.
 5. **Failure path proven:** with the classifier forced to fail/timeout,
-   routing falls back to regex signals and no turn errors (test-pinned).
+   routing falls back to regex and no turn errors (test-pinned).
 
-**Kill conditions (any one blocks promotion):**
-- Classifier precision < 0.85 (over-firing risk to healthy turns).
-- Any in-scope signal where classifier recall < regex recall − 0.05.
-- Fallback path not proven by test.
-- Cost per turn > $0.001 for the classifier call.
+**Kill conditions:** precision < 0.90; any supported signal with recall <
+regex − 0.05; fallback path unproven; cost/turn > $0.001; κ < 0.60.
 
-**Explicitly NOT criteria** (guarding against post-hoc rationalization):
-overall "feels better", agreement rate with the regex (the regex is the
-thing under suspicion — agreement with it is not evidence), or any metric
-computed after seeing results.
+**Evaluation set (frozen construction rule v2):**
+1. **REAL:** every learner utterance from the last 30 chronological
+   `logs/sessions/*-conversational-web.jsonl` sessions (jsonl only; exclude
+   `*-md`, `controller-demo*`, `ai-student*`). Deduplicate verbatim; drop
+   `(session open)` and blanks.
+2. **AI:** learner utterances from ONE pinned referee student tree — the
+   path is recorded in `utterances.json` before labeling.
+3. **CRITICAL-CLASS BANK** (`evals/critical_class_bank.json`, written
+   BEFORE any labeling or detector run; **not** mined from classifier
+   misses): ≥30 distress/help paraphrases covering expanded vs contracted
+   negation, "too advanced/hard/fast", "what are you asking" / "I don't
+   follow" / "I'm lost", "no entiendo" / "no comprendo", how-say help, and
+   topic fatigue / boredom. Evaluation items only — they may never be
+   pasted into the classifier's system prompt after freeze.
+4. **Three scorecards reported:** (a) REAL-only, (b) AI-only, (c)
+   CRITICAL-CLASS. **All primary gates must pass on (a) and (c)**; (b) is
+   diagnostic.
+5. A signal with < 15 gold positives across (1)+(3) cannot be promoted alone.
+
+**Explicitly NOT criteria:** "feels better", agreement with the regex (the
+regex is the thing under suspicion), or any metric defined after seeing
+results.
 
 ## Decision rule
 
-- All primary gates pass → promote intent signals to blocking; regex
-  becomes the documented fallback; §4.2's "shadow-first, promotion-gated"
-  is satisfied and the promotion is recorded in PEDAGOGY §4.2's
-  enforcement row.
-- Any kill condition → stay shadow, record the failure, and fix the
-  classifier (prompt/model) before re-testing. The regex patch from
-  2026-07-30 stays as the interim fallback either way.
+All gates pass on REAL and CRITICAL-CLASS → promote intent signals to
+blocking; regex becomes documented fallback; record in §4.2's enforcement
+row. Any kill condition → stay shadow, record the failure, fix the
+classifier, re-test. The 2026-07-30 regex patch remains the interim fallback
+either way (tactical debt, not architecture).
 
-## Measurement plan (executed only after this file is committed)
-
-1. Extract the utterance set by the frozen rule → `evals/results/
-   classifier-promotion-<stamp>/utterances.json`.
-2. Blind-label with Grok (`blind-score`, vocabulary + utterances only).
-3. Run both detectors over the same set; compute per-signal recall,
-   precision, latency, cost.
-4. Report against the table above; promote or don't.
-
-**Author's stated expectation (recorded so it can be wrong):** I expect
-the classifier to win on recall for meta_comprehension and boredom
-(regex has no boredom pattern at all) and to be roughly equal on
-help_request/topic_request. If precision fails, the likely cause is
-over-labeling short Spanish answers as non_understanding.
+**Author's stated expectation (recorded so it can be wrong):** classifier
+wins decisively on the CRITICAL-CLASS bank (regex has no boredom pattern at
+all and contraction-shaped negation patterns); roughly ties on REAL where
+most utterances are plain Spanish answers with no intent signal.
