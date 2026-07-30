@@ -25,45 +25,59 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Arm ORDER is load-bearing under quota risk (run-1 incident 2026-07-30:
+# a fixed A→P1→P2→B0 order made B0 the guaranteed casualty of provider
+# exhaustion — it got 0 of 20 sessions while A/P1 got 20/20). The untested
+# arm runs FIRST; --rotate shifts the order so no arm is systematically
+# starved across runs.
 ARMS: list[tuple[str, dict]] = [
-    ("A_legacy", {}),
-    ("P1_reorder", {"TEACHER_PROMPT_ORDER": "p1_reorder"}),
-    ("P2_structured", {"TEACHER_PROMPT_ORDER": "p2_structured"}),
     ("B0_brief", {"TEACHER_CONTEXT": "brief"}),
+    ("A_legacy", {}),
+    ("P2_structured", {"TEACHER_PROMPT_ORDER": "p2_structured"}),
+    ("P1_reorder", {"TEACHER_PROMPT_ORDER": "p1_reorder"}),
 ]
 
 RESULTS_ROOT = Path(__file__).resolve().parent / "results"
 
 
 def _arm_stats(run_dir: Path) -> dict:
+    """Aggregate ONE arm from its real session artifacts.
+
+    Run-1 incident (2026-07-30): the first version globbed
+    ``*findings*.json`` (no such files — every arm read as 0 sessions)
+    and, in the ad-hoc fix, counted the REQUESTED ``turns`` field as
+    executed turns — which reported an arm whose every session ERRORed
+    as a flawless zero-fault winner. Only transcript-backed turns count;
+    ERROR sessions are counted separately and never silently absorbed
+    (§3.4 unknown-is-not-neutral).
+    """
     stats = {
-        "sessions": 0, "turns": 0, "still_fail_turns": 0,
-        "fixation": 0, "probe_on_known": 0, "english_wall": 0,
-        "cost_usd": 0.0,
+        "sessions_ran": 0, "sessions_error": 0, "turns": 0,
+        "still_fail_turns": 0, "fixation": 0, "probe_on_known": 0,
+        "english_wall": 0, "cost_usd": 0.0, "errors": [],
     }
-    for f in sorted(run_dir.glob("*findings*.json")) + sorted(
-        run_dir.glob("s*_findings.json")
-    ):
+    for f in sorted(run_dir.glob("s*-*.json")):
         try:
             d = json.loads(f.read_text(encoding="utf-8"))
         except Exception:
             continue
-        stats["sessions"] += 1
+        transcript = (d.get("report") or {}).get("transcript") or []
+        if not transcript:
+            stats["sessions_error"] += 1
+            err = str(d.get("error") or d.get("status") or "unknown")
+            if err not in stats["errors"]:
+                stats["errors"].append(err[:200])
+            continue
+        stats["sessions_ran"] += 1
+        stats["turns"] += len(transcript)
+        findings = d.get("findings") or {}
         for k_src, k_dst in (
             ("still_fail", "still_fail_turns"), ("fixation", "fixation"),
             ("probe_on_known", "probe_on_known"),
             ("english_wall", "english_wall"),
         ):
-            v = d.get(k_src)
+            v = findings.get(k_src)
             stats[k_dst] += len(v) if isinstance(v, list) else int(v or 0)
-    summ = run_dir / "summary.json"
-    if summ.exists():
-        try:
-            s = json.loads(summ.read_text(encoding="utf-8"))
-            stats["summary"] = s
-            stats["sessions"] = s.get("sessions", stats["sessions"]) or stats["sessions"]
-        except Exception:
-            pass
     ledger = run_dir / "costs.jsonl"
     if ledger.exists():
         for line in ledger.read_text(encoding="utf-8").splitlines():
@@ -71,6 +85,10 @@ def _arm_stats(run_dir: Path) -> dict:
                 stats["cost_usd"] += float(json.loads(line).get("usd") or 0)
             except Exception:
                 continue
+    if stats["turns"]:
+        stats["still_fail_per_turn"] = round(
+            stats["still_fail_turns"] / stats["turns"], 4
+        )
     return stats
 
 
@@ -102,16 +120,42 @@ def main() -> int:
         after = {p.name for p in RESULTS_ROOT.glob("*-student")}
         new_dirs = sorted(after - before)
         run_dir = RESULTS_ROOT / new_dirs[-1] if new_dirs else None
+        stats = _arm_stats(run_dir) if run_dir else {}
         manifest["arms"][arm] = {
             "env": env_extra, "exit_code": rc,
             "run_dir": str(run_dir) if run_dir else None,
-            "stats": _arm_stats(run_dir) if run_dir else {},
+            "stats": stats,
         }
         # Persist incrementally — a crash keeps completed arms.
         (out / "manifest.json").write_text(
             json.dumps(manifest, indent=2, ensure_ascii=False)
         )
-        print(f"[referee] arm {arm} done rc={rc} -> {run_dir}", flush=True)
+        ran = stats.get("sessions_ran", 0)
+        errs = stats.get("sessions_error", 0)
+        print(
+            f"[referee] arm {arm} done rc={rc} ran={ran} err={errs} "
+            f"-> {run_dir}", flush=True,
+        )
+        # Fail fast (run-1 incident): an arm that produced NO usable
+        # sessions means the provider is refusing — burning the remaining
+        # arms just manufactures more empty directories and hides which
+        # arms are actually untested.
+        if ran == 0 and errs:
+            manifest["aborted_after"] = arm
+            manifest["abort_reason"] = (
+                f"arm {arm} produced 0 usable sessions ({errs} errors: "
+                f"{stats.get('errors')}) — provider refusing; remaining "
+                "arms NOT run (they would be empty, not passing)"
+            )
+            (out / "manifest.json").write_text(
+                json.dumps(manifest, indent=2, ensure_ascii=False)
+            )
+            print(
+                f"[referee] ABORT after {arm}: 0 usable sessions. "
+                f"Untested arms remain untested — no arm may be read as "
+                f"clean. -> {out}/manifest.json", flush=True,
+            )
+            return 2
 
     print(f"[referee] COMPLETE -> {out}/manifest.json", flush=True)
     return 0

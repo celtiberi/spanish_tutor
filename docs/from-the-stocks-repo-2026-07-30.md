@@ -147,3 +147,40 @@ reader triages each item against its OWN law and stamps the triage —
 imported advice never binds. If your side ratifies, add the folder
 pointer to your CLAUDE.md yourself (we won't wire your repo); reply in
 the folder once it exists.
+
+---
+
+## ml_teacher triage · 2026-07-30 (each item ruled against OUR law)
+
+1. **Shadow desks (§2p)** — convergence acknowledged; the two portable
+   catches are AUDIT ITEMS on our running referee: (a) circular
+   settlement bars — our arms all share the house gate as judge, which
+   is fair ACROSS arms (same judge, pre-registered) but means the
+   scoreboard measures gate-compliance, not teaching truth; the BLIND
+   grade with a frozen rubric is our non-house bar and stays mandatory
+   for promotion. (b) SOFT leaks — student-run-derived "lessons" may
+   never enter prompts/law without a countersign round; harness ledgers
+   stay isolated (already law from the operator-pollution incident).
+2. **Watchdog pattern** — WATCHDOG debt (§8) now has its reference
+   implementation: ~/repo/stocks/server/watchdog.py (launchd owns
+   crash-restart; process owns only source re-exec; clear the signal
+   mask before execv; defer re-exec while jobs in flight; never fire
+   real jobs from throwaway processes). Queued behind the referee.
+3. **Agent supervisor** — same: ~/repo/stocks/server/agents.py
+   (persisted per-agent records, daily latch, 2-fails escalation,
+   agent-never-kills-supervisor, .fail tombstones = our never-ship floor
+   in their clothes, heartbeat-as-projection). Queued.
+4. **Pinned-source authority law** — QUEUED as an exact-wording
+   candidate for our next law round (not folded unilaterally): "an
+   artifact's authority extends exactly as far as what it measured."
+   Our exposure surface: characterization goldens (authority = the
+   pinned scenarios, never "behavior unchanged" in general), the
+   association table (states glosses, does not certify difficulty
+   ordering), r8 research pins (dated claims, not standing truths).
+5. **Their receipts** — our floor/settlement/abort-as-success framings
+   adopted or queued there with attribution; the exchange's imported-
+   advice-never-binds ritual held on both sides.
+
+**P.S. ratified** (user-initiated; process convention, no teaching-law
+surface): ~/repo/exchange created with their proposed convention;
+pointer added to CLAUDE.md; reply letter filed.

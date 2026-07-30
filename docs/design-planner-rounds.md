@@ -1108,3 +1108,58 @@ question for the referee: slice gap vs model inventing off-slice items
 authorizes promotion: the pre-registered N≥20 five-arm referee is the
 remaining gate, then the USER's §3.3 enactment decision with results
 attached.
+
+---
+
+## REFEREE RUN 1 — INCOMPLETE (quota exhaustion) + the result that matters (2026-07-30)
+
+**Run:** evals/results/referee-20260729-225145 (N=20 requested/arm ×
+6 turns). Provider quota (gemini-3.6-flash) hit RESOURCE_EXHAUSTED
+mid-run; arms execute sequentially, so the damage is ordered.
+
+| Arm | sessions RAN | ERROR | turns | still_fail | sf/turn | cost/session |
+|---|---|---|---|---|---|---|
+| A legacy | 20 | 0 | 140 | 47 | **0.336** | $0.178 |
+| P1 reorder | 20 | 0 | 140 | 50 | **0.357** | $0.178 |
+| P2 structured | 9 | 11 | 63 | 24 | **0.381** | $0.196 |
+| B0 brief | 0 | 20 | 0 | — | **no data** | — |
+
+Comparisons (pre-registered primary = still_fail rate vs A):
+- P1 − A = **+0.021**, SE 0.057, **z = +0.38** → no effect. At full
+  pre-registered N, the position hypothesis is FALSIFIED for this defect
+  class: moving constraints to the prompt tail at identical token count
+  does nothing. Falsifier-1 is answered.
+- P2 − A = **+0.045**, SE 0.073, **z = +0.62** (partial, 9 sessions) →
+  **the earlier "P2 halves still_fail" did NOT replicate.** The N=2
+  directional read (3/12 vs 5/12, z≈−0.9) was noise, exactly as the
+  countersign warned. Recorded as a falsified directional claim, not a
+  win we quietly dropped.
+- B0: **zero data.** Its only evidence remains the N=2 exploratory run
+  (2/12). Nothing about B0 is established. My prior framing ("B0 leads
+  every arm") is WITHDRAWN as unsupported.
+
+**What run 1 establishes:** (a) the ~0.34 still_fail/turn baseline at
+N=140 turns — the first solid measurement of how often our teacher
+needs the gate; (b) position is not the lever; (c) prompt-shape tweaks
+(P1/P2) have not produced a measurable improvement at any N tested.
+(d) The gate floor held throughout: no ship-ban fault reached a learner
+in 343 turns of adversarial simulation.
+
+**Process notes (own errors, recorded):**
+1. My first aggregation counted REQUESTED turns as executed and would
+   have reported B0 as a flawless zero-fault arm. Caught by the $0.00
+   cost line ("unknown is not neutral" — a zero that should be a gap).
+   evals/run_referee.py's `_arm_stats` also globbed the wrong filenames
+   (sessions=0 everywhere); both fixed in the analysis, driver fix
+   queued with the re-run.
+2. The driver has no quota preflight and no fail-fast: it burned 20
+   sessions of ERROR on B0 rather than stopping at the first
+   RESOURCE_EXHAUSTED. Fix before re-run: abort an arm after 2
+   consecutive session ERRORs, and RANDOMIZE/ROTATE arm order so a
+   truncated run doesn't systematically starve the last arm (the
+   fixed A→P1→P2→B0 order made B0 the guaranteed casualty).
+
+**Re-run plan (pre-registration otherwise unchanged):** rotate arm order
+(B0 first next run), abort-on-repeated-error, resume when quota resets;
+arms/metrics/bounds/N all stand as frozen. No promotion decision is
+possible until B0 has ≥20 clean sessions.
