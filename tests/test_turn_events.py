@@ -69,8 +69,9 @@ def test_catalog_count_published_number():
     # The measured bus inventory (review said "~40"; the real number was 62
     # at the campaign close; +1 = MORPH_CARD, 2026-07-29 morph-card review;
     # +1 = FRAME_RECORDED, 2026-07-29 encounter-variety round;
-    # +1 = RENDER_DROPPED, 2026-07-29 §1.1b settlement round).
-    assert len(NOTE_CATALOG) == 65
+    # +1 = RENDER_DROPPED, 2026-07-29 §1.1b settlement round;
+    # +2 = OUTPUT_GATE_STRIPPED/HELD, 2026-07-30 still_fail floor).
+    assert len(NOTE_CATALOG) == 67
 
 
 def test_stability_classes_are_the_measured_vocabulary():
@@ -140,6 +141,8 @@ ROUND_TRIP = [
     (EV.MORPH_CARD, "morph_card:estar"),
     (EV.FRAME_RECORDED, "frame_recorded:estar:wellbeing"),
     (EV.RENDER_DROPPED, "render_dropped:image:cafe"),
+    (EV.OUTPUT_GATE_STRIPPED, "output_gate_stripped"),
+    (EV.OUTPUT_GATE_HELD, "output_gate_held:gate:probe_loop"),
     (EV.ASKED_TOPIC, "asked_topic:location:tu"),
     (EV.DUE_ENQUEUED, "due_enqueued:weather_hace"),
     (EV.IMAGE_DECLARED_IRRELEVANT, "image_declared_irrelevant:bote"),

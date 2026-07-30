@@ -244,7 +244,7 @@ class TestPipelineOrder:
             "teach_images", "image_decision", "system", "task", "messages",
             "final", "raw", "tool_delta", "usage", "error_result",
             "render_drops",
-            "gate_ctx", "gate_result", "need_recast",
+            "gate_ctx", "gate_result", "need_recast", "gate_hold",
             "result", "phase_label", "phase_note_key", "soft_plan",
         ])
 

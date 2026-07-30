@@ -194,6 +194,15 @@ function renderTutorParts(parts, fallbackContent) {
       )}</div>`
     );
   }
+  // still_fail floor rung b′ (system review 2026-07-30): the payload was
+  // held by the quality gate — this copy is CLIENT-owned UI, deliberately
+  // never presented as Marisol's Spanish teaching turn (§1.1a).
+  if (parts.gate_hold) {
+    blocks.push(
+      `<div class="part part-hold"><span class="part-label">Held</span>` +
+        `<span class="muted">That reply didn't pass the quality gate and wasn't shown — say anything to continue.</span></div>`
+    );
+  }
   return blocks.length ? blocks.join("") : esc(fallbackContent || "");
 }
 

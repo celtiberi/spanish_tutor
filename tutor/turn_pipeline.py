@@ -194,6 +194,7 @@ class TurnContext:
     gate_ctx: Any = None                            # output_gate.GateContext
     gate_result: Any = None                         # OutputGateResult | None
     need_recast: bool = False
+    gate_hold: bool = False   # still_fail floor rung b′: payload never ships
 
     # -- produced by settlement (§1.1b, 2026-07-29) --------------------------
     render_drops: list = field(default_factory=list)  # (kind, concept, reason)
@@ -1041,7 +1042,16 @@ GATE_CRITICAL_FAULTS = frozenset({
     # r7 S3: naked first exposure / cluster dump (gate:regloss stays SOFT
     # by omission)
     "gate:unscaffolded_new_item",
+    # System review 2026-07-30 (docs/reviews-system-review-20260730.md,
+    # Grok-countersigned): a repeated probe is user-visible harm — the
+    # 20260729-210545 incident shipped the same A/B check twice. probe_loop
+    # now forces repair AND participates in the still_fail floor below.
+    "gate:probe_loop",
 })
+
+# The still_fail FLOOR (§6 amendment, same review): faults in this set may
+# NEVER ship after a failed repair — the ladder is strip-part → hold.
+GATE_SHIP_BAN_FAULTS = GATE_CRITICAL_FAULTS
 
 
 def stage_gate_context(session, ctx: TurnContext) -> None:
@@ -1148,6 +1158,68 @@ def stage_gate_check(session, ctx: TurnContext) -> None:
         )
 
 
+def _gate_floor(session, ctx: TurnContext, residual: set) -> None:
+    """The still_fail FLOOR (system review 2026-07-30, Grok-amended R1;
+    PEDAGOGY §6 amendment): ship-ban faults may never reach the learner
+    after a failed repair. Ladder:
+    (a) part surgery — a residual probe_loop lives in the question parts;
+        drop try/continue, rebuild the raw, re-gate the remainder. Ship
+        the stripped turn only if no ship-ban fault remains.
+    (b′) hold — the faulting payload is NOT delivered. ctx.gate_hold makes
+        the client render a non-teaching system hold (client-owned copy —
+        never code-owned Spanish presented as Marisol, §1.1a).
+    Session consequence + operator surface: still-fail counter on the
+    session (debug ring shows it; SUMMONS-class visibility)."""
+    from dataclasses import replace
+
+    from .output_gate import check_output_gate
+    from .tutor_response import compose_raw, process_tutor_raw as _ptr
+    from .turn_events import TurnEventKind as EV
+
+    session.gate_still_fail_count = (
+        getattr(session, "gate_still_fail_count", 0) + 1
+    )
+    if residual == {"gate:probe_loop"}:
+        _vis, _parts = _ptr(ctx.raw or "")
+        pd = _parts.as_dict()
+        if (pd.get("try") or pd.get("continue")):
+            raw2 = compose_raw({**pd, "try": "", "continue": ""})
+            vis2, parts2 = _ptr(raw2)
+            gate3 = check_output_gate(replace(
+                ctx.gate_ctx,
+                parts=parts2.as_dict(), visible=vis2, raw=raw2,
+                require_recast=ctx.need_recast, truncated=False,
+                image_present=bool(ctx.teach_images),
+            ))
+            if not (set(gate3.faults or []) & GATE_SHIP_BAN_FAULTS):
+                ctx.raw = raw2
+                ctx.gate_result = gate3
+                ctx.ev.emit(
+                    EV.OUTPUT_GATE_STRIPPED,
+                    payload={"parts": ["try", "continue"]}, stage="gate",
+                )
+                # Surgery changed the reply — re-settle pixels against the
+                # stripped text (§1.1b; floor amendment: settlement bound
+                # is ≤3 with the floor rung, still no loop).
+                _settle_pixels(session, ctx)
+                return
+    ctx.raw = ""
+    ctx.gate_hold = True
+    # Nothing ships on a hold — orphaned image candidates drop with it.
+    for img in ctx.teach_images or []:
+        concept = str((img or {}).get("concept") or "?")
+        ctx.render_drops.append(("image", concept, "gate_hold"))
+        ctx.ev.emit(
+            EV.RENDER_DROPPED, key=f"image:{concept}",
+            payload={"reason": "gate_hold"}, stage="gate",
+        )
+    ctx.teach_images = []
+    ctx.ev.emit(
+        EV.OUTPUT_GATE_HELD,
+        payload={"faults": sorted(residual)}, stage="gate",
+    )
+
+
 def stage_gate_repair(session, ctx: TurnContext) -> None:
     """Verdict events + the single bounded repair round.  A critical fault
     (GATE_CRITICAL_FAULTS) re-asks once with the specific fault; the
@@ -1234,6 +1306,18 @@ def stage_gate_repair(session, ctx: TurnContext) -> None:
                     payload={"faults": list(gate2.faults)},
                     stage="gate",
                 )
+                # System review 2026-07-30: still_fail used to ship the
+                # faulting reply with a log note ("fail open" was policy).
+                # Ship-ban residuals now hit the floor.
+                residual = set(gate2.faults or []) & GATE_SHIP_BAN_FAULTS
+                if residual:
+                    _gate_floor(session, ctx, residual)
+        else:
+            # Repair produced nothing usable — the ORIGINAL failing reply
+            # is the payload; it gets the same floor, not a free pass.
+            residual = set(gate_result.faults or []) & GATE_SHIP_BAN_FAULTS
+            if residual:
+                _gate_floor(session, ctx, residual)
     else:
         ctx.ev.emit(EV.OUTPUT_GATE_OK, stage="gate")
 
@@ -1698,6 +1782,10 @@ def stage_parts_notes(session, ctx: TurnContext) -> None:
         }
         if ctx.gate_result is not None:
             result.parts["output_gate"] = ctx.gate_result.as_dict()
+        if ctx.gate_hold:
+            # Floor rung b′: the client renders a non-teaching system hold
+            # (client-owned copy — never presented as Marisol's Spanish).
+            result.parts["gate_hold"] = True
         if ctx.image_decision is not None:
             result.parts["image_decision"] = ctx.image_decision.as_dict()
             ctx.ev.emit(EV.IMAGE_DECISION, key=ctx.image_decision.reason,

@@ -1,0 +1,152 @@
+"""still_fail floor (system review 2026-07-30, PEDAGOGY §6 amendment).
+
+The 20260729-210545 incident: probe_loop fired, repair failed, the
+repeated A/B check shipped anyway — "fail open" was policy. These pins
+make the repeal permanent: ship-ban residuals get part surgery or a hold,
+never the learner.
+"""
+
+import pytest
+
+from tutor.session_memory import compose_topic_key
+from tutor.tutor_response import compose_raw, process_tutor_raw
+
+pytestmark = []
+
+
+class TestComposeRaw:
+    def test_round_trip_parts(self):
+        parts = {
+            "acknowledge": "¡Muy bien!",
+            "model": "**Estoy bien.**",
+            "try": "¿Y tú?",
+        }
+        vis, reparsed = process_tutor_raw(compose_raw(parts))
+        d = reparsed.as_dict()
+        self.check = d
+        assert d["acknowledge"] == "¡Muy bien!"
+        assert d["model"] == "**Estoy bien.**"
+        assert d["try"] == "¿Y tú?"
+        assert "Estoy bien" in vis
+
+    def test_empty_parts_compose_empty_tutor(self):
+        vis, reparsed = process_tutor_raw(compose_raw({}))
+        assert vis == ""
+
+
+class TestConceptClassFold:
+    def test_person_variants_fold_to_one_class(self):
+        # R3: «cómo estás» / «cómo está» are ONE meaning check for
+        # anti-loop keys (the incident's second ask must not read novel).
+        k1 = compose_topic_key("wellbeing", "cómo estás")
+        k2 = compose_topic_key("wellbeing", "como esta")
+        assert k1 == k2 == "wellbeing:como-estar"
+        k3 = compose_topic_key("name", "cómo te llamas")
+        k4 = compose_topic_key("name", "como se llama")
+        assert k3 == k4 == "name:como-llamar"
+
+    def test_ordinary_concepts_unfolded(self):
+        assert compose_topic_key("size", "ciudad") == "size:ciudad"
+
+
+# Reply fixtures: a probing A/B try on known wellbeing material — the
+# incident's shape. The seed sheet below marks IP-04 known so
+# seed_from_sheet registers ask_how as already-asked at open.
+OPEN_OK_REPLY = (
+    "<tutor>\n"
+    "  <acknowledge>¡Empezamos!</acknowledge>\n"
+    "  <model>**Yo estoy muy contento hoy.**</model>\n"
+    "  <try>¿Estás contento hoy también?</try>\n"
+    "</tutor>"
+)
+# Model line stays on sheet-known material so the ONLY residual fault is
+# the probe itself (surgery requires a pure probe_loop residual; anything
+# else is rung b′ by design).
+PROBE_REPLY = (
+    "<tutor>\n"
+    "  <acknowledge>¡Muy bien!</acknowledge>\n"
+    "  <model>**Estoy bien**, gracias.</model>\n"
+    "  <try>¿«Cómo estás» es «How are you?»? ¿Sí o no?</try>\n"
+    "</tutor>"
+)
+# Probe-only reply: stripping try leaves nothing to teach → remainder
+# faults no_teach_move (ship-ban) → hold.
+PROBE_ONLY_REPLY = (
+    "<tutor>\n"
+    "  <try>¿«¿Cómo estás?» significa «How are you?»? ¿Sí o no?</try>\n"
+    "</tutor>"
+)
+
+
+def _known_wellbeing_seed():
+    from tutor.character_sheet import default_sheet
+
+    s = default_sheet()
+    s["skills"]["IP-04"].update(
+        {"confidence": 0.85, "status": "known", "solid_uses": 2,
+         "evidence": ["said estoy bien repeatedly"]}
+    )
+    s["skills"]["IP-01"].update(
+        {"confidence": 0.85, "status": "known", "solid_uses": 2,
+         "evidence": ["greets naturally"]}
+    )
+    # Reply-surface keys are sheet-known so the unscaffolded scan stays
+    # quiet — the strip test needs probe_loop as the SOLE residual.
+    for key in ("estoy bien", "bien", "muy bien", "gracias", "cómo estás",
+                "cómo está", "contento"):
+        s["lexicon"][key] = {
+            "status": "known", "confidence": 0.8, "solid_uses": 2,
+            "introduced_at": "2026-07-20",
+        }
+    return s
+
+
+class TestStillFailFloor:
+    def test_probe_repair_probe_gets_stripped_not_shipped(
+        self, tutor_session_factory
+    ):
+        # open ok; turn 1 probes known wellbeing → probe_loop (critical
+        # since 2026-07-30) → repair ALSO probes → still_fail → floor
+        # rung (a): try/continue dropped, remainder re-gated and shipped.
+        ctx = tutor_session_factory(
+            seed_sheet=_known_wellbeing_seed(),
+            replies=[OPEN_OK_REPLY, PROBE_REPLY, PROBE_REPLY],
+        )
+        s = ctx.session
+        assert s.open_session().error is None
+        turn = s.user_turn("Estoy muy bien, gracias.")
+        assert turn.error is None
+        assert any(
+            n.startswith("output_gate_fail:") and "probe_loop" in n
+            for n in turn.notes
+        )
+        assert "output_gate_stripped" in turn.notes
+        # The probing question is GONE from the shipped reply.
+        assert "Sí o no" not in turn.reply
+        assert "How are you" not in turn.reply
+        # The compliant remainder survived.
+        assert "Estoy bien" in turn.reply
+        assert not turn.parts.get("gate_hold")
+
+    def test_unstrippable_probe_gets_held_never_shipped(
+        self, tutor_session_factory
+    ):
+        # Probe-only replies: surgery leaves an empty turn (no teach move —
+        # itself ship-ban) → rung (b′): hold. Nothing of the faulting
+        # payload reaches the learner; the client renders a system notice.
+        ctx = tutor_session_factory(
+            seed_sheet=_known_wellbeing_seed(),
+            replies=[OPEN_OK_REPLY, PROBE_ONLY_REPLY, PROBE_ONLY_REPLY],
+        )
+        s = ctx.session
+        assert s.open_session().error is None
+        turn = s.user_turn("Estoy muy bien, gracias.")
+        assert turn.error is None
+        assert any(
+            n.startswith("output_gate_held:") for n in turn.notes
+        )
+        assert turn.reply == ""
+        assert turn.parts.get("gate_hold") is True
+        assert "Sí o no" not in (turn.reply or "")
+        # Operator surface: the session counts its still-fails.
+        assert getattr(s, "gate_still_fail_count", 0) >= 1

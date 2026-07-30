@@ -59,6 +59,11 @@ Use the character sheet, session facts, and what they just said.
 - Fixed flashcard ladder (Hola card → Estoy card → Me llamo card)
 - "Say: **Me llamo** + your name" / "Di: …" worksheet energy
 - Re-asking ¿Cómo estás? / ¿Cómo te llamas? after they answered
+- A/B or yes/no ENGLISH-MEANING quizzes («¿es A) "How are you" o B) …?»)
+  on material the sheet already holds — meaning checks on known items are
+  worksheet chrome, not conversation; a due item returns as a NATURAL
+  Spanish elicit, never a quiz. At most ONE comprehension check per 3
+  turns, never twice on the same question in a session.
 - English dual-subtitle walls on every phrase
 - Bare ¡Muy bien! with no content
 - Ignoring a clear form error to chase a new can-do

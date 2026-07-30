@@ -120,6 +120,8 @@ class TurnEventKind(str, Enum):
     OUTPUT_GATE_REPAIRED = "output_gate_repaired"
     OUTPUT_GATE_STILL_FAIL = "output_gate_still_fail"
     OUTPUT_GATE_ERROR = "output_gate_error"
+    OUTPUT_GATE_STRIPPED = "output_gate_stripped"
+    OUTPUT_GATE_HELD = "output_gate_held"
     # -- post-model recorders (stage "record") ------------------------------
     INTRODUCED = "introduced"
     INTRODUCE_LAPSED = "introduce_lapsed"
@@ -329,6 +331,14 @@ NOTE_CATALOG: dict[TurnEventKind, NoteSpec] = {s.kind: s for s in [
           ["turn_pipeline._settle_pixels"],
           ["design-exchange-settlement.md audits"],
           "log-only", False),
+    _spec(TurnEventKind.OUTPUT_GATE_STRIPPED, "output_gate_stripped", True,
+          "(still_fail floor rung a — probing parts dropped, remainder "
+          "re-gated and shipped; system review 2026-07-30)",
+          ["turn_pipeline._gate_floor"], [], "log-only", False),
+    _spec(TurnEventKind.OUTPUT_GATE_HELD, "output_gate_held:", False,
+          "<faults> (still_fail floor rung b′ — payload never shipped; "
+          "client renders a non-teaching hold)",
+          ["turn_pipeline._gate_floor"], [], "log-only", False),
     _spec(TurnEventKind.ASKED_TOPIC, "asked_topic:", False,
           "<frame>:<concept> registry key (CHAR-BUG-007: pronouns leak in)",
           ["conv_session._execute_ai_tutor"], [], "log-only", True),
@@ -537,6 +547,10 @@ _RENDER = {
     _K.MORPH_CARD: lambda e: f"morph_card:{e.key}",
     _K.FRAME_RECORDED: lambda e: f"frame_recorded:{e.key}",
     _K.RENDER_DROPPED: lambda e: f"render_dropped:{e.key}",
+    _K.OUTPUT_GATE_STRIPPED: lambda e: "output_gate_stripped",
+    _K.OUTPUT_GATE_HELD: lambda e: (
+        "output_gate_held:" + ",".join(e.payload.get("faults") or [])
+    ),
     _K.ASKED_TOPIC: lambda e: f"asked_topic:{e.key}",
     _K.DUE_ENQUEUED: lambda e: f"due_enqueued:{e.key}",
     _K.IMAGE_DECLARED_IRRELEVANT:
@@ -626,7 +640,7 @@ def _parse_tail(kind: TurnEventKind, tail: str) -> tuple[str, dict]:
         key, _, reason = tail.rpartition(":")
         return key, {"reason": reason}
     if kind in (_K.OUTPUT_GATE_SOFT_FAIL, _K.OUTPUT_GATE_FAIL,
-                _K.OUTPUT_GATE_STILL_FAIL):
+                _K.OUTPUT_GATE_STILL_FAIL, _K.OUTPUT_GATE_HELD):
         return "", {"faults": tail.split(",") if tail else []}
     if kind is _K.PLAN_GATE_FAIL:
         return "", {"errors": tail.split(",") if tail else []}

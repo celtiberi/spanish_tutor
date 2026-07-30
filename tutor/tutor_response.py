@@ -284,6 +284,22 @@ def compose_visible(parts: TutorParts, *, for_ui: bool = False) -> str:
     return "\n\n".join(chunks)
 
 
+def compose_raw(parts: dict) -> str:
+    """Rebuild a minimal <tutor> raw from a parts dict — the still_fail
+    floor's part-surgery primitive (docs/reviews-system-review-20260730.md:
+    a repeated probe lives in the try/continue parts; dropping them and
+    re-gating the remainder beats shipping a known-bad question). Only the
+    six learner-facing part tags are reconstructed; image/tool markup does
+    not survive surgery (an image alongside a stripped turn is settled
+    separately, §1.1b)."""
+    chunks: list[str] = []
+    for k in ("acknowledge", "recast", "model", "explain", "try", "continue"):
+        v = str(parts.get(k) or "").strip()
+        if v:
+            chunks.append(f"<{k}>{v}</{k}>")
+    return "<tutor>" + "\n".join(chunks) + "</tutor>"
+
+
 def process_tutor_raw(raw: str) -> tuple[str, TutorParts]:
     """Parse + compose. Returns (visible_text, parts)."""
     parts = parse_tutor_response(raw)

@@ -152,12 +152,32 @@ SPANISH_CONCEPT_PAIRS: tuple[tuple[str, str], ...] = (
 )
 
 
+# R3 concept-class fold (system review 2026-07-30, Grok-amended): person/
+# accent/orthography VARIANTS of one lemma are ONE concept class for
+# anti-loop keys — «cómo estás» and «cómo está» are the same meaning
+# check, and distinct keys let the 20260729-210545 incident's second ask
+# read as novel on the instruction surface. Person/formality (tú/usted)
+# stays available as SURFACE metadata elsewhere (varied retrieval,
+# form-focus) — this fold applies only to registry/probe keys. Code-owned;
+# accent-folded surfaces (fold_lexical runs first in compose_topic_key).
+_CONCEPT_CLASS: dict[str, str] = {
+    "como estas": "como-estar",
+    "como esta": "como-estar",
+    "como te llamas": "como-llamar",
+    "como se llama": "como-llamar",
+}
+
+
 def compose_topic_key(frame: str, concept: str = "") -> str:
-    """Canonical registry key: "<frame>:<concept>" or the bare frame."""
+    """Canonical registry key: "<frame>:<concept>" or the bare frame.
+
+    ONE definition for memory + gate (probe_loop reads keys through the
+    same compose) — the R3 fold lives here and nowhere else."""
     f = fold_lexical((frame or "").strip())
     if not f:
         return ""
     c = fold_lexical((concept or "").strip())
+    c = _CONCEPT_CLASS.get(c, c)
     return f"{f}:{c}" if c else f
 
 
