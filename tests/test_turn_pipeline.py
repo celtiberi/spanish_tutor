@@ -236,12 +236,16 @@ class TestPipelineOrder:
         # batches 3/4 already carry (the keep-it-lean law held to the end).
         # §1.1b settlement round (2026-07-29) added render_drops (the
         # settle_pixels → settle_chrome drop trail for TurnRender).
+        # B0 dual path (§3.3 amended 2026-07-30) added realization_artifact
+        # — produced by stage_prompt_build (brief path only, None on full),
+        # consumed by stage_debug_capture + the completeness_v1 lint.
         assert sorted(tp.TurnContext.__dataclass_fields__) == sorted([
             "learner", "is_open", "ev", "input_mode", "log_learner",
             "llm_signals", "sig_pre", "obs", "blank", "sigs",
             "open_scenes", "activity", "decision", "intro_plan",
             "phase_consumed",
             "teach_images", "image_decision", "system", "task", "messages",
+            "realization_artifact",
             "final", "raw", "tool_delta", "usage", "error_result",
             "render_drops",
             "gate_ctx", "gate_result", "need_recast", "gate_hold",

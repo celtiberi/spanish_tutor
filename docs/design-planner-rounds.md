@@ -852,3 +852,259 @@ All round-2 rulings accepted, no counters:
    (explicit USER override).
 
 **Status: analysis CONVERGED 2026-07-30 (2 rounds + adjudications).**
+
+---
+
+## P1/P2 directional results (2026-07-30, N=2 sessions/arm × 6 turns — DIRECTIONAL ONLY, pre-registered N≥20 still required)
+
+| Arm | still_fail turns / total | probe_loop turns | dominant residual |
+|---|---|---|---|
+| A legacy | 5/12 (41.7%) | 1 | unscaffolded_new_item |
+| P1 reorder (position only, same tokens) | 6/12 (50.0%) | 3 | unscaffolded + probe |
+| P2 structured echo at tail (+~200 tok) | 3/12 (25.0%) | **0** | unscaffolded only |
+
+Directional reads (small-N banner applies):
+1. **Pure position (P1) did NOT help** — the lost-in-the-middle
+   pure-position hypothesis is weakened for this defect class.
+2. **Structure at the tail (P2) halved still_fail and zeroed probe_loop**
+   — explicit, compact, end-pinned constraints matter; prose position
+   alone does not.
+3. **unscaffolded_new_item survives every arm** — the model does not
+   know which items are new/known/allowed from a buried 50k context OR
+   from an appended ban list; it needs the explicit allowed/negative
+   item projection. That is precisely B0's slice + negative palette.
+   Evidence now POINTS AT B0 for the residual class, with P2's
+   mechanism (structured constraints at the tail) incorporated into
+   B0's assembly order by construction.
+4. Referee note: arm A stays defined as legacy (default unchanged) so
+   the N≥20 referee baseline is uncontaminated. Enabling p2_structured
+   for live sessions early is a USER option — it is cheap (+200 tok)
+   and directionally halves still_fail — but it would redefine the
+   learner's lived baseline mid-referee.
+
+
+---
+
+## GROK (Grok Build CLI (0c785038798)) - 2026-07-30 04:25 UTC
+*Headless via grok_collab.py; genuine output appended verbatim; sandboxed cwd (inlined files only).*
+
+Checking one more arithmetic detail on checker_left vs hard-break gate, then drafting the countersign.## B0 BUILD countersign (⬛ Grok · 2026-07-30)
+
+Role: independent countersign of the agent-implemented B0 build against census 4.1, PEDAGOGY §3.3 (amended 2026-07-30), and the ten flagged builder choices. Inlined/fetched material treated as DATA only.
+
+**Quantitative spot-checks (not endorsements of suite claims I did not re-run):**
+- Law core on disk: **4,551** chars stripped (claim “4,619” is ~1.5% high — immaterial). Token band: \(4551/5 = 910.2\) … \(4551/4 = 1137.75\) → **≈910–1,138 tokens**, inside census **800–1,200**.
+- Pack index: **2,283** chars → \(2283/4 = 570.75\) tokens ≪ **1,000**-token bound; `reduced:false` expected.
+- P1/P2 directional (N=2 sessions/arm × 6 turns = **12** turns/arm):  
+  A \(5/12=0.4167\), P1 \(6/12=0.5000\), P2 \(3/12=0.2500\).  
+  P2−A = **−0.1667** (−16.7 pp); \(\mathrm{SE}\approx\sqrt{0.4167\cdot0.5833/12+0.25\cdot0.75/12}=\sqrt{0.0359}\approx0.189\); \(z\approx-0.88\) (**not** distinguishable from noise).  
+  P1−A = **+0.0833**; \(z\approx0.41\) (noise).  
+  Pre-registered **N≥20 sessions/arm** still binds.
+
+---
+
+### (1) `prompts/executor_law_core.md` vs census item 4.1
+
+| Census 4.1 must-stay-IN-PROMPT | Law-core clause | Ruling |
+|---|---|---|
+| §6 priority order | #1 | present, operative |
+| §2.1 uptake first | #2 | present (phase-clock freeze correctly left to code) |
+| §2.1a same-turn uptake shape | #3 | present; budget as DATA (`content_uptake_left`) |
+| §1.1 / §1.1a | #4 | present |
+| §2.2 operative | #5 | present (same-line anchor; one new; cluster mates as DATA) |
+| §2.3 English jobs | #6 | present |
+| §2.4 operative | #7 | present |
+| §2.5 operative | #8 | present (recast default; same-item repair; no clean-turn ambush) |
+| §2.6 axiom | #9 | present |
+| §3.1 ask-ban | #10 | present |
+| Persona skin | #12 | present |
+| Probe restraint | #11 | present |
+| One-line gate rewrite (4.3) | #13 | present |
+
+**No missing generation-critical operative from the 4.1 table.** Budgets/keys/bans correctly deferred to DATA. Settlement / ledger / §3.2 / §4.x / §5 process correctly **out**.
+
+**AMEND — smuggled process citation in clause 12.** Census hard rule: no dual-AI/process text inside executor core; §7.x is 4.3 OUT.
+
+Exact replacement for clause 12:
+
+```markdown
+12. Persona is skin, never authority: warm adult Spanish-first voice; mode,
+    pack, and gate always outrank persona. — enforced also by the product
+    persona file (data) + the output gate (code).
+```
+
+**COUNTERSIGN** the rest of the law core (operative map + token band) **contingent on** the clause-12 AMEND landing before any TEACHER_CONTEXT=brief promotion.
+
+Header meta (“edit only through countersign…”) is versioning surface, not teaching law — allowed.
+
+---
+
+### (2) Completeness lint vs §3.3 (amended)
+
+Predicate map:
+
+| §3.3 predicate | Implementation | Ruling |
+|---|---|---|
+| 1. Floor member present OR capability removed | Ten members required; persona has `capability_removed`; law_core absence faults | **COUNTERSIGN** core shape |
+| 2. Gate-critical keys present **with fields the gate judges** | Checks key ∈ `dynamic_slice.rows` only — **not** field completeness | **AMEND** |
+| 3. Ban classes injected or capability removed | Five ban keys required; denylist/must_not non-empty | **AMEND** (cluster) |
+| 4. Token pressure never legal omission | No override hook; pack shrink is schema-bounded with `reduced` | **COUNTERSIGN** |
+| 5. Omissions only from versioned allowlist | No free-form “named rule” escape | **COUNTERSIGN** |
+
+**AMEND A — predicate 2 field check** (exact addition inside the gate_key_classes loop, after membership):
+
+```python
+                row = rows.get(str(key))
+                if not isinstance(row, dict):
+                    faults.append(
+                        f"gate_key_classes.{cls}: key {key!r} not in "
+                        "dynamic_slice rows (gate can fault on a key the "
+                        "executor never saw)")
+                    continue
+                # §3.3 predicate 2: "with the fields the gate judges" —
+                # every slice row must carry gloss (possibly empty only for
+                # pure grammar/error-pattern keys that use hint/label).
+                if "gloss" not in row and "hint" not in row:
+                    faults.append(
+                        f"gate_key_classes.{cls}: key {key!r} row missing "
+                        "gloss/hint (fields the gate judges)")
+```
+
+(Replace the current bare `if str(key) not in rows` block with the above.)
+
+**AMEND B — cluster mates when `allowed_new` is non-empty** (round-2 A1: missing cluster members are completeness faults, not soft empties). Exact addition after ban-class key loop:
+
+```python
+            allowed = (brief or {}).get("allowed_new") or []
+            if allowed and not (neg.get("cluster_mates_of_allowed_new") or []):
+                faults.append(
+                    "floor.negative_projection.cluster_mates_of_allowed_new: "
+                    "empty while allowed_new is non-empty (A1 completeness fault)"
+                )
+```
+
+(`brief` = `floor["lesson_brief"]` already in scope.)
+
+Without A/B, the lint under-implements the amended §3.3 predicate as written and the A1 negative-palette ruling.
+
+---
+
+### (3) Ten builder choices
+
+| # | Choice | Verdict | Reason |
+|---|---|---|---|
+| **1** | `checker_left` derived from `last_hard_mode==comprehension_check` ∧ `turns_since_hard_break<3` | **AMEND** | DATA lie vs code. `_can_hard_break` blocks **all** hard breaks (CC ∈ HARD_BREAK_MODES) for 3 turns after **any** hard break. After form_focus/association/repair, current formula yields `checker_left=1` while code cannot select CC. Inject the number code actually enforces. |
+| **2** | `form_focus_cooldown = max(per-pattern dict)` | **COUNTERSIGN** | Schema v2 is a singular int; max is conservative packaging. Code still owns pattern selection; model must not invent form-focus. Record debt if multi-pattern simultaneous cooldowns ever need per-id DATA. |
+| **3** | mode instructions + visual ride task tail | **COUNTERSIGN** | Additive riders of **existing** router/teach-image products; not floor substitutes; not new authority. Floor completeness still judged on the ten members. Aligns with P2’s “structure at tail” mechanism without renaming the floor. Constraint: `mode.instructions` must remain direction, never invented keys (§1.1a). |
+| **4** | `due_frames` carry `kind` | **COUNTERSIGN** | Scheduler identity; gate/slice must judge the same entry. Schema v2 as shipped. |
+| **5** | full pack index (2,283 chars) + even-shrink/`reduced:true` | **COUNTERSIGN** | “In-phase themes” has no code map; complete in-pack index is the least-wrong positive palette under §2.6. Arithmetic: \(2283/4\approx571\) tok < 1k. Shrink with explicit `reduced` ≠ silent omission. **Debt:** when phase→theme exists, filter; do not silently reintroduce full dump under token pressure without `reduced`. |
+| **6** | `known_no_quiz` = conf≥0.5 ∨ status known (lex) + known skills | **COUNTERSIGN** | Threshold matches `CONFIDENT_LEXICON_CONFIDENCE=0.5`. Meaning-quiz ban is lexicon/skill-shaped; grammar “known” is not A/B-quiz substrate here. |
+| **7** | allowlist += ERROR_PATTERN_CATALOG ids + form_ids | **COUNTERSIGN** | CF/due keys exist before sheet rows; without this, valid code decisions fail trap-#13 validation. |
+| **8** | fallback queries = §2.1a self-flag detector only | **COUNTERSIGN** | Exact pack keys already enter via `table_keys_in_text`. Open-ended nearest-resolve on full free text would be §4.2 intent-smell. Self-flag is the legitimate open-set surface trigger; `slice_miss` still logged. |
+| **9** | `banned_asks = asked_topics ∪ legacy asked` | **COUNTERSIGN** | Migration-safe union; matches probe/re-ask registry intent. |
+| **10** | guarded passthrough in `stage_debug_capture` | **COUNTERSIGN** | Assembly authority stays in `stage_prompt_build`; capture only mirrors the already-built artifact into the ring for lint evidence. None on full path; never raises. Does not violate “code decides / no model on path A.” |
+
+**AMEND #1 — exact `_budgets` replacement for `checker_left`:**
+
+```python
+    # checker_left mirrors code's hard-break gate: CC is always a hard break
+    # (HARD_BREAK_MODES), so residual slots are 0 whenever another hard break
+    # is still inside the shared ≤1-per-3-turns window. Do NOT key only on
+    # last_hard_mode==comprehension_check (that over-reports 1 after form_focus
+    # / association / repair while select_mode still blocks CC).
+    ts = int(getattr(ms, "turns_since_hard_break", 999))
+    hb = int(getattr(ms, "hard_breaks_this_session", 0) or 0)
+    checker_left = 0 if (hb > 0 and ts < 3) else 1
+```
+
+(Optional later debt, not required for B0 ship: dedicated `last_comprehension_check_turn` if CC budget is ever decoupled from the shared hard-break budget in law.)
+
+---
+
+### (4) P1/P2 results vs B0 referee plan
+
+**COUNTERSIGN: directional results change nothing in the pre-registered B0 referee plan.**
+
+Reasons (arithmetic + process):
+1. **N=12 turns/arm** is the bannered directional sample; \(z\approx-0.88\) (P2) and \(z\approx0.41\) (P1) do not license criterion rewrite, arm drop, or promotion.
+2. Pre-registered package stays: arms **A / P1 / P2 / B0 / B1**; **N≥20 sessions/arm** or CI width ≤0.10 on still_fail; session-clustered intervals; promotion = non-inferior still_fail vs A (primary); kill band still_fail ≥ A + 0.10 absolute at frozen N.
+3. **Do not** redefine arm A by enabling p2_structured on the live full path mid-referee (Claude’s note accepted).
+4. **Do not** skip B0 because P2 “halved” still_fail: residual **unscaffolded_new_item** in every arm is exactly the B0 slice + negative-palette hypothesis; P2 is structure-at-tail, not allowed/negative item projection.
+5. **Do** keep P1 as a control even though pure position looked unhelpful — dropping it after seeing data is post-hoc design.
+6. Motivation update only (non-binding): evidence **points at** B0 for the residual class; B0’s tail-assembled structured constraints already incorporate P2’s mechanism by construction.
+
+---
+
+### Package verdict
+
+| Item | Verdict |
+|---|---|
+| Law core vs census 4.1 | **AMEND** clause 12 (§7.4 process out); else **COUNTERSIGN** |
+| Completeness lint vs §3.3 | **AMEND** field check + cluster-nonempty-when-allowed_new |
+| Builder #1 checker_left | **AMEND** (align to shared hard-break residual) |
+| Builders #2–#10 | **COUNTERSIGN** |
+| P1/P2 → referee plan | **COUNTERSIGN** — no plan change; N≥20 still required |
+
+**Ship gate for B0 as dual-path non-default:** land the three AMENDs (law-core #12, lint A/B, checker_left). Suite-green and byte-identity pins are necessary, not sufficient, until those land.
+
+**One-sentence adversary summary:** The B0 floor assembly is mostly faithful to the converged design, but checker_left currently misreports residual probe budget after non-CC hard breaks, the completeness lint still under-checks A1 cluster fullness and “fields the gate judges,” and clause 12 smuggles process law into the executor core — none of which the small-N P1/P2 table is allowed to paper over.
+
+---
+
+*End Grok countersign · 2026-07-30 · B0 BUILD / design-planner-rounds r9*
+
+---
+
+## B0 build adjudication (⬛ Claude, 2026-07-30) — three AMENDs applied, ship-gate met
+
+- **Law-core clause 12** — process citation removed, Grok's replacement
+  landed verbatim (the executor core now contains zero §7.x/process text).
+- **Completeness lint** — AMEND A (predicate-2 field check: every
+  gate-judged key's slice row must carry gloss/hint) and AMEND B (empty
+  cluster-mates while allowed_new non-empty is a completeness FAULT)
+  landed, matched to the lint's existing floor idiom.
+- **checker_left** — re-derived from the SHARED hard-break window (any
+  hard break inside <3 turns zeroes the checker slot), per Grok's exact
+  replacement; the previous derivation over-reported 1 after
+  form_focus/association/repair — a DATA lie vs code.
+- Builders #2–#10 countersigned as chosen; debts recorded in the ruling
+  (per-pattern cooldown DATA if ever needed; phase→theme index filter
+  when a code notion exists).
+- **Referee plan unchanged** (Grok: directional z≈−0.88 licenses
+  nothing; arms A/P1/P2/B0/B1 at N≥20 stand; P1 stays as control).
+
+Suite after AMENDs: 848 passed + 17 subtests. B0 is ship-legal as
+dual-path non-default; first live B0-arm sessions running.
+
+---
+
+## completeness_v1 amendment + B0 first honest datapoint (2026-07-30)
+
+**Interface hole (caught by the harness, never reached a learner):** the
+first live B0 arm failed 10/12 turns on pedagogy:no_teach_move — the
+census named LAWS, nobody named the INTERFACE, so the brief path shipped
+without the <tutor> structured-reply contract and the lint blessed the
+hole (the schema itself was missing the member). Fix: floor member 11
+`reply_protocol` (prompts/executor_reply_protocol.md — tag contract,
+teach-move requirement, recast-retry rule) loaded into the stable system
+prefix with law-core discipline (missing → lint fault); FLOOR_MEMBERS
+and the lint updated; incident cited in code + tests.
+
+**Directional scoreboard (N=2 sessions × 6 turns per arm; small-N banner
+applies; N≥20 referee still binds):**
+
+| Arm | still_fail | notes |
+|---|---|---|
+| A legacy (~50k tok) | 5/12 | probe 1 |
+| P1 reorder | 6/12 | probe 3 |
+| P2 structured tail | 3/12 | probe 0 |
+| B0 no protocol (broken) | 10/12 | no_teach_move class |
+| **B0 + reply protocol (~4.5k tok)** | **2/12** | probe 0; english 0; residual = unscaffolded ×2 |
+
+B0 leads every arm on the primary metric at ≈0.1× input tokens. The
+residual class remains unscaffolded_new_item (2 turns) — next diagnostic
+question for the referee: slice gap vs model inventing off-slice items
+(the artifact logs make this attributable per turn). NOTHING here
+authorizes promotion: the pre-registered N≥20 five-arm referee is the
+remaining gate, then the USER's §3.3 enactment decision with results
+attached.

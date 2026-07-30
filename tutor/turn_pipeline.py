@@ -184,6 +184,10 @@ class TurnContext:
     system: str = ""                                # static system blocks
     task: str = ""                                  # per-turn task message
     messages: list = field(default_factory=list)    # full request messages
+    # B0 brief path only (PEDAGOGY §3.3 amended): the completeness_v1 turn
+    # artifact from realization_context — stashed for the lint + debug ring.
+    # None on the full path.
+    realization_artifact: Any = None
     final: Any = None                               # provider response obj
     raw: str = ""                                   # raw model text
     tool_delta: Any = None                          # sheet tool blocks
@@ -944,12 +948,40 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
     prefix-cache covers system + chat history.  The per-turn sheet rides
     in the task message at the request tail.  No personal context —
     personal-data capture is disabled.  Full history in testing
-    (HISTORY_TURNS=0); never mutates session.history."""
+    (HISTORY_TURNS=0); never mutates session.history.
+
+    B0 dual path (PEDAGOGY §3.3 AMENDED 2026-07-30, USER-ratified;
+    docs/design-planner-rounds.md): TEACHER_CONTEXT=brief swaps the prompt
+    for the ten-member floor — system = law core + persona (cache-stable),
+    task = realization context (brief + slice + bans + manifest, volatile
+    tail), messages = last-K exchange window (the only legal windowing,
+    versioned in realization_context.K_EXCHANGES).  The completeness_v1
+    artifact is stashed on ctx and mirrored into the debug ring entry.
+    This is the ONLY branch point — the default ("full") path below is
+    byte-identical to the historical prompt, and everything downstream
+    (gate, settlement, recorders) runs unchanged on both paths."""
     from . import config
     from .character_sheet import format_sheet_for_prompt
     from .corpus import load_pack
     from .executor import build_ai_tutor_system, build_ai_tutor_user_message
     from .scenes import scene_hints_for_prompt
+
+    if getattr(config, "TEACHER_CONTEXT", "full") == "brief":
+        from .lesson_brief import assemble_lesson_brief
+        from .realization_context import build_realization_context
+
+        brief = assemble_lesson_brief(session, ctx)
+        rc = build_realization_context(session, ctx, brief)
+        ctx.system = rc.system_blocks
+        ctx.task = rc.task
+        if ctx.is_open:
+            ctx.messages = [{"role": "user", "content": ctx.task}]
+        else:
+            ctx.messages = list(rc.window_messages) + [
+                {"role": "user", "content": ctx.task}
+            ]
+        ctx.realization_artifact = rc.artifact
+        return
 
     ctx.system = build_ai_tutor_system(
         pack_palette=load_pack(session.pack_dir),
@@ -1857,6 +1889,16 @@ def stage_debug_capture(session, ctx: TurnContext) -> None:
         stop_reason=getattr(ctx.final, "stop_reason", "") or "",
         is_open=ctx.is_open,
     )
+    # B0 brief path (§3.3 amended): mirror the completeness_v1 artifact
+    # into the ring entry just captured — the lint's logged evidence.
+    # Pure passthrough (None on the full path); never raises.
+    if ctx.realization_artifact is not None:
+        try:
+            session.debug_requests[-1]["realization_artifact"] = (
+                ctx.realization_artifact
+            )
+        except (IndexError, TypeError, KeyError):
+            pass
 
 
 def stage_log_turn(session, ctx: TurnContext) -> None:

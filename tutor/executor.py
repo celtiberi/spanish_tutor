@@ -331,6 +331,32 @@ def build_ai_tutor_user_message(
         },
     }
     payload = {k: v for k, v in payload.items() if v is not None}
+    # r9 falsifier arms (docs/design-planner-rounds.md, frozen order;
+    # USER-ratified 2026-07-30). Same-content position/structure controls
+    # for the lost-in-the-middle hypothesis — NEVER a truncation (§3.3):
+    #   legacy        — historical order (sheet buried mid-message)
+    #   p1_reorder    — identical keys, constraints LAST (zero token delta)
+    #   p2_structured — legacy order + compact structured constraints echo
+    #                   pinned to the tail (~200 tokens)
+    order = getattr(config, "TEACHER_PROMPT_ORDER", "legacy")
+    if order == "p1_reorder":
+        tail_keys = ("session_facts", "hard_observations", "mode")
+        payload = {
+            **{k: v for k, v in payload.items() if k not in tail_keys},
+            **{k: payload[k] for k in tail_keys if k in payload},
+        }
+    elif order == "p2_structured":
+        payload["FINAL_CONSTRAINTS_check_before_replying"] = {
+            "do_not_re_ask_these_frames": mem.get("asked_topics") or [],
+            "mode_instructions": mode.get("instructions") or "",
+            "hard_rules": [
+                "no A/B or yes/no English-meaning quiz on known material",
+                "never re-ask any do_not_re_ask frame (any person/formality "
+                "variant counts as the same ask)",
+                "every NEW Spanish item carries its gloss/anchor on the "
+                "same line",
+            ],
+        }
     return (
         "<tutor_turn_task>\n"
         + json.dumps(payload, ensure_ascii=False, indent=2)

@@ -82,6 +82,29 @@ CONTROLLER_EXECUTOR = os.environ.get("CONTROLLER_EXECUTOR", MODEL)
 # docs/reviews-architecture-refactor.md, 2026-07-28); any other value is a
 # hard ValueError at session construction.
 TEACHER_MODE = (os.environ.get("TEACHER_MODE", "planned") or "planned").strip().lower()
+
+# r9 falsifier arm selector (docs/design-planner-rounds.md, USER-ratified
+# 2026-07-30): legacy | p1_reorder | p2_structured. Position/structure
+# controls only — same content, never truncation (SS3.3).
+TEACHER_PROMPT_ORDER = (
+    os.environ.get("TEACHER_PROMPT_ORDER", "legacy") or "legacy"
+).strip().lower()
+
+# B0 dual-path realization context (PEDAGOGY SS3.3 AMENDED 2026-07-30,
+# USER-ratified "ratify, run P1/P2, build B0 in parallel";
+# docs/design-planner-rounds.md round-2 CONVERGED):
+#   full  (default) — today's teacher path, byte-identical (build_ai_tutor_*)
+#   brief           — B0 floor: law core + persona + LessonBrief + same-turn
+#                     slice + negative projection + budgets + manifest +
+#                     last-K exchange window + pack index + fallback
+#                     (tutor/realization_context.py; completeness_v1 lint:
+#                     scripts/check_completeness.py)
+# Non-default until the pre-registered referee (arms A/P1/P2/B0/B1) passes.
+# Orthogonal to TEACHER_PROMPT_ORDER (the P1/P2 falsifier knob above).
+TEACHER_CONTEXT = (
+    os.environ.get("TEACHER_CONTEXT", "full") or "full"
+).strip().lower()
+
 PLANNED_TEACHER_MODES = ("planned", "plan", "new", "ai")
 # Teach images: cache-first; on miss generate same-turn when enabled + generator.
 # Empty/unset = auto-on when GEMINI_API_KEY or GOOGLE_API_KEY is present.
