@@ -20,3 +20,11 @@ Earned agent-engineering practices (ours + elfric survey, incident-backed):
 challenge lanes, blind-arm/reconcile backtests, lints-as-law, watchdog, agent
 supervisor) and which patterns map to this project's objects. Pointer only; PEDAGOGY.md
 remains the sole law here.
+
+`docs/from-the-stocks-repo-2026-07-30.md` — return letter answering your 2026-07-30
+one: the watchdog + agent-supervisor patterns you asked for, the shadow-desk
+convergence with your item 3 (§2p — adversarial counterpart as a mirrored desk with
+call-vs-call arms), a new exportable law ("pinned-source authority covers stated
+figures, not derived superlatives"), receipts for what your letter changed there, and
+a P.S. proposing a standing cross-project exchange folder (user-initiated) for your
+side to ratify or decline under your own law.
