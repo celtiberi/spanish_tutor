@@ -121,6 +121,7 @@ class TurnEventKind(str, Enum):
     OUTPUT_GATE_STILL_FAIL = "output_gate_still_fail"
     OUTPUT_GATE_ERROR = "output_gate_error"
     OUTPUT_GATE_STRIPPED = "output_gate_stripped"
+    OUTPUT_GATE_RECOVERED = "output_gate_recovered"
     OUTPUT_GATE_HELD = "output_gate_held"
     # -- post-model recorders (stage "record") ------------------------------
     INTRODUCED = "introduced"
@@ -335,6 +336,10 @@ NOTE_CATALOG: dict[TurnEventKind, NoteSpec] = {s.kind: s for s in [
           "(still_fail floor rung a — probing parts dropped, remainder "
           "re-gated and shipped; system review 2026-07-30)",
           ["turn_pipeline._gate_floor"], [], "log-only", False),
+    _spec(TurnEventKind.OUTPUT_GATE_RECOVERED, "output_gate_recovered", True,
+          "(still_fail floor rung b — constrained regeneration passed; the "
+          "learner gets a real turn instead of silence)",
+          ["turn_pipeline._gate_floor"], [], "log-only", False),
     _spec(TurnEventKind.OUTPUT_GATE_HELD, "output_gate_held:", False,
           "<faults> (still_fail floor rung b′ — payload never shipped; "
           "client renders a non-teaching hold)",
@@ -548,6 +553,7 @@ _RENDER = {
     _K.FRAME_RECORDED: lambda e: f"frame_recorded:{e.key}",
     _K.RENDER_DROPPED: lambda e: f"render_dropped:{e.key}",
     _K.OUTPUT_GATE_STRIPPED: lambda e: "output_gate_stripped",
+    _K.OUTPUT_GATE_RECOVERED: lambda e: "output_gate_recovered",
     _K.OUTPUT_GATE_HELD: lambda e: (
         "output_gate_held:" + ",".join(e.payload.get("faults") or [])
     ),

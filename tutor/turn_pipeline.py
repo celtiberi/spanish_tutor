@@ -1235,6 +1235,76 @@ def _gate_floor(session, ctx: TurnContext, residual: set) -> None:
                 # is ≤3 with the floor rung, still no loop).
                 _settle_pixels(session, ctx)
                 return
+    # (b) MODEL-OWNED RECOVERY under capability bans — the rung that was
+    # specified in the countersigned ladder and MISSING from the first
+    # implementation. Incident 2026-07-30 (session 133545): a learner
+    # wrote "I do not understand what you are asking. Too advanced for
+    # me" and received SILENCE, because strip-part could not fix a
+    # mixed residual and the floor fell straight through to hold. A dead
+    # turn at the moment of confusion is worse than an imperfect turn.
+    # Constraints only — never code-authored Spanish (§1.1a).
+    if not getattr(ctx, "_recovery_spent", False):
+        ctx._recovery_spent = True
+        from .conv_session import tutor_turn
+
+        bans = [
+            "Do NOT introduce ANY new Spanish word or phrase this turn — "
+            "use only Spanish the learner has already met.",
+            "Do NOT ask any comprehension quiz, A/B question, or repeat a "
+            "question you already asked.",
+            "Keep it to at most 2 short sentences.",
+            "If the learner said they are confused or asked a question, "
+            "answer THAT first, simply, then stop.",
+        ]
+        recovery = {
+            "role": "user",
+            "content": (
+                "(harness) RECOVERY — your last reply was blocked by the "
+                "quality gate and was NOT shown to the learner.\n"
+                f"Blocked for: {', '.join(sorted(residual))}\n"
+                "Rewrite the turn under these hard constraints:\n- "
+                + "\n- ".join(bans)
+                + "\nSame reply format as always."
+            ),
+        }
+        try:
+            final3, raw3, _t3, usage3, _ = tutor_turn(
+                session.client, session.caps, ctx.system,
+                ctx.messages
+                + [{"role": "assistant", "content": ctx.raw or ""}]
+                + [recovery],
+                tools=None,
+            )
+        except Exception:
+            raw3, final3, usage3 = "", None, None
+        if usage3:
+            ctx.usage = {
+                k: (ctx.usage or {}).get(k, 0) + (usage3 or {}).get(k, 0)
+                for k in ("input_tokens", "output_tokens",
+                          "thinking_tokens", "cached_input_tokens")
+            }
+        if raw3 and raw3.strip():
+            vis3, parts3 = _ptr(raw3)
+            gate4 = check_output_gate(replace(
+                ctx.gate_ctx,
+                parts=parts3.as_dict(), visible=vis3, raw=raw3,
+                require_recast=ctx.need_recast,
+                image_present=bool(ctx.teach_images),
+                truncated=(
+                    (getattr(final3, "stop_reason", "") or "") == "max_tokens"
+                ),
+            ))
+            if not (set(gate4.faults or []) & GATE_SHIP_BAN_FAULTS):
+                ctx.raw = raw3
+                ctx.final = final3
+                ctx.gate_result = gate4
+                ctx.ev.emit(
+                    EV.OUTPUT_GATE_RECOVERED,
+                    payload={"blocked_for": sorted(residual)}, stage="gate",
+                )
+                _settle_pixels(session, ctx)
+                return
+
     ctx.raw = ""
     ctx.gate_hold = True
     # Nothing ships on a hold — orphaned image candidates drop with it.

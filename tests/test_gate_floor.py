@@ -76,6 +76,15 @@ PROBE_ONLY_REPLY = (
     "  <try>¿«¿Cómo estás?» significa «How are you?»? ¿Sí o no?</try>\n"
     "</tutor>"
 )
+# What a compliant rung-(b) recovery looks like: known material only, no
+# quiz chrome, a real teach move.
+RECOVERY_OK_REPLY = (
+    "<tutor>\n"
+    "  <acknowledge>¡Muy bien!</acknowledge>\n"
+    "  <model>**Estoy bien.**</model>\n"
+    "  <try>¿Y tú? **Estoy bien.**</try>\n"
+    "</tutor>"
+)
 
 
 def _known_wellbeing_seed():
@@ -93,7 +102,7 @@ def _known_wellbeing_seed():
     # Reply-surface keys are sheet-known so the unscaffolded scan stays
     # quiet — the strip test needs probe_loop as the SOLE residual.
     for key in ("estoy bien", "bien", "muy bien", "gracias", "cómo estás",
-                "cómo está", "contento"):
+                "cómo está", "contento", "y tú"):
         s["lexicon"][key] = {
             "status": "known", "confidence": 0.8, "solid_uses": 2,
             "introduced_at": "2026-07-20",
@@ -128,15 +137,44 @@ class TestStillFailFloor:
         assert "Estoy bien" in turn.reply
         assert not turn.parts.get("gate_hold")
 
+    def test_recovery_rung_ships_a_real_turn_instead_of_silence(
+        self, tutor_session_factory
+    ):
+        # Incident 2026-07-30 (session 133545): a learner wrote "I do not
+        # understand what you are asking. Too advanced for me" and got
+        # SILENCE — strip could not fix a mixed residual and the floor
+        # fell straight to hold. Rung (b) is the fix: ONE constrained
+        # regeneration (bans only, model still performs Spanish) before
+        # any hold. A compliant recovery must SHIP.
+        ctx = tutor_session_factory(
+            seed_sheet=_known_wellbeing_seed(),
+            replies=[OPEN_OK_REPLY, PROBE_ONLY_REPLY, PROBE_ONLY_REPLY,
+                     RECOVERY_OK_REPLY],
+        )
+        s = ctx.session
+        assert s.open_session().error is None
+        turn = s.user_turn("I do not understand what you are asking.")
+        assert turn.error is None
+        assert "output_gate_recovered" in turn.notes
+        assert not turn.parts.get("gate_hold")
+        assert "Estoy bien" in turn.reply
+        assert "Sí o no" not in turn.reply
+        # The recovery prompt states the bans and never dictates Spanish.
+        recovery_msg = ctx.fake.request(3)["messages"][-1]["content"]
+        assert "RECOVERY" in recovery_msg
+        assert "Do NOT introduce ANY new Spanish" in recovery_msg
+        assert "Estoy bien" not in recovery_msg  # no code-authored Spanish
+
     def test_unstrippable_probe_gets_held_never_shipped(
         self, tutor_session_factory
     ):
-        # Probe-only replies: surgery leaves an empty turn (no teach move —
-        # itself ship-ban) → rung (b′): hold. Nothing of the faulting
+        # Probe-only replies through BOTH remaining rungs (repair, then the
+        # constrained recovery) → rung (b′): hold. Nothing of the faulting
         # payload reaches the learner; the client renders a system notice.
         ctx = tutor_session_factory(
             seed_sheet=_known_wellbeing_seed(),
-            replies=[OPEN_OK_REPLY, PROBE_ONLY_REPLY, PROBE_ONLY_REPLY],
+            replies=[OPEN_OK_REPLY, PROBE_ONLY_REPLY, PROBE_ONLY_REPLY,
+                     PROBE_ONLY_REPLY],
         )
         s = ctx.session
         assert s.open_session().error is None

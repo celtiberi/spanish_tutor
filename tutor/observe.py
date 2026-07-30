@@ -212,8 +212,18 @@ def probe_signals(learner: str) -> set[str]:
     if re.search(
         r"\bwhat\s+(does|do|is|are)\b|"
         r"\bwhat\s+you\s+(are\s+)?saying\b|"
-        r"\bi\s+don'?t\s+know\s+what\b|"
+        r"\bi\s+do\s*n'?o?t\s+know\s+what\b|"
+        # "do not understand" (expanded) missed the contraction-only form
+        # and cost a learner a DEAD TURN: 2026-07-30 session 133545 —
+        # "I do not understand what you are asking. Too advanced for me"
+        # routed to plain conversation, the tutor pushed due items, the
+        # gate held the reply, and the learner got silence.
+        r"\bi\s+do\s+not\s+understand\b|"
         r"\bi\s+don'?t\s+understand\b|"
+        r"\b(too|way)\s+(advanced|hard|difficult|fast|much)\b|"
+        r"\bno\s+idea\s+what\b|"
+        r"\bi'?m\s+lost\b|"
+        r"\bconfus(ed|ing)\b|"
         r"\bno\s+entiendo\b|"
         r"\bwhat\s+does\s+.+mean\b|"
         r"\bmeans?\b.+\?|"
