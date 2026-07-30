@@ -39,6 +39,10 @@ os.environ.setdefault("FOCUS_MODEL", "off")
 os.environ.setdefault("FOCUS_ASYNC", "false")
 os.environ.setdefault("FOCUS_BLOCKING", "false")
 os.environ.setdefault("SHEET_TOOLS", "false")
+# Voice is browser-triggered on the web path and never fires in this
+# headless harness (verified: zero `tts` rows in run ledgers) — clamped
+# anyway so no future change can silently bill audio for a text sim.
+os.environ.setdefault("TTS_ENABLED", "false")
 # Full teacher context while testing (project gate:
 # docs/teacher-context-no-truncate.md)
 os.environ.setdefault("TEACHER_CONTEXT_TRUNCATE", "false")
