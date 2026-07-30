@@ -71,11 +71,52 @@ def _lexicon_confidence(sheet: dict, key: str) -> float:
         return 0.0
 
 
+# next_best fields the related-bucket matcher may read. NEVER avoid /
+# reason / method / primary or other free-form fields: the 2026-07-29 hola
+# incident (session 20260729-163623, Grok countersign in
+# docs/design-encounter-variety.md) was caused by
+# avoid="return_to_greetings_when_already_emerging" making
+# word_present("greetings", blob) True — the instruction to avoid
+# greetings promoted the whole greetings theme into the FIRST bucket.
+_NEXT_BEST_MATCH_FIELDS = (
+    "can_do", "activity", "stretch", "statement", "form_focus", "teach_hint",
+)
+
+
 def _next_best_blob(sheet: dict) -> str:
     nb = (sheet or {}).get("next_best")
     if not isinstance(nb, dict):
         return ""
-    return " ".join(str(v) for v in nb.values() if isinstance(v, str)).lower()
+    return " ".join(
+        str(nb[f]) for f in _NEXT_BEST_MATCH_FIELDS
+        if isinstance(nb.get(f), str)
+    ).lower()
+
+
+def _true_zero_sheet(sheet: dict) -> bool:
+    """True zero on BOTH axes (encounter-variety round, Grok B AMEND):
+    no schedule history (no introduced_at anywhere in lexicon) AND no
+    ability signal (no skill emerging-or-better / confidence ≥ 0.20).
+    Only such sheets get the greetings-first opener bias; anyone
+    mid-stream orders greetings with the rest of the table."""
+    lex = (sheet or {}).get("lexicon") or {}
+    for entry in lex.values():
+        if isinstance(entry, dict) and entry.get("introduced_at"):
+            return False
+    skills = (sheet or {}).get("skills") or {}
+    for entry in skills.values():
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("status") or "").lower() in (
+            "emerging", "known", "fragile",
+        ):
+            return False
+        try:
+            if float(entry.get("confidence") or 0.0) >= 0.20:
+                return False
+        except (TypeError, ValueError):
+            pass
+    return True
 
 
 def _session_excluded(session_snapshot: dict | None) -> set[str]:
@@ -116,17 +157,22 @@ def candidate_keys(
 ) -> list[str]:
     """Introducible table keys, teach-order first.
 
-    Order: keys related to the sheet's next_best (key or theme named in its
-    text) first, then the greetings/farewells/courtesy openers, then the
-    rest — each bucket in table order. ``pack_topics`` is accepted for API
-    stability (future in-topic filtering); the thin ship orders from
-    next_best + themes only. ``session_snapshot`` excludes concepts the
-    session already covered/imaged (audit (a1) 2026-07-28).
+    Order: keys related to the sheet's next_best FIRST (key or theme named
+    in its targeting fields — _NEXT_BEST_MATCH_FIELDS only, never avoid/
+    reason); then, ONLY for a true-zero sheet (_true_zero_sheet, both
+    axes), the greetings/farewells/courtesy openers; then the rest; for
+    mid-stream sheets the openers sort AFTER rest — each bucket in table
+    order (encounter-variety round, 2026-07-29: the hola incident).
+    ``pack_topics`` is accepted for API stability (future in-topic
+    filtering); the thin ship orders from next_best + themes only.
+    ``session_snapshot`` excludes concepts the session already covered/
+    imaged (audit (a1) 2026-07-28).
     """
     exclude = _session_excluded(session_snapshot)
     blob = _next_best_blob(sheet)
+    greetings_first = _true_zero_sheet(sheet)
     related: list[str] = []
-    priority: list[str] = []
+    openers: list[str] = []
     rest: list[str] = []
     for key, entry in table.items():
         if not _eligible(sheet, table, key):
@@ -139,10 +185,19 @@ def candidate_keys(
         ):
             related.append(key)
         elif theme in PRIORITY_THEMES:
-            priority.append(key)
+            openers.append(key)
         else:
             rest.append(key)
-    return related + priority + rest
+    # Openers lead ONLY for a true zero; for anyone mid-stream they sort
+    # AFTER content (counter-amendment, adjudication in
+    # docs/design-encounter-variety.md: demoting openers merely INTO rest
+    # left hola first by plain table order — greetings open the table —
+    # so Grok's own acceptance test "first candidate is not hola" failed
+    # by executed replay. Openers are the special first move or the last
+    # resort, never the default).
+    if greetings_first:
+        return related + openers + rest
+    return related + rest + openers
 
 
 def plan_introduction(
@@ -242,7 +297,8 @@ def plan_instructions(plan: IntroducePlan) -> str:
             f"INTRODUCE (one item, rule {plan.rule_id}): present "
             f"**{plan.key}** anchored to the English cognate "
             f"'{p.get('anchor')}' (≤6 English words for the anchor; no other "
-            "English)."
+            f"English). The anchor line must contain **{plan.key}** "
+            "itself — never a floating anchor the learner must re-attach."
         )
     elif plan.scaffold_type == "image":
         core = (
@@ -254,7 +310,8 @@ def plan_instructions(plan: IntroducePlan) -> str:
         core = (
             f"INTRODUCE (one item, rule {plan.rule_id}): present "
             f"**{plan.key}** with the memory keyword '{p.get('keyword')}' "
-            "(≤6 English words; no other English)."
+            f"(≤6 English words; no other English). The keyword line "
+            f"must contain **{plan.key}** itself — never a floating anchor."
         )
     else:
         core = (

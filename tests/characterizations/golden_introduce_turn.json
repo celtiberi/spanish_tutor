@@ -4,7 +4,7 @@
     "faults": [],
     "ok": true,
     "scaffold_saved": {
-      "hola": "anchor"
+      "me llamo": "gloss"
     }
   },
   "learner": "Muy bien, gracias.",
@@ -16,7 +16,7 @@
     "images_shown": [],
     "intro_budget_remaining": 1,
     "introduced_this_session": [
-      "hola"
+      "me llamo"
     ],
     "shown": [
       "greet",
@@ -37,7 +37,7 @@
   "notes": [
     "mode=conversation",
     "mode_reason=default_conversation",
-    "introduce_planned:hola:R-E",
+    "introduce_planned:me llamo:R-D",
     "output_gate_ok",
     "rules_backup",
     "hard_observer",
@@ -46,8 +46,8 @@
     "focus_async",
     "structured_reply",
     "pedagogy:ok",
-    "introduced:hola",
-    "progress_milestone:planted:hola",
+    "introduced:me llamo",
+    "progress_milestone:planted:me llamo",
     "pedagogy:known_learner_open",
     "phase=ai_tutor",
     "activity=new_input",
@@ -80,22 +80,22 @@
   },
   "progress_events": [
     {
-      "key": "hola",
+      "key": "me llamo",
       "kind": "planted",
       "polarity": "up"
     }
   ],
-  "reply": "¡Muy bien!\n\nPara saludar decimos **hola** — like \"hello\" in English.\n\nDi **hola** para saludar.",
+  "reply": "¡Muy bien!\n\nPara presentarte dices **me llamo** (my name is): Me llamo Marisol.\n\nDi: **Me llamo** y tu nombre.",
   "save_sheet_calls": [
     "_commit_sheet"
   ],
   "sheet": {
-    "lexicon:hola": {
+    "lexicon:me llamo": {
       "confidence": 0.0,
       "interval_days": 1,
       "introduced_at": "<TODAY>",
       "next_due": "<TOMORROW>",
-      "scaffold": "keyword",
+      "scaffold": "gloss",
       "status": "unknown",
       "successive_successes": 0
     },

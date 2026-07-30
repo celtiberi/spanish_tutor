@@ -81,7 +81,7 @@ def due_elicit_block(
     due. Code decides WHAT is due; the model only realizes ONE re-encounter
     naturally in Spanish.
     """
-    from .retrieval_scheduler import due_items
+    from .retrieval_scheduler import due_items, frames_seen_of
 
     # Phase sole-orchestrator: new_input owns introduce; do not compete
     # with due.
@@ -99,6 +99,18 @@ def due_elicit_block(
         "DUE RE-ENCOUNTERS (weave ONE naturally into this turn's Spanish; "
         "no flashcard framing, no re-gloss unless they fail): " + listing
     )
+    # Varied-retrieval direction (PEDAGOGY §2.4 rider, encounter-variety
+    # round 2026-07-29): state + constraint only — the FULL frames_seen set
+    # backs the "not on that list" claim (no semantic drop); the prompt
+    # line shows at most 6. Empty history appends nothing (first recorded
+    # elicit free); never name a required target frame.
+    for d in due:
+        frames = frames_seen_of(sheet, d.key, d.kind)
+        if frames:
+            block += (
+                f"\n«{d.key}» due — frames so far: {', '.join(frames[:6])}. "
+                "Elicit it in a context not on that list."
+            )
     return block, due
 
 
@@ -160,10 +172,16 @@ def introduce_scaffold_evidence(plan, reply: str, teach_images=None) -> bool:
     stype = getattr(plan, "scaffold_type", "")
     if stype == "gloss":
         return gloss_after_key(plan.key, reply or "")
+    # key= makes attachment REQUIRED: the anchor line must carry the item
+    # (2026-07-29 floating-anchor incident — a why with no referent).
     if stype == "cognate":
-        return anchor_in_reply({"cognate_en": payload.get("anchor")}, reply or "")
+        return anchor_in_reply(
+            {"cognate_en": payload.get("anchor")}, reply or "", key=plan.key
+        )
     if stype == "keyword":
-        return anchor_in_reply({"keyword_en": payload.get("keyword")}, reply or "")
+        return anchor_in_reply(
+            {"keyword_en": payload.get("keyword")}, reply or "", key=plan.key
+        )
     if stype == "image":
         return any(
             (t.get("concept") or "") == plan.key for t in (teach_images or [])
@@ -785,6 +803,12 @@ class ConversationalSession:
         save_sheet(self.sheet_path, self.sheet)
         self.tools = SHEET_TOOLS if use_tools else None
         self.logger: SessionLogger | None = None
+        # §1.1b settled render record (design-exchange-settlement.md):
+        # turn-scoped RESULT, written once by stage_settle_chrome and
+        # replaced whole each turn — deliberately NOT in SessionState
+        # (display-only, never snapshotted; cleared on new_chat/reset in
+        # open_session and reset_sheet).
+        self.last_turn_render = None
         self.teacher_mode = (config.TEACHER_MODE or "planned").strip().lower()
         # E4/E4b deletion (docs/reviews-architecture-refactor.md, 2026-07-28):
         # the TEACHER_MODE=rules PlanCard runtime and the legacy harness were
@@ -880,6 +904,27 @@ class ConversationalSession:
         except Exception:
             return []
 
+    def _progress_production(self, key: str, kind: str) -> list[str]:
+        """r8 production-evidence milestones at a due SUCCESS (2026-07-29,
+        docs/pedagogy-research-r8-progress-measurement.md; build
+        countersign AMENDs applied): first_solo — first spaced due-success
+        (the §2.4 scaffold strip is SOFT direction, not gate-proven
+        absence of help, so copy never claims "without help");
+        new_context — due success while frames_seen ≥ 2 (multi-frame
+        EXPOSURE at success, not frame-of-success attribution — debt
+        NEW_CONTEXT_FRAME_OF_SUCCESS). Both ledger-deduped, fire once per
+        item, move no ability fields."""
+        from .retrieval_scheduler import frames_seen_of
+
+        notes = self._progress_note("first_solo", key, item_kind=kind)
+        frames = frames_seen_of(self.sheet, key, kind)
+        if len(frames) >= 2:
+            notes.extend(self._progress_note(
+                "new_context", key, item_kind=kind,
+                detail_ctx={"frames": frames},
+            ))
+        return notes
+
     def _progress_ladder(self, transition: dict) -> list[str]:
         """Ladder crossings (taking_root / rooted / regression) from one
         record_outcome_ex transition."""
@@ -973,6 +1018,11 @@ class ConversationalSession:
         sheet_for_focus = self._sheet_for_focus()
         if self.last_mode_decision:
             sheet_for_focus = {**sheet_for_focus, "_last_mode_decision": self.last_mode_decision}
+        if self.last_turn_render is not None:
+            sheet_for_focus = {
+                **sheet_for_focus,
+                "_last_turn_render": self.last_turn_render.as_dict(),
+            }
         panel, meta = enrich_focus_panel(
             sheet_for_focus,
             learner=learner,
@@ -1152,7 +1202,8 @@ class ConversationalSession:
 
         hit = ensure_asset(concept, generate=False)
         if hit:
-            self.pedagogy_memory.note_image(concept)
+            # §1.1b: attach produces a CANDIDATE — note_image fires at
+            # settle_chrome for confirmed display only.
             return [{
                 **hit,
                 "decision_reason": f"mode:{decision.mode.value}",
@@ -1207,6 +1258,8 @@ class ConversationalSession:
                     key=d.key, payload={"kind": d.kind}, stage="schedule",
                 ))
                 notes.extend(self._progress_ladder(tr))
+                if ok:
+                    notes.extend(self._progress_production(d.key, d.kind))
             elif d.kind == "grammar" and d.key in resolved_forms:
                 self.sheet, tr = record_outcome_ex(self.sheet, d.key, d.kind, True)
                 notes.append(ev.emit(
@@ -1214,6 +1267,7 @@ class ConversationalSession:
                     key=d.key, payload={"kind": d.kind}, stage="schedule",
                 ))
                 notes.extend(self._progress_ladder(tr))
+                notes.extend(self._progress_production(d.key, d.kind))
         return notes
 
     def _spawn_signal_shadow(self, learner: str, mode: str, reason: str) -> None:
@@ -1323,6 +1377,11 @@ class ConversationalSession:
                 snap = dict(sheet_snap) if isinstance(sheet_snap, dict) else {}
                 if self.last_mode_decision:
                     snap = {**snap, "_last_mode_decision": self.last_mode_decision}
+                if self.last_turn_render is not None:
+                    snap = {
+                        **snap,
+                        "_last_turn_render": self.last_turn_render.as_dict(),
+                    }
                 panel, meta = enrich_focus_panel(
                     snap,
                     learner=learner,
@@ -1577,6 +1636,7 @@ class ConversationalSession:
             stage_gate_context,
             stage_gate_repair,
             stage_phase_tick,
+            stage_settle_pixels,
         )
 
         ctx = TurnContext(
@@ -1594,6 +1654,10 @@ class ConversationalSession:
             _stage(self, ctx)
         if ctx.error_result is not None:
             return ctx.error_result
+        # settle_pixels₀ (§1.1b) — outside the gate try/except, like the
+        # context build: settlement is code-simple and must not be
+        # swallowed as a gate error.
+        stage_settle_pixels(self, ctx)
         stage_gate_context(self, ctx)
         try:
             stage_gate_check(self, ctx)
@@ -1626,6 +1690,7 @@ class ConversationalSession:
         # ledger keeps the money history. The sheet itself and
         # progress_session_id are untouched.
         self.state.reset("new_chat", sheet=self.sheet)
+        self.last_turn_render = None  # §1.1b: render record is per-chat
 
         # New chat ≠ new learner: seed session memory from durable sheet
         try:
@@ -1730,6 +1795,7 @@ class ConversationalSession:
         # misses (costs, focus_version, focus_inflight, image_warm_inflight).
         # The on-disk COST ledger is append-only forever (continuity ruling).
         self.state.reset("sheet_reset", sheet=self.sheet)
+        self.last_turn_render = None  # §1.1b: render record dies with reset
         return self.sheet
 
     def sheet_human(self) -> str:

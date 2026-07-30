@@ -608,6 +608,40 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
         self.assertEqual(g.scaffold_saved.get("mucho gusto"), "gloss")
 
 
+class TestAnchorAttachment(unittest.TestCase):
+    """2026-07-29 floating-anchor incident: anchor_in_reply requires the
+    item on the SAME LINE as the anchor (§2.2 attachment clause). key is
+    REQUIRED — the keyless presence-anywhere form was killed by the
+    countersign (zero callers; the keyless path IS the founding bug)."""
+
+    ENTRY = {"cognate_en": "enchanted"}
+
+    def test_same_line_attaches(self):
+        from tutor.output_gate import anchor_in_reply
+
+        text = "**Encantado** — like English 'enchanted'.\nDi: Encantado."
+        self.assertTrue(anchor_in_reply(self.ENTRY, text, key="encantado"))
+
+    def test_floating_anchor_rejected(self):
+        from tutor.output_gate import anchor_in_reply
+
+        text = (
+            "Like English 'enchanted' — delighted.\n"
+            "Me llamo Marisol. **Encantado**."
+        )
+        self.assertFalse(anchor_in_reply(self.ENTRY, text, key="encantado"))
+        # empty key can never attach (presence-anywhere is dead)
+        self.assertFalse(anchor_in_reply(self.ENTRY, text, key=""))
+
+    def test_absent_anchor_stays_false(self):
+        from tutor.output_gate import anchor_in_reply
+
+        self.assertFalse(
+            anchor_in_reply(self.ENTRY, "**Encantado** (mucho gusto).",
+                            key="encantado")
+        )
+
+
 class TestEnglishWallZeroExemption(unittest.TestCase):
     """2026-07-28 zero-English incident: a COMPLIANT true-zero opening
     (English framing + glossed tiny Spanish, tl_ratio 0.32-0.40) tripped

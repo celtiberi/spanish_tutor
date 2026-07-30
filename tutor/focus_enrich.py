@@ -225,16 +225,14 @@ def enrich_focus_panel(
     """
     # mode_decision optional: enricher usually runs after a turn; caller may
     # pass via sheet["_last_mode_decision"] without changing the public API.
+    # §1.1b (2026-07-29): the _turn_morph stash is DEAD — the live card
+    # arrives via sheet["_last_turn_render"] (settled at stage_settle_chrome,
+    # synchronously, from exchange_render.card_engagement). The enricher is
+    # an OVERLAY: it fills presentation cells on the panel it builds and may
+    # never change which form is engaged or which images were confirmed.
     mode_decision = None
     if isinstance(sheet, dict):
         mode_decision = sheet.get("_last_mode_decision")
-    # Code decides WHICH form this turn engages (dice→decir, "I am
-    # making"→hacer, form error). Stashing on the shared decision dict makes
-    # every later sheet_public repaint show the same block for this turn.
-    if isinstance(mode_decision, dict) and (learner or "").strip():
-        from .turn_morph import stash_turn_morph
-
-        stash_turn_morph(mode_decision, learner)
     base = build_focus_panel(sheet, mode_decision=mode_decision)
     meta: dict[str, Any] = {
         "source": "static",

@@ -53,7 +53,8 @@
     "teacher_mode=planned",
     "open_scenes=boat_likes,boat_meet_captain,boat_where_boat",
     "mem_shown=english_only",
-    "mem_asked=conversation,placement"
+    "mem_asked=conversation,placement",
+    "morph_card:estar"
   ],
   "parts_keys": [
     "acknowledge",

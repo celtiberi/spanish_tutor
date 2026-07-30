@@ -34,6 +34,7 @@
   "model_requests": 2,
   "notes": [
     "due_outcome_success:pan",
+    "progress_milestone:first_solo:pan",
     "mode=conversation",
     "mode_reason=scene_goal:boat_likes",
     "due_elicit_offered:agua",
@@ -78,7 +79,13 @@
     "index": 0,
     "turns_in_phase": 2
   },
-  "progress_events": [],
+  "progress_events": [
+    {
+      "key": "pan",
+      "kind": "first_solo",
+      "polarity": "up"
+    }
+  ],
   "reply": "¡Qué rico el pan!\n\n**Yo bebo agua con el pan.**\n\n¿Bebes mucha agua?",
   "save_sheet_calls": [
     "_commit_sheet"

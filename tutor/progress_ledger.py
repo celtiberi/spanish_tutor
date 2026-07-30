@@ -89,6 +89,16 @@ KINDS = (
     "can_do_emerging",
     "can_do_known",
     "task_complete",
+    # r8 progress-measurement round (2026-07-29; build countersign AMENDs
+    # applied): production-evidence milestones. first_solo = first spaced
+    # DUE-SUCCESS (re-encounter path; §2.4 scaffold strip is SOFT law, not
+    # gate-proven absence of help — copy says "spaced recall", never
+    # "proved without help"); new_context = due success while frames_seen
+    # ≥ 2 (multi-frame EXPOSURE history, not frame-of-success attribution
+    # — debt NEW_CONTEXT_FRAME_OF_SUCCESS, §8). Event-facts, never
+    # live-state claims (live_state_supports returns None → no recheck).
+    "first_solo",
+    "new_context",
     # Honesty correction (2026-07-28 false-planted incident): a `retracted`
     # event (polarity=down, `retracts`=<target kind>) voids every matching
     # up event of (retracts, key) for BOTH display and dedupe — the raw
@@ -169,6 +179,12 @@ def detail_for(kind: str, key: str, **ctx: Any) -> str:
     if kind == "task_complete":
         desc = str(ctx.get("desc") or "").strip()
         return f"Task done: {desc}" if desc else f"Task done ({key})"
+    if kind == "first_solo":
+        return f"«{key}» — first successful spaced recall (due re-encounter)"
+    if kind == "new_context":
+        frames = [str(f) for f in (ctx.get("frames") or []) if str(f)]
+        ftxt = f" ({', '.join(frames[:4])})" if frames else ""
+        return f"«{key}» — spaced recall after multi-frame practice{ftxt}"
     if kind == "retracted":
         target = str(ctx.get("target") or "milestone")
         reason = str(ctx.get("reason") or "recorded without evidence")
@@ -403,10 +419,12 @@ def _latest_epoch_ts(events: list[dict]) -> datetime.datetime | None:
 
 
 def _post_epoch(events: list[dict]) -> list[dict]:
-    """DEDUPE scope: only events strictly AFTER the latest epoch mark.
+    """Scope: only events strictly AFTER the latest epoch mark.
 
-    Display paths never use this — pre-epoch history stays visible; only
-    `has_milestone` / `up_keys` (the re-mint gate) are scoped.
+    Used by `has_milestone` / `up_keys` (the re-mint gate) and — since the
+    2026-07-29 concept-rail redesign — by `concept_nodes` (a state view
+    must not present a pre-reset band as the reset learner's current
+    truth). Pre-epoch raw lines stay on disk for audit.
     """
     cut = _latest_epoch_ts(events)
     if cut is None:
@@ -465,107 +483,198 @@ def _local_day(ts: str) -> str:
         return (ts or "")[:10]
 
 
-def read_recent(
+def concept_nodes(
     *,
-    limit_days: int | None = None,
-    limit_clusters: int | None = None,
     ledger_path: Path | str | None = None,
-    today: datetime.date | None = None,
 ) -> list[dict]:
-    """Session-clustered events, newest cluster first.
+    """One node per item across the CURRENT learner epoch, chronological.
 
-    A cluster is a DATE CONTAINER for one session (amended (c): never an
-    achievement — no streak counting here). Cluster shape:
-    {session_id, date, events (chronological), summary {kind: count}}.
-    Events without a session_id cluster by local calendar day. Retracted
-    pairs (false milestone + correction row) never display — the raw lines
-    remain on disk for audit only.
+    2026-07-29 rail redesign (user direction: "it's their journey through
+    concepts and learning — not days"): the journey's unit is the ITEM, not
+    the calendar. The chronologically LATEST active event for each
+    (item_kind, key) is the node's current truth (a regressed item shows
+    the regression; a re-planted item shows planted). Epoch scope: a
+    sheet_reset starts a new journey — a pre-reset "rooted" shown as
+    current state would be a lie about the reset learner, so nodes read
+    post-epoch only (the day view that displayed pre-epoch history died
+    with this redesign; raw lines stay on disk for audit). Retracted pairs
+    never appear. Node shape: the event dict + `date` (local day) and
+    `events_count` (how many active events this item has this epoch).
     """
-    events = _active_events(_read_events(ledger_path))
-    clusters: dict[str, dict] = {}
-    order: list[str] = []
-    for e in events:
-        day = _local_day(str(e.get("ts") or ""))
-        ck = str(e.get("session_id") or "") or f"day:{day}"
-        c = clusters.get(ck)
-        if c is None:
-            c = {
-                "session_id": str(e.get("session_id") or ""),
-                "date": day,
-                "events": [],
-                "summary": {},
-            }
-            clusters[ck] = c
-            order.append(ck)
-        c["events"].append(dict(e))
-        c["date"] = day  # date of the latest event in the cluster
-        kind = str(e.get("kind"))
-        c["summary"][kind] = int(c["summary"].get(kind, 0)) + 1
-    # Newest cluster first (by last event ts, append order as tiebreak)
-    def _last_ts(ck: str) -> str:
-        evs = clusters[ck]["events"]
-        return str(evs[-1].get("ts") or "") if evs else ""
-
-    order.sort(key=_last_ts, reverse=True)
-    out = [clusters[ck] for ck in order]
-    if limit_days is not None:
-        day0 = (today if today is not None else datetime.date.today()) - datetime.timedelta(
-            days=max(0, int(limit_days) - 1)
-        )
-        out = [c for c in out if c["date"] >= day0.isoformat()]
-    if limit_clusters is not None:
-        out = out[: max(0, int(limit_clusters))]
-    return out
-
-
-def read_recent_days(
-    *,
-    limit_days: int | None = None,
-    limit_clusters: int | None = None,
-    ledger_path: Path | str | None = None,
-    today: datetime.date | None = None,
-) -> list[dict]:
-    """Day-clustered events, newest day first — the rail's visual unit.
-
-    2026-07-28 rail incident: per-session clusters made one afternoon of
-    tinkering read as four separate journeys. The visual unit is the LOCAL
-    calendar day; sessions within a day are merged (each event keeps its
-    session_id for tooltip/debug). Cluster shape:
-    {date, sessions (distinct ids, first-appearance order), session_count,
-    events (chronological), summary {kind: count}}. Retracted pairs never
-    appear (raw lines stay on disk for audit only).
-    """
-    events = _active_events(_read_events(ledger_path))
+    events = _post_epoch(_active_events(_read_events(ledger_path)))
     events.sort(key=_event_ts)  # chronological, stable on append order
-    days: dict[str, dict] = {}
+    nodes: dict[tuple[str, str], dict] = {}
     for e in events:
-        day = _local_day(str(e.get("ts") or ""))
-        c = days.get(day)
-        if c is None:
-            c = {
-                "date": day,
-                "sessions": [],
-                "session_count": 0,
-                "events": [],
-                "summary": {},
-            }
-            days[day] = c
-        c["events"].append(dict(e))
-        sid = str(e.get("session_id") or "")
-        if sid and sid not in c["sessions"]:
-            c["sessions"].append(sid)
-        kind = str(e.get("kind"))
-        c["summary"][kind] = int(c["summary"].get(kind, 0)) + 1
-    out = sorted(days.values(), key=lambda c: c["date"], reverse=True)
-    for c in out:
-        c["session_count"] = len(c["sessions"])
-    if limit_days is not None:
-        day0 = (today if today is not None else datetime.date.today()) - datetime.timedelta(
-            days=max(0, int(limit_days) - 1)
+        ik = str(e.get("item_kind") or "")
+        key = str(e.get("key") or "")
+        prev = nodes.get((ik, key))
+        node = dict(e)
+        node["events_count"] = (
+            int(prev["events_count"]) + 1 if prev else 1
         )
-        out = [c for c in out if c["date"] >= day0.isoformat()]
-    if limit_clusters is not None:
-        out = out[: max(0, int(limit_clusters))]
+        node["date"] = _local_day(str(e.get("ts") or ""))
+        nodes[(ik, key)] = node
+    return list(nodes.values())
+
+
+def _can_do_band(entry: dict | None) -> str:
+    """Display band (r8 build countersign, Grok item-3 AMEND, 2026-07-29):
+    "solid" ONLY when the known-gate ARITHMETIC holds (conf ≥
+    KNOWN_MIN_CONF and solid_uses ≥ KNOWN_MIN_SOLID_USES) — never trust
+    the status string alone (Grok's executed probe: a legacy entry saying
+    "known" at conf 0.5 / uses 0 must not wear mastery copy); "emerging"
+    ONLY at conf ≥ EMERGING_CONF (0.55) — a fragile entry below the floor
+    is quiet, not emerging (hiding regression behind an emerging label is
+    the DA failure mode); else "quiet"."""
+    if not isinstance(entry, dict):
+        return "quiet"
+    from .character_sheet import KNOWN_MIN_CONF, KNOWN_MIN_SOLID_USES
+
+    try:
+        conf = float(entry.get("confidence") or 0.0)
+    except (TypeError, ValueError):
+        conf = 0.0
+    try:
+        uses = int(entry.get("solid_uses") or 0)
+    except (TypeError, ValueError):
+        uses = 0
+    if conf >= KNOWN_MIN_CONF and uses >= KNOWN_MIN_SOLID_USES:
+        return "solid"
+    if conf >= EMERGING_CONF:
+        return "emerging"
+    return "quiet"
+
+
+def concept_groups(
+    sheet: dict,
+    *,
+    table: dict | None = None,
+    scene_goals: dict | None = None,
+    ledger_path: Path | str | None = None,
+    limit_groups: int | None = None,
+) -> list[dict]:
+    """The rail's visual units — can-do FUNCTION sections first, then
+    theme groups (r8 progress round, 2026-07-29: progress is what the
+    learner can DO; items are the substrate and nest under the function
+    they serve — never exiled, never the headline).
+
+    Section kinds in the returned list (all recency-ordered, items newest
+    first, time only as each node's `date` whisper):
+    - kind="can_do": one per can-do with signal (an attached node, its own
+      ledger crossing, or sheet conf ≥ EMERGING_CONF). Carries id,
+      statement, band (solid/emerging/quiet — honesty gates in
+      _can_do_band), label (mastery "Can …" phrasing ONLY at solid),
+      evidence (the can-do's own latest ledger node, if any), and items —
+      lexicon nodes routed via can_dos.THEME_TO_CAN_DO + grammar nodes
+      routed via FORM_INVENTORY supports.
+    - kind="theme"/"tasks"/"other": unrouted nodes, grouped as before.
+    Each node keeps the humanized display/gloss + single display_state
+    (the 2026-07-28 one-state law).
+    """
+    from .can_dos import CAN_DOS, FORM_INVENTORY, THEME_TO_CAN_DO
+
+    sheet = sheet if isinstance(sheet, dict) else {}
+    nodes = concept_nodes(ledger_path=ledger_path)
+    goals = scene_goals
+    if goals is None and any(
+        str(n.get("item_kind") or "") == "task" or n.get("kind") == "task_complete"
+        for n in nodes
+    ):
+        goals = default_scene_goals()
+    skills = sheet.get("skills") or {}
+
+    sections: dict[str, dict] = {}
+
+    def _section(cid: str) -> dict:
+        s = sections.get(cid)
+        if s is None:
+            band = _can_do_band(
+                skills.get(cid) if isinstance(skills.get(cid), dict) else None
+            )
+            s = {
+                "kind": "can_do",
+                "id": cid,
+                "theme": cid,
+                "label": can_do_display(
+                    cid,
+                    "can_do_known" if band == "solid" else "can_do_emerging",
+                ),
+                "statement": str(
+                    (CAN_DOS.get(cid) or {}).get("statement") or cid
+                ),
+                "band": band,
+                "evidence": None,
+                "items": [],
+                "last_ts": "",
+            }
+            sections[cid] = s
+        return s
+
+    def _bump(g: dict, ts: str) -> None:
+        if ts > g["last_ts"]:
+            g["last_ts"] = ts
+
+    groups: dict[str, dict] = {}
+    for n in nodes:
+        n["needs_recheck"] = live_state_supports(n, sheet) is False
+        n["display_state"] = display_state(n)
+        n.update(humanize_event(n, table, goals))
+        ts = str(n.get("ts") or "")
+        ik = str(n.get("item_kind") or "")
+        key = str(n.get("key") or "")
+        # Route to a can-do section: the can-do's own crossings; lexicon
+        # via table theme; grammar via form-inventory supports.
+        cid: str | None = None
+        if ik == "skill" and key in CAN_DOS:
+            s = _section(key)
+            s["evidence"] = n
+            _bump(s, ts)
+            continue
+        if ik == "grammar":
+            supports = (FORM_INVENTORY.get(key) or {}).get("supports") or []
+            cid = supports[0] if supports else None
+        elif ik in ("", "lexicon"):
+            entry = (table or {}).get(key)
+            theme = str((entry or {}).get("theme") or "").strip()
+            cid = THEME_TO_CAN_DO.get(theme)
+        if cid is not None and cid in CAN_DOS:
+            s = _section(cid)
+            s["items"].append(n)
+            _bump(s, ts)
+            continue
+        theme, label = _group_for(n, table)
+        g = groups.get(theme)
+        if g is None:
+            g = {
+                "kind": (
+                    "tasks" if theme == _GROUP_TASKS[0]
+                    else "abilities" if theme == _GROUP_ABILITIES[0]
+                    else "theme"
+                ),
+                "theme": theme, "label": label, "items": [], "last_ts": "",
+            }
+            groups[theme] = g
+        g["items"].append(n)
+        _bump(g, ts)
+    # Can-dos with live sheet signal but no ledger nodes yet still show
+    # (quiet sections are dropped — the rail is where you've been, not the
+    # syllabus).
+    for cid, ent in skills.items():
+        if (
+            cid in CAN_DOS and cid not in sections
+            and _can_do_band(ent if isinstance(ent, dict) else None) != "quiet"
+        ):
+            _section(cid)
+
+    sec_list = sorted(
+        sections.values(), key=lambda g: g["last_ts"], reverse=True
+    )
+    grp_list = sorted(groups.values(), key=lambda g: g["last_ts"], reverse=True)
+    out = sec_list + grp_list
+    for g in out:
+        g["items"].sort(key=lambda n: str(n.get("ts") or ""), reverse=True)
+    if limit_groups is not None:
+        out = out[: max(0, int(limit_groups))]
     return out
 
 
@@ -890,27 +999,6 @@ def _group_for(event: dict, table: dict | None) -> tuple[str, str]:
     return theme, theme.replace("_", " ").capitalize()
 
 
-def group_cluster_events(events: list[dict], table: dict | None) -> list[dict]:
-    """Theme groups for one cluster, in first-appearance order.
-
-    Shape: [{theme, label, events (chronological), summary {kind: count}}].
-    Pure regrouping of the SAME event dicts — invents nothing (§3).
-    """
-    groups: dict[str, dict] = {}
-    order: list[str] = []
-    for e in events:
-        theme, label = _group_for(e, table)
-        g = groups.get(theme)
-        if g is None:
-            g = {"theme": theme, "label": label, "events": [], "summary": {}}
-            groups[theme] = g
-            order.append(theme)
-        g["events"].append(e)
-        kind = str(e.get("kind"))
-        g["summary"][kind] = int(g["summary"].get(kind, 0)) + 1
-    return [groups[t] for t in order]
-
-
 def build_progress_payload(
     sheet: dict,
     *,
@@ -918,41 +1006,31 @@ def build_progress_payload(
     table: dict | None = None,
     scene_goals: dict | None = None,
     ledger_path: Path | str | None = None,
-    limit_clusters: int = 20,
+    limit_groups: int = 20,
     today: datetime.date | None = None,
 ) -> dict:
-    """/api/progress payload: DAY clusters + live-state join + countable header.
+    """/api/progress payload: CONCEPT groups + live-state join + header.
 
-    The visual unit is the local calendar day (`read_recent_days`) — one
-    cluster per day, sessions merged, session ids kept per event for
-    tooltip/debug. Each event carries humanized `display`/`gloss` fields
-    (`humanize_event`) and a single `display_state`; each cluster carries
-    theme `groups` for subtle ordering (never the only visible text — the
-    2026-07-28 rail incident). Header counts are the amended (e)4 join —
+    2026-07-29 redesign (user direction): the visual unit is the concept
+    group, not the calendar day — one group per theme ever, one node per
+    item at its latest-event state (`concept_groups`), recency-ordered,
+    time demoted to each node's `date` whisper. Each node carries the
+    humanized `display`/`gloss` fields and a single `display_state` (the
+    2026-07-28 one-state law). Header counts are the amended (e)4 join —
     countable things, not mean confidence: durable = rooted events whose
     live interval still holds >=14; known / emerging = live sheet status
     bands. The abstract 0-100 score stays in the payload for compat but is
     no longer the display.
     """
     sheet = sheet if isinstance(sheet, dict) else {}
-    clusters = read_recent_days(
-        limit_clusters=limit_clusters, ledger_path=ledger_path, today=today
+    groups = concept_groups(
+        sheet,
+        table=table,
+        scene_goals=scene_goals,
+        ledger_path=ledger_path,
+        limit_groups=limit_groups,
     )
-    goals = scene_goals
-    if goals is None and any(
-        str(e.get("item_kind") or "") == "task" or e.get("kind") == "task_complete"
-        for c in clusters
-        for e in c["events"]
-    ):
-        goals = default_scene_goals()
-    total_events = 0
-    for c in clusters:
-        for e in c["events"]:
-            total_events += 1
-            e["needs_recheck"] = live_state_supports(e, sheet) is False
-            e["display_state"] = display_state(e)
-            e.update(humanize_event(e, table, goals))
-        c["groups"] = group_cluster_events(c["events"], table)
+    total_nodes = sum(len(g["items"]) for g in groups)
 
     durable_keys = {
         (str(e.get("item_kind") or ""), str(e.get("key") or ""))
@@ -971,15 +1049,17 @@ def build_progress_payload(
         except (TypeError, ValueError):
             continue
 
+    # Header counts ride the same display gates as the sections (r8 build
+    # countersign item 3: never trust the status string alone).
     known = 0
     emerging = 0
     for ent in (sheet.get("skills") or {}).values():
         if not isinstance(ent, dict):
             continue
-        status = str(ent.get("status") or "")
-        if status == "known":
+        band = _can_do_band(ent)
+        if band == "solid":
             known += 1
-        elif status == "emerging":
+        elif band == "emerging":
             emerging += 1
 
     try:
@@ -996,11 +1076,11 @@ def build_progress_payload(
         score = {}
 
     return {
-        "clusters": clusters,
+        "groups": groups,
         "counts": {"durable": durable, "known": known, "emerging": emerging},
         "due_soon": due_soon,
         "session_id": str(session_id or ""),
-        "empty": total_events == 0,
+        "empty": total_nodes == 0,
         # Compat only — header displays the countable pair, not this scalar.
         "score": score,
     }

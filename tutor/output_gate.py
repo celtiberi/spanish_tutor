@@ -323,19 +323,33 @@ def gloss_after_key(key: str, text: str) -> bool:
     return len(_ALPHA_TOKEN_RE.findall(m.group(1))) <= MAX_NEW_ITEM_GLOSS_WORDS
 
 
-def anchor_in_reply(entry: dict, text: str) -> bool:
-    """Cognate/keyword anchor text from the table entry present in-reply.
+def anchor_in_reply(entry: dict, text: str, key: str) -> bool:
+    """Cognate/keyword anchor present on the same LINE as ``key``.
 
     Shared scaffold-evidence detector (same sharing law as gloss_after_key):
     `entry` needs only `cognate_en` / `keyword_en` fields — callers may pass a
-    real association-table entry or a plan-payload shim."""
+    real association-table entry or a plan-payload shim.
+
+    ``key`` is REQUIRED — presence-anywhere is never scaffold evidence
+    (2026-07-29 floating-anchor incident; countersign REJECTED the keyless
+    fallback: zero remaining callers, and the keyless path IS the founding
+    bug). The association forms between anchor and form on one line of
+    learner-facing text, or not at all (§2.2 attachment clause / P2).
+    """
+    from .textnorm import phrase_present
+
+    if not (key or "").strip():
+        return False
     for field_name in ("cognate_en", "keyword_en"):
         raw = entry.get(field_name)
         if not raw:
             continue
         head = str(raw).split("(")[0].strip().strip(" .,'\"").lower()
-        if head and phrase_match(head, text):
-            return True
+        if not head:
+            continue
+        for line in (text or "").splitlines():
+            if phrase_match(head, line) and phrase_present(key, line):
+                return True
     return False
 
 
@@ -452,7 +466,7 @@ def scan_unscaffolded_new_items(
         if gloss_after_key(key, full_blob):
             scaffold_saved[key] = "gloss"
             continue
-        if anchor_in_reply(entry, full_blob):
+        if anchor_in_reply(entry, full_blob, key=key):
             scaffold_saved[key] = "anchor"
             continue
         if key == introduce_key:

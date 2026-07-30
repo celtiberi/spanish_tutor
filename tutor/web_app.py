@@ -520,11 +520,12 @@ def create_app() -> FastAPI:
 
     @app.get("/api/progress")
     def get_progress(request: Request):
-        """Journey rail: DAY-clustered milestone events (sessions merged;
-        session_id kept per event for tooltip/debug) + humanized display
-        names + live-state join + countable header
-        (docs/design-progression-view.md, as amended; day clustering and
-        humanization per the 2026-07-28 rail incident)."""
+        """Journey rail: CONCEPT groups — one group per theme, one node per
+        item at its latest-event state, recency-ordered, time demoted to a
+        per-node whisper (2026-07-29 redesign, user direction: the journey
+        is through concepts, not days) + humanized display names +
+        live-state join + countable header
+        (docs/design-progression-view.md, as amended)."""
         sid = request.cookies.get(COOKIE)
         _, session, _ = _require(sid)
         from .progress_ledger import build_progress_payload

@@ -109,6 +109,34 @@ CAN_DOS: dict[str, dict] = {
     },
 }
 
+# Journey routing: association-table THEMES whose items visibly support a
+# can-do (r8 progress round, docs/pedagogy-research-r8-progress-measurement
+# .md, Grok Q3 ruling: themes are content domains, NOT functions — they may
+# route supporting items UNDER a can-do, never stand in for one). Unmapped
+# themes stay ordinary theme groups on the rail. Code-owned; a theme may
+# serve at most ONE can-do (validated in tests).
+CAN_DO_THEMES: dict[str, tuple[str, ...]] = {
+    "IP-01": ("greetings",),
+    "IP-03": ("introductions",),
+    # copulas REMOVED (build countersign item 2): ser is identity/
+    # description, not wellbeing — ser/estar route per-form via
+    # FORM_INVENTORY supports instead of a theme-level dump.
+    "IP-04": ("how_are_you", "states"),
+    # courtesy REMOVED: IP-05's statement is leave-taking only; mid-
+    # exchange politeness stays an ordinary theme until a politeness
+    # can-do exists. numbers REMOVED: age/quantity substrate reaches
+    # IP-07 via the numbers_0_20 / tener_age_possession form routes, not
+    # a 29-lemma theme dump.
+    "IP-05": ("farewells",),
+    "IP-06": ("food", "drinks", "preferences"),
+    "IP-07": ("family", "people", "places", "question_words"),
+}
+
+THEME_TO_CAN_DO: dict[str, str] = {
+    theme: cid for cid, themes in CAN_DO_THEMES.items() for theme in themes
+}
+
+
 # Supporting forms (not can-dos) — focus-on-form only inside communication.
 FORM_INVENTORY: dict[str, dict] = {
     "present_estar_person": {
@@ -545,14 +573,22 @@ def build_focus_panel(
     if not morph:
         morph = morphology_blocks_for_can_do(can_do if isinstance(can_do, str) else None)
 
-    # Turn-engaged form wins (incident 2026-07-28: card never updated on
-    # dice / "I am making" meta questions). turn_morph stashes the block on
-    # the live mode-decision dict; it dies with the next turn's decision.
+    # §1.1b (design-exchange-settlement.md, 2026-07-29): the ONLY lawful
+    # live master of the card is the settled TurnRender's card view — the
+    # _turn_morph shared-dict stash is dead. Everything above (mode
+    # targets' form_id / next_best form_focus / can-do block) is AGENDA:
+    # it may render only as labeled "up next" chrome, never as this-turn
+    # engagement (honesty carve-out; the me-llamo pin incident).
+    for b in morph:
+        b["live"] = False
+        b["engaged_by"] = b.get("engaged_by") or "up_next"
     turn_block = None
-    if isinstance(mode_decision, dict):
-        tm = mode_decision.get("_turn_morph")
-        if isinstance(tm, dict) and tm.get("paradigm"):
-            turn_block = dict(tm)
+    tr = sheet.get("_last_turn_render")
+    if isinstance(tr, dict):
+        card = tr.get("card")
+        if isinstance(card, dict) and card.get("paradigm"):
+            turn_block = dict(card)
+            turn_block["live"] = True
     if turn_block:
         rest = [
             b for b in morph

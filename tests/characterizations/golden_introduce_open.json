@@ -31,7 +31,7 @@
   "notes": [
     "mode=conversation",
     "mode_reason=known_open_from_sheet",
-    "introduce_planned:hola:R-E",
+    "introduce_planned:me llamo:R-D",
     "output_gate_ok",
     "rules_backup",
     "hard_observer",
@@ -77,7 +77,7 @@
     "_commit_sheet"
   ],
   "sheet": {
-    "lexicon:hola": null
+    "lexicon:me llamo": null
   },
   "stop_reason": "end_turn",
   "usage": {

@@ -147,14 +147,6 @@ function renderTutorParts(parts, fallbackContent) {
       )}</div>`
     );
   }
-  if (parts.explain) {
-    const depth = parts.explain_depth === "deep" ? "Why (more)" : "Why";
-    blocks.push(
-      `<div class="part part-explain"><span class="part-label">${depth}</span>${esc(
-        parts.explain
-      )}</div>`
-    );
-  }
   if (parts.model) {
     const mode = parts.mode || (parts.plan || {}).mode || "";
     const modelLabel =
@@ -166,6 +158,16 @@ function renderTutorParts(parts, fallbackContent) {
     blocks.push(
       `<div class="part part-model"><span class="part-label">${modelLabel}</span>${esc(
         parts.model
+      )}</div>`
+    );
+  }
+  // Why AFTER Model (2026-07-29 encantado incident): the anchor/why of a
+  // new word must never precede the word itself.
+  if (parts.explain) {
+    const depth = parts.explain_depth === "deep" ? "Why (more)" : "Why";
+    blocks.push(
+      `<div class="part part-explain"><span class="part-label">${depth}</span>${esc(
+        parts.explain
       )}</div>`
     );
   }
@@ -331,6 +333,12 @@ function renderMorphology(sheet) {
 
   let html = "";
   for (const b of blocks) {
+    // §1.1b honesty carve-out: agenda-sourced blocks render only as
+    // labeled "up next" — never silently as this-turn engagement.
+    const upNext =
+      b.live === false
+        ? ` <span class="muted" title="agenda preview — not this turn's engagement">· up next</span>`
+        : "";
     const learner = b.learner
       ? ` · you: ${b.learner.status || "?"} (${pct(b.learner.confidence)})`
       : "";
@@ -346,7 +354,7 @@ function renderMorphology(sheet) {
       .join("");
     html += `
       <div class="morph-block">
-        <h3>${esc(b.label || "Forms")}</h3>
+        <h3>${esc(b.label || "Forms")}${upNext}</h3>
         <div class="morph-lemma">${esc(b.pos || "")}${
       b.lemma ? " · " + esc(b.lemma) : ""
     }${esc(learner)}</div>
@@ -444,7 +452,7 @@ function renderScore(sheet) {
 
   const prev = lastDurableCount;
   els.countDurable.textContent = String(durable);
-  if (els.countKnown) els.countKnown.textContent = `can-dos known ${known}`;
+  if (els.countKnown) els.countKnown.textContent = `can-dos solid ${known}`;
   if (els.countEmerging) els.countEmerging.textContent = `emerging ${emerging}`;
 
   if (els.scoreDelta) {
@@ -466,7 +474,10 @@ function renderScore(sheet) {
   lastDurableCount = durable;
 }
 
-// ——— Journey rail (left): evidence-backed milestone nodes, session clusters ———
+// ——— Journey rail (left): concept groups of evidence-backed item nodes ———
+// 2026-07-29 redesign (user direction): the journey is through CONCEPTS,
+// not days — one group per theme, one node per item at its latest-event
+// state, recency-ordered; time survives only as a hover whisper.
 // Honesty law (PEDAGOGY §3 + amended design): nodes render ONLY ledger events;
 // no streak chrome, no XP; mastery copy only at the known band; downgraded
 // nodes carry a quiet "needs re-check" badge instead of silent permanence.
@@ -480,7 +491,13 @@ const JOURNEY_KINDS = {
   can_do_emerging: { icon: "☆", label: "emerging" },
   can_do_known: { icon: "★", label: "known" },
   task_complete: { icon: "⚑", label: "task done" },
+  first_solo: { icon: "🗣", label: "first successful spaced recall" },
+  new_context: { icon: "🧭", label: "recalled after multi-frame practice" },
 };
+
+/** Band icon for a can-do function section (r8: mastery ★ only at the
+ * known gate; 0.55 is emerging ONLY). */
+const CAN_DO_BAND_ICONS = { solid: "★", emerging: "☆", quiet: "·" };
 
 // Amended (c) first-session copy: durability milestones are multi-day BY
 // DESIGN; same-day seeds/tasks still show, and this copy sets the honest
@@ -494,11 +511,11 @@ function localIsoDay(d) {
   return d.toLocaleDateString("en-CA");
 }
 
-/** Day-chip label: "Today" / "Yesterday" / "Jul 26". */
-function journeyDayLabel(iso) {
+/** Time whisper for a node tooltip: "today" / "yesterday" / "Jul 26". */
+function journeyWhen(iso) {
   const now = new Date();
-  if (iso === localIsoDay(now)) return "Today";
-  if (iso === localIsoDay(new Date(now.getTime() - 86400e3))) return "Yesterday";
+  if (iso === localIsoDay(now)) return "today";
+  if (iso === localIsoDay(new Date(now.getTime() - 86400e3))) return "yesterday";
   const d = new Date(`${iso}T12:00:00`);
   if (isNaN(d.getTime())) return iso || "";
   const opts = { month: "short", day: "numeric" };
@@ -506,10 +523,11 @@ function journeyDayLabel(iso) {
   return d.toLocaleDateString(undefined, opts);
 }
 
-/** One milestone chip: icon + humanized display name. ONE state per chip
- * (2026-07-28 rail incident): "recheck" REPLACES the celebration icon —
- * history stays in the ledger, the display shows current truth. Hover/tap
- * shows the full evidence sentence (+ gloss, + session id for debug). */
+/** One item node: icon + humanized display name, at its CURRENT state
+ * (latest ledger event this epoch). ONE state per node (2026-07-28 rail
+ * incident): "recheck" REPLACES the celebration icon — history stays in
+ * the ledger, the display shows current truth. Hover/tap shows the full
+ * evidence sentence (+ gloss, + the time whisper, + session id for debug). */
 function journeyChip(ev) {
   const meta = JOURNEY_KINDS[ev.kind] || { icon: "•", label: ev.kind };
   const state =
@@ -527,6 +545,7 @@ function journeyChip(ev) {
   } else {
     tip.push(meta.label);
   }
+  if (ev.date) tip.push(journeyWhen(ev.date));
   if (ev.session_id) tip.push(`session ${ev.session_id}`);
   return (
     `<li class="j-chip ${state}" title="${esc(tip.filter(Boolean).join("\n"))}">` +
@@ -535,68 +554,50 @@ function journeyChip(ev) {
   );
 }
 
-/** One day cluster: date chip on the rail spine + inline milestone chips.
- * Theme grouping survives only as ordering + a tiny muted prefix, never as
- * the only visible text (2026-07-28 rail incident: "Greetings — 1 planted"
- * rows said nothing). */
-function journeyDay(c, isCurrent) {
-  const label = journeyDayLabel(c.date || "");
-  const nSess = Number(c.session_count || (c.sessions || []).length || 0);
-  const sess = nSess > 1 ? `<span class="j-sess">· ${nSess} sessions</span>` : "";
-  const groups =
-    c.groups && c.groups.length
-      ? c.groups
-      : [{ theme: "other", events: c.events || [] }];
-  const chips = groups
-    .map((g) => {
-      const theme = String(g.theme || "");
-      const prefix =
-        theme && !["abilities", "tasks", "other"].includes(theme)
-          ? `<li class="j-theme" aria-hidden="true">${esc((g.label || theme).toLowerCase())}</li>`
-          : "";
-      return prefix + (g.events || []).map(journeyChip).join("");
-    })
-    .join("");
-  const body = (c.events || []).length
-    ? `<ul class="j-chips">${chips}</ul>`
-    : `<p class="j-sum">quiet so far — seeds today, sprouts on return</p>`;
+/** One rail section. kind="can_do" (r8, 2026-07-29): the headline unit is
+ * the FUNCTION — band icon + can-do phrasing ("Can greet a peer" ONLY at
+ * the solid/known gate), full statement + evidence sentence on hover, the
+ * supporting items nested beneath. Other kinds (theme/tasks/other) render
+ * as plain concept groups. Reuses the day-section styling — the spine
+ * walks functions first, then loose concept space. */
+function journeyGroup(g, isCurrent) {
+  const items = g.items || [];
+  const chips = items.map(journeyChip).join("");
+  const body = items.length ? `<ul class="j-chips">${chips}</ul>` : "";
+  let head;
+  if (g.kind === "can_do") {
+    const icon = CAN_DO_BAND_ICONS[g.band] || "·";
+    const tip = [g.statement || ""];
+    if (g.band) tip.push(g.band);
+    if (g.evidence?.detail) tip.push(g.evidence.detail);
+    head =
+      `<header class="j-date" title="${esc(tip.filter(Boolean).join("\n"))}">` +
+      `<span class="j-dot" aria-hidden="true"></span>` +
+      `<span class="j-daylabel">${esc(icon)} ${esc(String(g.label || g.id || ""))}</span>` +
+      `</header>`;
+  } else {
+    const label = String(g.label || g.theme || "").toLowerCase();
+    head =
+      `<header class="j-date"><span class="j-dot" aria-hidden="true"></span>` +
+      `<span class="j-daylabel">${esc(label)}</span></header>`;
+  }
   return (
     `<section class="j-day${isCurrent ? " current" : ""}">` +
-    `<header class="j-date"><span class="j-dot" aria-hidden="true"></span>` +
-    `<span class="j-daylabel">${esc(label)}</span>${sess}</header>` +
-    body +
+    head + body +
     `</section>`
   );
 }
 
 function renderJourney(progress) {
   if (!els.journeyBody) return;
-  const clusters = (progress?.clusters || []).slice();
-  if (progress?.empty || !clusters.length) {
+  const groups = (progress?.groups || []).slice();
+  if (progress?.empty || !groups.length) {
     els.journeyBody.innerHTML =
       `<p class="j-empty">${esc(JOURNEY_EMPTY_COPY)}</p>`;
   } else {
-    const todayIso = localIsoDay(new Date());
-    // A live session with no milestones yet still shows an honest, quiet
-    // "Today" stop on the path (amended (c): quiet sessions may exist).
-    if (progress?.session_id && !clusters.some((c) => c.date === todayIso)) {
-      clusters.unshift({
-        date: todayIso,
-        sessions: [progress.session_id],
-        session_count: 1,
-        events: [],
-        groups: [],
-      });
-    }
-    const html = clusters
-      .map((c) => {
-        const isCurrent =
-          c.date === todayIso ||
-          (progress?.session_id &&
-            (c.sessions || []).includes(progress.session_id));
-        return journeyDay(c, isCurrent);
-      })
-      .join("");
+    // Groups arrive recency-ordered — the top of the rail is where the
+    // learner is currently working; the first group reads as current.
+    const html = groups.map((g, i) => journeyGroup(g, i === 0)).join("");
     els.journeyBody.innerHTML = `<div class="j-rail">${html}</div>`;
   }
   if (els.journeyFoot) {

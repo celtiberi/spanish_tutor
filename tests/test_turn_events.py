@@ -66,8 +66,11 @@ def test_render_table_covers_every_kind():
 
 
 def test_catalog_count_published_number():
-    # The measured bus inventory (review said "~40"; the real number is 62).
-    assert len(NOTE_CATALOG) == 62
+    # The measured bus inventory (review said "~40"; the real number was 62
+    # at the campaign close; +1 = MORPH_CARD, 2026-07-29 morph-card review;
+    # +1 = FRAME_RECORDED, 2026-07-29 encounter-variety round;
+    # +1 = RENDER_DROPPED, 2026-07-29 §1.1b settlement round).
+    assert len(NOTE_CATALOG) == 65
 
 
 def test_stability_classes_are_the_measured_vocabulary():
@@ -134,6 +137,9 @@ ROUND_TRIP = [
     (EV.INTRODUCED, "introduced:hola"),
     (EV.INTRODUCE_LAPSED, "introduce_lapsed:buenos días:no_scaffold"),
     (EV.FIRST_SEEN, "first_seen:mucho gusto"),
+    (EV.MORPH_CARD, "morph_card:estar"),
+    (EV.FRAME_RECORDED, "frame_recorded:estar:wellbeing"),
+    (EV.RENDER_DROPPED, "render_dropped:image:cafe"),
     (EV.ASKED_TOPIC, "asked_topic:location:tu"),
     (EV.DUE_ENQUEUED, "due_enqueued:weather_hace"),
     (EV.IMAGE_DECLARED_IRRELEVANT, "image_declared_irrelevant:bote"),
@@ -358,10 +364,14 @@ def test_introduce_session_typed_status_matches_strings(
     turn = s.user_turn("muy bien")
     _assert_turn_contract(turn)
     _reparse_equivalence(turn)
-    # the golden introduce arc: planned + marked introduced, typed and legacy
+    # the golden introduce arc: planned + marked introduced, typed and
+    # legacy (key hola→me llamo 2026-07-29, encounter-variety round —
+    # _known_seed is mid-stream, openers sort last)
     assert any(e.kind is EV.INTRODUCE_PLANNED for e in turn.events)
-    assert "introduced:hola" in turn.notes
-    assert [e.key for e in turn.events if e.kind is EV.INTRODUCED] == ["hola"]
+    assert "introduced:me llamo" in turn.notes
+    assert [e.key for e in turn.events if e.kind is EV.INTRODUCED] == [
+        "me llamo"
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -411,7 +421,7 @@ def test_absorb_sees_zero_events_on_golden_runs(
     s3 = ctx3.session
     assert s3.open_session().error is None
     t3 = s3.user_turn("Muy bien, gracias.")
-    assert "introduced:hola" in t3.notes
+    assert "introduced:me llamo" in t3.notes
     # §2.1a uptake flag (the family that WAS absorbed pre-batch-2)
     ctx4 = tutor_session_factory(seed_sheet=_known_seed())
     s4 = ctx4.session

@@ -44,7 +44,7 @@
     "notes": [
       "mode=conversation",
       "mode_reason=default_conversation",
-      "introduce_planned:hola:R-E",
+      "introduce_planned:me llamo:R-D",
       "output_gate_ok",
       "rules_backup",
       "hard_observer",
@@ -180,7 +180,7 @@
       "turns_in_phase": 1
     },
     "progress_events": [],
-    "reply": "Contento means happy.\n\n**Estoy contento** (I'm happy).\n\nDi: **Estoy contento**.",
+    "reply": "**Estoy contento** (I'm happy).\n\nContento means happy.\n\nDi: **Estoy contento**.",
     "save_sheet_calls": [
       "_commit_sheet"
     ],

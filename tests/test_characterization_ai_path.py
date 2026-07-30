@@ -77,14 +77,17 @@ OPEN_KNOWN_REPLY = (
     "</tutor>"
 )
 
-# Introduce turn: presents the planned key «hola» WITH its R-E keyword
-# anchor ("hello") → scaffold evidence → the introduce ledger write fires.
+# Introduce turn: presents the planned key WITH its scaffold → evidence →
+# the introduce ledger write fires. Key changed hola→me llamo (R-D gloss)
+# 2026-07-29: _known_seed is mid-stream (IP-01 known), so the
+# encounter-variety round sorts openers last and the router plans
+# «me llamo» (docs/design-encounter-variety.md).
 TURN_INTRO_REPLY = (
     "<tutor>\n"
     "  <acknowledge>¡Muy bien!</acknowledge>\n"
-    "  <model>Para saludar decimos **hola** — like \"hello\" in "
-    "English.</model>\n"
-    "  <try>Di **hola** para saludar.</try>\n"
+    "  <model>Para presentarte dices **me llamo** (my name is): "
+    "Me llamo Marisol.</model>\n"
+    "  <try>Di: **Me llamo** y tu nombre.</try>\n"
     "</tutor>"
 )
 
@@ -311,6 +314,18 @@ def test_golden_blank_open_and_zero_register_turn(tutor_session_factory):
     # introduced_at, no retrieval enqueue, confidence untouched.
     assert "first_seen:estoy bien" in turn.notes
     assert "first_seen:bien" not in turn.notes
+    # CHAR_PIN (2026-07-29 morph-card review; re-homed by the §1.1b
+    # settlement round the same day): the tutor-side introduction engages
+    # the Morphology card in the SAME turn — «estoy bien» → the estar
+    # paradigm block, now settled into the frozen TurnRender (the
+    # _turn_morph shared-dict stash is dead) which every sheet_public
+    # repaint reads.
+    assert "morph_card:estar" in turn.notes
+    render = s.last_turn_render
+    assert render is not None
+    tm = render.card or {}
+    assert tm.get("form_id") == "present_estar_person"
+    assert tm.get("engaged_by") == "introduction"
     eb = s.sheet["lexicon"]["estoy bien"]
     assert eb.get("first_seen")
     assert not eb.get("introduced_at")
@@ -365,6 +380,12 @@ def test_golden_due_elicit_turn(tutor_session_factory):
     # CHAR_PIN: learner used the due key → retrieval outcome recorded
     # PRE-call; ladder advances (successes 0→1, interval 1d, due tomorrow).
     assert "due_outcome_success:pan" in turn.notes
+    # CHAR_PIN (r8 production milestones, 2026-07-29): first due success =
+    # "said it without help" (re-encounter unscaffolded by construction);
+    # no new_context (pan has no multi-frame history). Golden regenerated
+    # for this one added note + progress event (the only delta).
+    assert "progress_milestone:first_solo:pan" in turn.notes
+    assert not any("new_context" in n for n in turn.notes)
     pan = s.sheet["lexicon"]["pan"]
     tomorrow = (
         datetime.date.today() + datetime.timedelta(days=1)
@@ -409,39 +430,43 @@ def test_golden_introduce_new_input_turn(tutor_session_factory):
 
     # CHAR_PIN: no dues → plan opens on new_input; the known open is
     # introduce-flavorable, so a plan is emitted on the OPEN too — but the
-    # canned open reply omits the key, so nothing is marked.
+    # canned open reply omits the key, so nothing is marked. Key changed
+    # hola:R-E → me llamo:R-D 2026-07-29 (encounter-variety round:
+    # _known_seed is mid-stream — IP-01 known — so openers sort last;
+    # docs/design-encounter-variety.md; goldens regenerated WITH the round).
     assert "activity=new_input" in open_res.notes
-    assert "introduce_planned:hola:R-E" in open_res.notes
+    assert "introduce_planned:me llamo:R-D" in open_res.notes
     assert not any(n.startswith("introduced:") for n in open_res.notes)
     obs_open = _observe(
         ctx, open_res, save_slice=slice(0, n_open),
-        sheet_keys=(("lexicon", "hola"),),
+        sheet_keys=(("lexicon", "me llamo"),),
     )
     check_golden("golden_introduce_open", obs_open)
 
     turn = s.user_turn("Muy bien, gracias.")
     assert turn.error is None
 
-    # CHAR_PIN: plan re-emitted; reply presented «hola» WITH the R-E anchor
-    # → introduce ledger write + session budget consumed + rail milestone.
-    assert "introduce_planned:hola:R-E" in turn.notes
-    assert "introduced:hola" in turn.notes
-    assert "progress_milestone:planted:hola" in turn.notes
-    assert s.pedagogy_memory.introduced_this_session == ["hola"]
+    # CHAR_PIN: plan re-emitted; reply presented «me llamo» WITH the R-D
+    # gloss → introduce ledger write + session budget consumed + rail
+    # milestone.
+    assert "introduce_planned:me llamo:R-D" in turn.notes
+    assert "introduced:me llamo" in turn.notes
+    assert "progress_milestone:planted:me llamo" in turn.notes
+    assert s.pedagogy_memory.introduced_this_session == ["me llamo"]
     assert s.pedagogy_memory.intro_budget_remaining() == 1
     # CHAR_PIN (honesty law): introduction NEVER grants ability — schedule
     # fields written, confidence/status untouched.
-    hola = s.sheet["lexicon"]["hola"]
+    me_llamo = s.sheet["lexicon"]["me llamo"]
     tomorrow = (
         datetime.date.today() + datetime.timedelta(days=1)
     ).isoformat()
-    assert hola["introduced_at"] == datetime.date.today().isoformat()
-    assert hola["scaffold"] == "keyword"
-    assert hola["next_due"] == tomorrow
-    assert hola["interval_days"] == 1
-    assert hola["successive_successes"] == 0
-    assert float(hola["confidence"] or 0.0) == 0.0
-    assert hola["status"] == "unknown"
+    assert me_llamo["introduced_at"] == datetime.date.today().isoformat()
+    assert me_llamo["scaffold"] == "gloss"
+    assert me_llamo["next_due"] == tomorrow
+    assert me_llamo["interval_days"] == 1
+    assert me_llamo["successive_successes"] == 0
+    assert float(me_llamo["confidence"] or 0.0) == 0.0
+    assert me_llamo["status"] == "unknown"
     # CHAR_PIN — CHAR-BUG-001 RESOLVED (Phase 4 batch 4, known_bugs.json):
     # the atomic-turn save — ONE durable persist per successful turn at the
     # recorder commit point (_commit_sheet via stage_sheet_commit), AFTER
@@ -451,7 +476,7 @@ def test_golden_introduce_new_input_turn(tutor_session_factory):
 
     obs_turn = _observe(
         ctx, turn, save_slice=slice(n_open, None),
-        sheet_keys=(("lexicon", "hola"), ("lexicon", "muy bien")),
+        sheet_keys=(("lexicon", "me llamo"), ("lexicon", "muy bien")),
     )
     obs_turn["learner"] = "Muy bien, gracias."
     check_golden("golden_introduce_turn", obs_turn)
@@ -474,10 +499,10 @@ def test_notes_chronological_order(tutor_session_factory):
     turn = s.user_turn("Muy bien, gracias.")
     notes = list(turn.notes)
     mode_i = notes.index("mode=conversation")
-    planned_i = notes.index("introduce_planned:hola:R-E")
+    planned_i = notes.index("introduce_planned:me llamo:R-D")
     gate_i = notes.index("output_gate_ok")
     sheet_i = notes.index("hard_observer")
-    marked_i = notes.index("introduced:hola")
+    marked_i = notes.index("introduced:me llamo")
     # True chronology: mode select → introduce plan (pre-call) → gate
     # (post-call) → sheet maintenance (_finish) → introduce mark (post-gate).
     assert mode_i < planned_i < gate_i < sheet_i < marked_i

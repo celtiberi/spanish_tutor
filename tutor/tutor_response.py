@@ -267,10 +267,14 @@ def compose_visible(parts: TutorParts, *, for_ui: bool = False) -> str:
         chunks.append(parts.acknowledge.strip())
     if parts.recast.strip():
         chunks.append(parts.recast.strip())
-    if parts.explain.strip():
-        chunks.append(parts.explain.strip())
+    # Model BEFORE explain (2026-07-29 encantado incident: the fixed
+    # order put the "why" of a new word ahead of the word itself — the
+    # learner read an anchor with no referent). Meet the form, then
+    # anchor it; for recasts the corrected sentence already precedes.
     if parts.model.strip():
         chunks.append(parts.model.strip())
+    if parts.explain.strip():
+        chunks.append(parts.explain.strip())
     if parts.try_.strip():
         chunks.append(parts.try_.strip())
     if parts.continue_.strip():
@@ -292,59 +296,3 @@ def process_tutor_raw(raw: str) -> tuple[str, TutorParts]:
         # into `continue` and compose keeps it.
         visible = ""
     return visible, parts
-
-
-# Prompt fragment injected into system + harness
-STRUCTURED_REPLY_SPEC = """
-## Structured reply (required shape)
-
-Wrap learner-facing content in these tags (omit a tag if empty).
-The student never sees the tag names — the app assembles the message.
-
-```
-<tutor>
-  <acknowledge>...</acknowledge>
-  <recast>...</recast>
-  <explain depth="brief">...</explain>
-  <model>...</model>
-  <try>...</try>
-  <continue>...</continue>
-</tutor>
-```
-
-| Part | When |
-|------|------|
-| **acknowledge** | Meaning / rapport. Not “perfect” on wrong Spanish. |
-| **recast** | Required on form/register/construction error. Clean model. |
-| **explain** | Optional 1–2 lines; deep only if they asked why. |
-| **model** | Usually required: 1–3 short Spanish targets. |
-| **try** | Almost always: one clear production task. |
-| **continue** | Optional extra beat after try. |
-
-### Teaching (not chat-buddy)
-
-Every turn needs a teach move: **model**, **try**, and/or **recast+retry**.
-A lone open question with no model is wrong.
-
-Bad: only “¡Hola! ¿Cómo estás?” with no models.
-Good: model **Estoy bien / Estoy más o menos** then try “¿Cómo estás?”
-
-After a recast, **try** = same form again — do not jump topics.
-
-### Forbidden in the reply (hard fail)
-Do **not** emit character-sheet JSON, tool payloads, can-do codes (IP-04),
-error_pattern ids, confidence numbers, or fenced ```json dumps.
-Only Spanish conversation inside the tags. The app updates the sheet.
-
-### Example
-
-```
-<tutor>
-  <acknowledge>¡Ah, sí! Todo bien hoy.</acknowledge>
-  <recast>Natural: **Todo va bien** — o **Todo está bien**.</recast>
-  <explain depth="brief">Pick one pattern — don't mix va + está.</explain>
-  <model>**Todo va bien.** / **Estoy bien.**</model>
-  <try>Di una: **Todo va bien** o **Estoy bien**.</try>
-</tutor>
-```
-""".strip()

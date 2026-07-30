@@ -92,8 +92,14 @@ turn recorders at the exact historical inline order (``RECORDER_STAGES``)::
                              writes (r7 S1 + R-H scaffold-evidence law)
     stage_first_seen         gate scaffold_saved → durable first_seen bits
                              (Round-2 AMEND 1c)
+    stage_intro_morph        introduced/first-seen verb keys engage the
+                             Morphology card (2026-07-29 review: tutor-side
+                             introductions had no home)
     stage_memory_notes       note_plan_try + asked-topic registry +
                              note_tutor_turn memory writes
+    stage_frame_record       frames_seen exposure writes for realized due
+                             elicits + introductions (encounter-variety
+                             round, 2026-07-29)
     stage_declared_image     tutor-declared <image concept="…"/> resolution
                              (relevance law, repeat/cooldown gates)
     stage_mode_record        mode-state recorders: hard-break note, form
@@ -188,6 +194,9 @@ class TurnContext:
     gate_ctx: Any = None                            # output_gate.GateContext
     gate_result: Any = None                         # OutputGateResult | None
     need_recast: bool = False
+
+    # -- produced by settlement (§1.1b, 2026-07-29) --------------------------
+    render_drops: list = field(default_factory=list)  # (kind, concept, reason)
 
     # -- produced by the recorder family (batch 4) --------------------------
     result: Any = None                              # TurnResult (stage_finish)
@@ -498,7 +507,7 @@ def _due_elicit_build(session, ctx: TurnContext) -> str | None:
         return None
     ctx.ev.emit(
         EV.DUE_ELICIT_OFFERED,
-        payload={"keys": [d.key for d in due]},
+        payload={"keys": [d.key for d in due], "kinds": [d.kind for d in due]},
         stage="instruct",
     )
     return due_block
@@ -852,11 +861,10 @@ def stage_fallback_image(session, ctx: TurnContext) -> None:
         # miss warms async below.
         generate=False,
     )
-    if ctx.teach_images:
-        session.pedagogy_memory.note_image(
-            ctx.teach_images[0].get("concept")
-        )
-    elif (
+    # §1.1b: attach produces a CANDIDATE — note_image moved to
+    # settle_chrome (confirmed display only). Miss notes stay here (a
+    # miss is a generation-warming fact, not a display fact).
+    if not ctx.teach_images and (
         ctx.image_decision is not None
         and getattr(ctx.image_decision, "want", False)
         and ctx.image_decision.concept
@@ -866,11 +874,6 @@ def stage_fallback_image(session, ctx: TurnContext) -> None:
             source="mode",
             decision_reason=f"warm:{ctx.image_decision.reason}",
         )
-
-
-def stage_image_costs(session, ctx: TurnContext) -> None:
-    """Image cost notes for whatever attached above."""
-    session._note_image_costs(ctx.teach_images)
 
 
 def stage_introduce_render(session, ctx: TurnContext) -> None:
@@ -1004,11 +1007,14 @@ def stage_model_call(session, ctx: TurnContext) -> None:
 
 
 # The realize census, at the EXACT historical inline order.
+# stage_image_costs DELETED (§1.1b P-3, 2026-07-29): display bookkeeping
+# (note_image, image costs) fires at settle_chrome for CONFIRMED images
+# only — an image the learner never saw must not be billed or counted
+# as shown.
 REALIZE_STAGES: tuple = (
     stage_signal_shadow,
     stage_mode_image,
     stage_fallback_image,
-    stage_image_costs,
     stage_introduce_render,
     stage_mode_snapshot,
     stage_prompt_build,
@@ -1078,6 +1084,41 @@ def stage_gate_context(session, ctx: TurnContext) -> None:
         asked_topics=set(session.pedagogy_memory.asked_topics),
         topic_nouns=session._topic_nouns(),
     )
+
+
+def _settle_pixels(session, ctx: TurnContext) -> None:
+    """Shared pixel-settlement pass (§1.1b; run ≤2× per turn — post-
+    generation and again after a gate-repair rewrite). Confirms image
+    candidates against the REALIZED exchange and shrinks ctx.teach_images
+    to the confirmed set, so GateContext.image_present, introduce
+    scaffold evidence, memory notes, parts and costs all see truth. Every
+    drop emits a typed event — never a silent kill."""
+    from .exchange_render import exchange_surface, settle_images
+    from .turn_events import TurnEventKind as EV
+    from .tutor_response import process_tutor_raw as _ptr
+
+    if not ctx.teach_images:
+        return
+    visible, _parts = _ptr(ctx.raw or "")
+    surface = exchange_surface(
+        ctx.learner if not ctx.is_open else "", visible
+    )
+    confirmed, drops = settle_images(ctx.teach_images, surface)
+    ctx.teach_images = confirmed
+    for concept, reason in drops:
+        ctx.render_drops.append(("image", concept, reason))
+        ctx.ev.emit(
+            EV.RENDER_DROPPED, key=f"image:{concept}",
+            payload={"reason": reason}, stage="settle",
+        )
+
+
+def stage_settle_pixels(session, ctx: TurnContext) -> None:
+    """settle_pixels₀ — the commit phase for pre-call image candidates
+    (mode/scene attach, fallback, R-B introduce). Runs BEFORE the gate
+    context is built (design-exchange-settlement.md, Grok OQ3: a doomed
+    image must not license a scaffold or exempt a probe)."""
+    _settle_pixels(session, ctx)
 
 
 def stage_gate_check(session, ctx: TurnContext) -> None:
@@ -1164,6 +1205,11 @@ def stage_gate_repair(session, ctx: TurnContext) -> None:
         if raw2 and raw2.strip():
             ctx.raw = raw2
             ctx.final = final2
+            # settle_pixels₁ (§1.1b, Grok OQ3): the rewrite may have
+            # dropped the concept — re-settle BEFORE the re-gate so
+            # image_present cannot license a scaffold the learner will
+            # not see. Shrink-only; ≤2 settlements per turn, no loop.
+            _settle_pixels(session, ctx)
             _vis1, _parts1 = _ptr(ctx.raw or "")
             gate2 = check_output_gate(
                 replace(
@@ -1172,6 +1218,7 @@ def stage_gate_repair(session, ctx: TurnContext) -> None:
                     visible=_vis1,
                     raw=ctx.raw or "",
                     require_recast=ctx.need_recast,
+                    image_present=bool(ctx.teach_images),
                     truncated=(
                         (getattr(final2, "stop_reason", "") or "")
                         == "max_tokens"
@@ -1191,9 +1238,12 @@ def stage_gate_repair(session, ctx: TurnContext) -> None:
         ctx.ev.emit(EV.OUTPUT_GATE_OK, stage="gate")
 
 
-# The gate/repair census — the executor calls context-build first, then
-# check + repair inside the historical try/except.
+# The gate/repair census — the executor calls settle_pixels then
+# context-build first (both outside the historical try/except), then
+# check + repair inside it. settle_pixels precedes context build so
+# image_present is settled truth (§1.1b, 2026-07-29).
 GATE_REPAIR_STAGES: tuple = (
+    stage_settle_pixels,
     stage_gate_context,
     stage_gate_check,
     stage_gate_repair,
@@ -1313,6 +1363,52 @@ def stage_first_seen(session, ctx: TurnContext) -> None:
     # here is gone — the writes persist at stage_sheet_commit.
 
 
+def stage_settle_chrome(session, ctx: TurnContext) -> None:
+    """settle_chrome — the commit phase for non-pixel chrome (§1.1b,
+    design-exchange-settlement.md; replaces the stage_intro_morph stash).
+    Runs post-recorders because its projection legally consumes the
+    INTRODUCED / FIRST_SEEN events those stages emit (the ordering
+    contradiction Grok caught in the single-stage draft). Derives the
+    card view (learner engagement beats introduction — one priority
+    ladder in exchange_render.card_engagement), freezes the TurnRender
+    (single-assignment; replaced whole next turn), and does the
+    confirmed-display bookkeeping (P-3): note_image / image costs fire
+    HERE, for what the learner actually sees — never at attach."""
+    from .exchange_render import (
+        PROJECTION_EVENT_ALLOWLIST,
+        TurnRender,
+        card_engagement,
+    )
+    from .turn_events import TurnEventKind as EV
+    from .tutor_response import process_tutor_raw as _ptr
+
+    visible, _parts = _ptr(ctx.raw or "")
+    events = tuple(
+        (e.kind.value, e.key)
+        for e in ctx.ev.events
+        if e.kind.value in PROJECTION_EVENT_ALLOWLIST
+    )
+    card = card_engagement(
+        ctx.learner if not ctx.is_open else "", visible, events
+    )
+    if card:
+        ctx.ev.emit(
+            EV.MORPH_CARD, key=card.get("lemma") or card.get("form_id") or "",
+            payload={"engaged_by": card.get("engaged_by") or ""},
+            stage="settle",
+        )
+    for img in ctx.teach_images or []:
+        concept = (img or {}).get("concept")
+        if concept:
+            session.pedagogy_memory.note_image(concept)
+    session._note_image_costs(ctx.teach_images)
+    session.last_turn_render = TurnRender(
+        images=tuple(ctx.teach_images or []),
+        card=card,
+        drops=tuple(ctx.render_drops),
+    )
+
+
 def stage_memory_notes(session, ctx: TurnContext) -> None:
     """Session-memory recorders: plan-try memory, the asked-topic registry
     (2026-07-28 repetition forensics) and note_tutor_turn so meta "what
@@ -1352,6 +1448,51 @@ def stage_memory_notes(session, ctx: TurnContext) -> None:
             acknowledge=result.parts.get("acknowledge") or "",
             concepts=img_concepts or None,
         )
+
+
+def stage_frame_record(session, ctx: TurnContext) -> None:
+    """frames_seen exposure recorder (docs/design-encounter-variety.md,
+    Grok-countersigned 2026-07-29): when THIS turn's realized try/model
+    actually exercised a due-offered key — verbatim or via a conjugated
+    surface form («¿Cómo estás?» fires «estar», the Grok constraint) — or
+    introduced a key, record the turn's topic frame on that sheet entry.
+    Exposure history, never ability evidence (§3.2 untouched); no topic
+    frame this turn records nothing; the FRAME_RECORDED event fires only
+    on a genuine new write (it is the revisit-bound counter)."""
+    from .turn_events import TurnEventKind as EV
+
+    parts = ctx.result.parts or {}
+    try_text = parts.get("try") or parts.get("continue") or ""
+    model = parts.get("model") or ""
+    text = f"{model} {try_text}".strip()
+    if not text:
+        return
+    from .session_memory import compose_topic_key, topic_key_for_try
+
+    frame, concept = topic_key_for_try(try_text, nouns=session._topic_nouns())
+    if not frame:
+        return
+    fkey = compose_topic_key(frame, concept)
+    from .retrieval_scheduler import frames_seen_of, record_frame
+    from .turn_morph import lemma_engaged_by_text
+
+    targets: list[tuple[str, str]] = []
+    for e in ctx.ev.find(EV.DUE_ELICIT_OFFERED):
+        keys = list((e.payload or {}).get("keys") or [])
+        kinds = list((e.payload or {}).get("kinds") or [])
+        for i, k in enumerate(keys):
+            if lemma_engaged_by_text(text, k):
+                targets.append((k, kinds[i] if i < len(kinds) else "lexicon"))
+    for e in ctx.ev.find(EV.INTRODUCED):
+        if e.key:
+            targets.append((e.key, "lexicon"))
+    for k, kind in targets:
+        before = frames_seen_of(session.sheet, k, kind)
+        session.sheet = record_frame(session.sheet, k, kind, fkey)
+        if frames_seen_of(session.sheet, k, kind) != before:
+            ctx.ev.emit(
+                EV.FRAME_RECORDED, key=f"{k}:{fkey}", stage="record",
+            )
 
 
 def stage_declared_image(session, ctx: TurnContext) -> None:
@@ -1395,9 +1536,11 @@ def stage_declared_image(session, ctx: TurnContext) -> None:
                 "decision_reason": "tutor_declared",
                 "visual_score": 1.0,
             }]
-            session.pedagogy_memory.note_image(declared)
+            # §1.1b: note_image + costs moved to settle_chrome (the
+            # declared image is exchange-confirmed by construction —
+            # concept_in_text gated this branch above). Cooldown stays:
+            # pacing state, not display bookkeeping.
             session.pedagogy_memory.declared_image_cooldown = 3
-            session._note_image_costs(ctx.teach_images)
         else:
             session._note_image_miss(
                 declared,
@@ -1578,17 +1721,25 @@ def stage_sheet_commit(session, ctx: TurnContext) -> None:
     session._commit_sheet()
 
 
-# The recorder census (9 stages, batch-1 re-derived inventory) + the atomic
-# commit point as the family's final member.
+# The recorder census (9 stages, batch-1 re-derived inventory; +1
+# post-campaign: stage_intro_morph, 2026-07-29 morph-card review) + the
+# atomic commit point as the family's final member.
+# stage_intro_morph DELETED, stage_settle_chrome ADDED (§1.1b,
+# design-exchange-settlement.md, 2026-07-29): the card view is a
+# projection settled AFTER the recorder events it consumes and AFTER
+# declared images join the confirmed set; parts_notes then projects the
+# full event log including settlement events.
 RECORDER_STAGES: tuple = (
     stage_finish,
     stage_introduce_ledger,
     stage_first_seen,
     stage_memory_notes,
+    stage_frame_record,
     stage_declared_image,
     stage_mode_record,
     stage_soft_plan,
     stage_tail_events,
+    stage_settle_chrome,
     stage_parts_notes,
     stage_sheet_commit,
 )

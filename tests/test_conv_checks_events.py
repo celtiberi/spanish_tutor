@@ -108,14 +108,15 @@ def test_live_parity_events_vs_replay(tutor_session_factory):
     result2 = {"turns": turns2}
     _parity({"expect": {"introduce_planned": True}}, result2)
     _parity(
-        {"expect": {"progress_milestones": ["planted:hola"]}}, result2
+        {"expect": {"progress_milestones": ["planted:me llamo"]}}, result2
     )
     # The introduce turn really carried the expectations (not vacuous).
+    # (planted key hola→me llamo 2026-07-29, encounter-variety round.)
     assert introduce_scaffolded(
         {"expect": {"introduce_planned": True}}, result2
     ) == []
     assert progress_milestones_fired(
-        {"expect": {"progress_milestones": ["planted:hola"]}}, result2
+        {"expect": {"progress_milestones": ["planted:me llamo"]}}, result2
     ) == []
 
 

@@ -35,7 +35,7 @@
   "notes": [
     "mode=conversation",
     "mode_reason=default_conversation",
-    "introduce_planned:hola:R-E",
+    "introduce_planned:me llamo:R-D",
     "output_gate_fail:gate:unscaffolded_new_item",
     "output_gate_repaired",
     "rules_backup",
@@ -87,7 +87,7 @@
     "_commit_sheet"
   ],
   "sheet": {
-    "lexicon:hola": null,
+    "lexicon:me llamo": null,
     "lexicon:mucho gusto": {
       "confidence": 0.0,
       "first_seen": "<TODAY>",

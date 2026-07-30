@@ -358,22 +358,73 @@ def detect_turn_morph(learner: str) -> dict | None:
     return None
 
 
-def stash_turn_morph(mode_decision: dict, learner: str) -> dict | None:
-    """Compute + stash the turn block on the live mode-decision dict.
+# stash_turn_morph / stash_intro_morph DELETED (§1.1b settlement round,
+# 2026-07-29): the shared-dict _turn_morph stash was the accretion pattern
+# in miniature (two writers, precedence rules on a mutable bag). The card
+# view is now derived once per turn by exchange_render.card_engagement
+# (which calls the pure detectors below) and frozen into TurnRender at
+# stage_settle_chrome.
 
-    The session shares ONE decision dict per turn between the focus enricher
-    and every sheet_public repaint, so writing here makes the block stick for
-    the whole turn without threading new state through conv_session. A turn
-    with no form engagement clears any stale block (defensive: decision
-    dicts are normally fresh each turn).
+
+def detect_intro_morph(keys: list[str]) -> dict | None:
+    """Which tutor-introduced key engages a verb-form card? None = none.
+
+    Review 2026-07-29 (docs/reviews-morph-card-introductions.md): when the
+    TUTOR introduces a structural item (estar via recast+model), chat
+    explain is capped at 1–3 lines and this card was the designed home for
+    paradigm depth — but every detect path above only reads the LEARNER's
+    turn, so introductions never reached it. Keys come from the turn's
+    INTRODUCED / FIRST_SEEN events (pipeline knowledge — no reply re-scan);
+    tokens go through the same ambiguity-safe _TOKEN_INDEX (better to miss
+    than flash a wrong card).
     """
-    if not isinstance(mode_decision, dict):
-        return None
-    if not (learner or "").strip():
-        return mode_decision.get("_turn_morph")
-    block = detect_turn_morph(learner)
-    if block:
-        mode_decision["_turn_morph"] = block
-    else:
-        mode_decision.pop("_turn_morph", None)
-    return block
+    for raw in keys:
+        text = (raw or "").lower().replace("_", " ")
+        if not text.strip():
+            continue
+        lemma: str | None = None
+        persons: set[str] = set()
+        for token in re.findall(rf"[{_ES}]+", text):
+            hit = _TOKEN_INDEX.get(token)
+            if hit is None:
+                continue
+            if lemma is None:
+                lemma = hit[0]
+            if hit[0] == lemma and hit[1]:
+                persons.add(hit[1])
+        if lemma is None:
+            continue
+        block = _block_for_lemma(lemma)
+        if block is None:
+            continue
+        block["engaged_by"] = "introduction"
+        if text != lemma:
+            _add_watch(block, f"new this turn: {text}")
+        _highlight(block, persons or {"yo"})
+        return block
+    return None
+
+
+def lemma_engaged_by_text(text: str, key: str) -> bool:
+    """Did ``text`` realize ``key`` — verbatim OR via a conjugated surface
+    form of its verb lemma? («¿Cómo estás?» realizes the due key «estar».)
+
+    Encounter-variety round (Grok constraint, 2026-07-29): a bare
+    word_present(lemma) check would systematically miss conjugated elicits
+    and silently under-count frames_seen. Uses the same ambiguity-safe
+    _TOKEN_INDEX as the card triggers — better to miss than to over-credit.
+    """
+    from .textnorm import phrase_present
+
+    if phrase_present(key, text):
+        return True
+    k = (key or "").lower().strip()
+    if not k:
+        return False
+    for token in re.findall(rf"[{_ES}]+", (text or "").lower()):
+        hit = _TOKEN_INDEX.get(token)
+        if hit is not None and hit[0] == k:
+            return True
+    return False
+
+

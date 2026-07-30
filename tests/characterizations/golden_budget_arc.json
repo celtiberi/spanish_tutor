@@ -22,7 +22,7 @@
       "notes": [
         "mode=conversation",
         "mode_reason=known_open_from_sheet",
-        "introduce_planned:hola:R-E",
+        "introduce_planned:me llamo:R-D",
         "output_gate_ok",
         "rules_backup",
         "hard_observer",
@@ -60,7 +60,7 @@
       },
       "intro_budget_remaining": 1,
       "introduced_this_session": [
-        "hola"
+        "me llamo"
       ],
       "learner_turn_index": 2,
       "mode": "conversation",
@@ -68,7 +68,7 @@
         "mode=conversation",
         "mode_reason=default_conversation",
         "uptake_flagged:pan",
-        "introduce_planned:hola:R-E",
+        "introduce_planned:me llamo:R-D",
         "output_gate_ok",
         "rules_backup",
         "hard_observer",
@@ -77,8 +77,8 @@
         "focus_async",
         "structured_reply",
         "pedagogy:ok",
-        "introduced:hola",
-        "progress_milestone:planted:hola",
+        "introduced:me llamo",
+        "progress_milestone:planted:me llamo",
         "pedagogy:known_learner_open",
         "phase=ai_tutor",
         "activity=new_input",
@@ -108,15 +108,15 @@
       },
       "intro_budget_remaining": 0,
       "introduced_this_session": [
-        "hola",
-        "buenos días"
+        "me llamo",
+        "soy"
       ],
       "learner_turn_index": 3,
       "mode": "conversation",
       "notes": [
         "mode=conversation",
         "mode_reason=default_conversation",
-        "introduce_planned:buenos días:R-D",
+        "introduce_planned:soy:R-D",
         "output_gate_ok",
         "rules_backup",
         "hard_observer",
@@ -125,8 +125,8 @@
         "focus_async",
         "structured_reply",
         "pedagogy:ok",
-        "introduced:buenos días",
-        "progress_milestone:planted:buenos días",
+        "introduced:soy",
+        "progress_milestone:planted:soy",
         "pedagogy:known_learner_open",
         "phase=ai_tutor",
         "activity=new_input",
@@ -136,7 +136,8 @@
         "teacher_mode=planned",
         "open_scenes=boat_likes,boat_meet_captain,boat_where_boat",
         "mem_shown=greet,spanish_ok",
-        "mem_asked=conversation"
+        "mem_asked=conversation",
+        "morph_card:ser"
       ],
       "phase": {
         "frozen_turns": 0,
@@ -156,8 +157,8 @@
       },
       "intro_budget_remaining": 0,
       "introduced_this_session": [
-        "hola",
-        "buenos días"
+        "me llamo",
+        "soy"
       ],
       "learner_turn_index": 4,
       "mode": "conversation",
@@ -200,8 +201,8 @@
       },
       "intro_budget_remaining": 0,
       "introduced_this_session": [
-        "hola",
-        "buenos días"
+        "me llamo",
+        "soy"
       ],
       "learner_turn_index": 5,
       "mode": "conversation",

@@ -124,6 +124,9 @@ class TurnEventKind(str, Enum):
     INTRODUCED = "introduced"
     INTRODUCE_LAPSED = "introduce_lapsed"
     FIRST_SEEN = "first_seen"
+    MORPH_CARD = "morph_card"
+    FRAME_RECORDED = "frame_recorded"
+    RENDER_DROPPED = "render_dropped"
     ASKED_TOPIC = "asked_topic"
     DUE_ENQUEUED = "due_enqueued"
     IMAGE_DECLARED_IRRELEVANT = "image_declared_irrelevant"
@@ -309,6 +312,23 @@ NOTE_CATALOG: dict[TurnEventKind, NoteSpec] = {s.kind: s for s in [
     _spec(TurnEventKind.FIRST_SEEN, "first_seen:", False, "<key>",
           ["conv_session._execute_ai_tutor (scaffold_saved → AMEND 1c)"],
           [], "log-only", True),
+    _spec(TurnEventKind.MORPH_CARD, "morph_card:", False,
+          "<lemma> (tutor-side introduction engaged the Morphology card)",
+          ["turn_pipeline.stage_intro_morph"],
+          ["web Morphology card (block stashed on last_mode_decision)"],
+          "log-only", True),
+    _spec(TurnEventKind.FRAME_RECORDED, "frame_recorded:", False,
+          "<key>:<frame> (frames_seen exposure write — the revisit-bound "
+          "counter, docs/design-encounter-variety.md)",
+          ["turn_pipeline.stage_frame_record"],
+          ["encounter-variety revisit bound (count of writes)"],
+          "log-only", False),
+    _spec(TurnEventKind.RENDER_DROPPED, "render_dropped:", False,
+          "<kind>:<concept> (§1.1b settlement drop — operator/telemetry, "
+          "never a learner-facing message; no silent kills)",
+          ["turn_pipeline._settle_pixels"],
+          ["design-exchange-settlement.md audits"],
+          "log-only", False),
     _spec(TurnEventKind.ASKED_TOPIC, "asked_topic:", False,
           "<frame>:<concept> registry key (CHAR-BUG-007: pronouns leak in)",
           ["conv_session._execute_ai_tutor"], [], "log-only", True),
@@ -514,6 +534,9 @@ _RENDER = {
         lambda e: f"introduce_lapsed:{e.key}:"
                   f"{e.payload.get('reason', 'no_scaffold')}",
     _K.FIRST_SEEN: lambda e: f"first_seen:{e.key}",
+    _K.MORPH_CARD: lambda e: f"morph_card:{e.key}",
+    _K.FRAME_RECORDED: lambda e: f"frame_recorded:{e.key}",
+    _K.RENDER_DROPPED: lambda e: f"render_dropped:{e.key}",
     _K.ASKED_TOPIC: lambda e: f"asked_topic:{e.key}",
     _K.DUE_ENQUEUED: lambda e: f"due_enqueued:{e.key}",
     _K.IMAGE_DECLARED_IRRELEVANT:

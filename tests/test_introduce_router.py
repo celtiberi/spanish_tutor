@@ -296,6 +296,31 @@ class TestLapsedIntroFirstSeen(TableCase):
     R-A plan + gloss-only reply → introduce_lapsed + scaffold_saved records
     the planned key + first_seen sticks → next-turn bare use is CLEAN."""
 
+    def test_floating_anchor_is_not_scaffold_evidence(self):
+        # 2026-07-29 floating-anchor incident: the anchor in one block,
+        # the word in another — the learner re-attaches by guessing. The
+        # anchor counts ONLY on the same line as the item.
+        from tutor.conv_session import introduce_scaffold_evidence
+
+        sheet = default_sheet()
+        plan = plan_introduction(
+            sheet, self.table, _fresh_snap(), key="encantado"
+        )
+        self.assertEqual(plan.scaffold_type, "cognate")
+        anchor = str((plan.scaffold_payload or {}).get("anchor") or "")
+        self.assertTrue(anchor)
+        floating = (
+            f"Like English '{anchor}' — delighted.\n"
+            "¡Hola! Me llamo Marisol. **Encantado**.\n"
+            "¿Sí o no?"
+        )
+        self.assertFalse(introduce_scaffold_evidence(plan, floating))
+        attached = (
+            f"**Encantado** — like English '{anchor}'.\n"
+            "Di: **Encantado**."
+        )
+        self.assertTrue(introduce_scaffold_evidence(plan, attached))
+
     def test_encantado_lapse_writes_first_seen_next_bare_clean(self):
         from tutor.conv_session import introduce_scaffold_evidence
         from tutor.output_gate import (

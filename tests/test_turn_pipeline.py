@@ -85,11 +85,12 @@ DOCUMENTED_HEAD = [
     "stage_guard6_covered",
 ]
 
+# §1.1b settlement round (2026-07-29): stage_image_costs DELETED — display
+# bookkeeping fires at settle_chrome for CONFIRMED images only.
 DOCUMENTED_REALIZE = [
     "stage_signal_shadow",
     "stage_mode_image",
     "stage_fallback_image",
-    "stage_image_costs",
     "stage_introduce_render",
     "stage_mode_snapshot",
     "stage_prompt_build",
@@ -99,16 +100,22 @@ DOCUMENTED_REALIZE = [
 # Batch 4 census (docs/reviews-architecture-refactor.md, batch-1 re-derived
 # inventory: RECORDERS = 9) at the EXACT historical inline order, plus the
 # atomic commit point as the family's FINAL member (CHAR-BUG-001 RESOLVED —
-# the batch's declared delta per Grok amendment (a)).
+# the batch's declared delta per Grok amendment (a)).  Post-campaign:
+# stage_frame_record (encounter-variety round); §1.1b settlement round
+# 2026-07-29 — stage_intro_morph DELETED, stage_settle_chrome ADDED (the
+# card view is a projection settled AFTER the recorder events it consumes
+# and after declared images join the confirmed set).
 DOCUMENTED_RECORDERS = [
     "stage_finish",
     "stage_introduce_ledger",
     "stage_first_seen",
     "stage_memory_notes",
+    "stage_frame_record",
     "stage_declared_image",
     "stage_mode_record",
     "stage_soft_plan",
     "stage_tail_events",
+    "stage_settle_chrome",
     "stage_parts_notes",
     "stage_sheet_commit",
 ]
@@ -141,9 +148,11 @@ class TestPipelineOrder:
         assert all(callable(f) for f in tp.REALIZE_STAGES)
 
     def test_gate_repair_sequence_matches_documented_list(self):
-        # Batch 3 census: GATE/REPAIR = 3 — context build (outside the
-        # executor's try), then check + repair (inside it).
+        # Batch 3 census: GATE/REPAIR = 3; §1.1b settlement round added
+        # stage_settle_pixels FIRST (outside the executor's try, like the
+        # context build) so image_present is settled truth before gating.
         assert [f.__name__ for f in tp.GATE_REPAIR_STAGES] == [
+            "stage_settle_pixels",
             "stage_gate_context",
             "stage_gate_check",
             "stage_gate_repair",
@@ -195,17 +204,25 @@ class TestPipelineOrder:
             DOCUMENTED_HEAD
             + ["stage_contributors", "stage_phase_tick"]
             + DOCUMENTED_REALIZE
-            + ["stage_gate_context", "stage_gate_check", "stage_gate_repair"]
+            + [
+                "stage_settle_pixels", "stage_gate_context",
+                "stage_gate_check", "stage_gate_repair",
+            ]
             + DOCUMENTED_RECORDERS
             + DOCUMENTED_CAPTURE_LOG
         )
         # No stage rides two families.
         assert len(set(full)) == len(full)
-        # Census arithmetic: 9 + 2 + 8 + 3 + 10 + 2 = 34 stage functions;
-        # the 5 contributors are InstructionContributor instances under
-        # the stage_contributors loop (pinned by
+        # Census arithmetic: 9 + 2 + 7 + 4 + 12 + 2 = 36 stage functions
+        # (§1.1b settlement round: realize −stage_image_costs, gate
+        # +stage_settle_pixels, recorders −intro_morph +settle_chrome)
+        # (recorders 11 + the atomic commit; post-campaign additions:
+        # stage_intro_morph — 2026-07-29 morph-card review;
+        # stage_frame_record — 2026-07-29 encounter-variety round); the 5
+        # contributors are InstructionContributor instances under the
+        # stage_contributors loop (pinned by
         # test_contributor_census_and_order).
-        assert len(full) == 34
+        assert len(full) == 36
         assert len(tp.CONTRIBUTORS) == 5
 
     def test_turn_context_lean_field_census(self):
@@ -217,6 +234,8 @@ class TestPipelineOrder:
         # products (result, phase_label, phase_note_key, soft_plan);
         # batch 5 added NOTHING — the capture/log stages read fields
         # batches 3/4 already carry (the keep-it-lean law held to the end).
+        # §1.1b settlement round (2026-07-29) added render_drops (the
+        # settle_pixels → settle_chrome drop trail for TurnRender).
         assert sorted(tp.TurnContext.__dataclass_fields__) == sorted([
             "learner", "is_open", "ev", "input_mode", "log_learner",
             "llm_signals", "sig_pre", "obs", "blank", "sigs",
@@ -224,6 +243,7 @@ class TestPipelineOrder:
             "phase_consumed",
             "teach_images", "image_decision", "system", "task", "messages",
             "final", "raw", "tool_delta", "usage", "error_result",
+            "render_drops",
             "gate_ctx", "gate_result", "need_recast",
             "result", "phase_label", "phase_note_key", "soft_plan",
         ])
@@ -791,10 +811,12 @@ class TestStageContributors:
         assert offered[0].stage == "instruct"
 
     def test_introduce_contributor_defers_render(self, tutor_session_factory):
-        # golden_introduce_open facts: no dues → new_input open plans
-        # «hola» (R-E) — the plan parks on ctx.intro_plan and the
-        # INSTRUCTIONS DO NOT carry it yet (R-B honesty: the realize
-        # region renders after image resolution).
+        # golden_introduce_open facts: no dues → new_input open plans one
+        # item — the plan parks on ctx.intro_plan and the INSTRUCTIONS DO
+        # NOT carry it yet (R-B honesty: the realize region renders after
+        # image resolution). Key changed hola→me llamo 2026-07-29
+        # (encounter-variety round: _known_seed has IP-01 known, so it is
+        # mid-stream — openers sort last; docs/design-encounter-variety.md).
         session = tutor_session_factory(seed_sheet=_known_seed()).session
         ctx = _ctx(session, learner="", is_open=True)
         for stage in tp.PRE_MODEL_STAGES:
@@ -802,9 +824,9 @@ class TestStageContributors:
         tp.stage_contributors(session, ctx)
         assert ctx.activity == "new_input"
         assert ctx.intro_plan is not None
-        assert ctx.intro_plan.key == "hola"
+        assert ctx.intro_plan.key == "me llamo"
         planned = ctx.ev.latest(EV.INTRODUCE_PLANNED)
-        assert planned is not None and planned.key == "hola"
+        assert planned is not None and planned.key == "me llamo"
         # The plan's rendered block (golden pin: "INTRODUCE (one item,
         # rule R-E)") is NOT in the instructions yet — realize renders it.
         assert "INTRODUCE (one item" not in (ctx.decision.instructions or "")
@@ -953,16 +975,17 @@ class TestAtomicSheetCommit:
 
         turn = ctx.session.user_turn("Muy bien, gracias.")
         assert turn.error is None
-        assert "introduced:hola" in turn.notes
+        # (introduce key hola→me llamo 2026-07-29, encounter-variety round)
+        assert "introduced:me llamo" in turn.notes
         assert [c[0] for c in commits] == ["_commit_sheet", "_commit_sheet"]
 
         # Commit-point field set (the binding declaration's assertion
         # surface): the single snapshot has the introduce fields...
         snap = commits[-1][1]
-        hola = (snap.get("lexicon") or {})["hola"]
-        assert hola["introduced_at"] == datetime.date.today().isoformat()
-        assert hola["scaffold"] == "keyword"
-        assert hola["next_due"]
+        me_llamo = (snap.get("lexicon") or {})["me llamo"]
+        assert me_llamo["introduced_at"] == datetime.date.today().isoformat()
+        assert me_llamo["scaffold"] == "gloss"
+        assert me_llamo["next_due"]
         # ...and the sheet-maintenance field set from _finish's process_turn
         # (no earlier partial save carried one without the other).
         assert snap.get("updated_at")

@@ -210,3 +210,40 @@ Every AMEND accepted; Grok's exact replacement blocks above are BINDING over the
 ## Status: MVP SHIPPED 20260728-112355 (⬛ Claude build agent, 2026-07-28)
 
 Implemented the proposal **as amended** (Grok's replacement blocks): `tutor/progress_ledger.py` (append-only `logs/progress.jsonl`, up+down polarity, injectable clock/path, templated copy centralized in `detail_for` — mastery language only at the known band); emit sites in `tutor/conv_session.py` (planted / taking_root 3d / rooted 14d / regression-after-≥3d as polarity-down / error_recovered at streak≥3 & count==0 / can_do_emerging 0.55 / can_do_known at the code gate / task_complete; **no session-end milestone**; up-crossings dedupe once per key against the ledger); `record_outcome_ex` in the scheduler returns the interval transition (allowlist untouched); `/api/progress` with live-state `needs_recheck` join + countable header (durable-so-far · known · emerging; 0-100 score kept payload-only for compat); left journey rail in web_static (session clusters as date containers, first-session seeds-today copy, quiet needs-re-check badge, informational "Due soon" footer, no streak chrome); tests in `tests/test_progress_ledger.py` (43 checks incl. the no-milestone-without-evidence honesty test and the sub-known copy ban) and eval c08 now asserts `progress_milestone:taking_root:hasta luego` fires exactly once (`progress_milestones_fired`, per-trajectory ledger isolation). Not yet built (explicitly deferred, from amended (e)): vs-last-session delta line; down events for error re-hit / can-do demotion ride the live-state badge only, not ledger rows; global once-per-key dedupe means a key re-planted after a learner reset does not re-mint its historical milestones.
+
+---
+
+## Amendment: concept groups replace day clustering (2026-07-29, USER-directed)
+
+User ruling on the shipped day-clustered rail: *"why is the journey broken
+into yesterday and today? … it's their journey through concepts and
+learning — not days."* Day clustering (the 2026-07-28 session-fragment
+fix) had made the calendar the organizing principle — the ledger's storage
+shape leaking into the UI; the same theme could appear under multiple day
+headers as if it were different things.
+
+**Shipped redesign (tutor/progress_ledger.py `concept_nodes` /
+`concept_groups`, /api/progress `groups` payload, app.js render):**
+- Top level = association-table theme groups (skills → Abilities, tasks →
+  Tasks), ONE group per theme ever.
+- One node per item at its chronologically LATEST active-event state
+  (`events_count` keeps the item's event count); the one-state law and
+  needs_recheck join carry over unchanged.
+- Groups and items order by most recent activity — the top of the rail is
+  where the learner is working now.
+- Time demoted to a per-node hover whisper (today / yesterday / Jul 26);
+  never a header, never a partition (midnight is invisible).
+- **Epoch semantics changed deliberately:** the old view displayed
+  pre-epoch history above a "Fresh start" boundary row; a per-item STATE
+  view showing a pre-reset "rooted" as current truth would lie about the
+  reset learner, so nodes read post-epoch only and the boundary row died
+  with the day view. Raw lines remain on disk (append-only law untouched);
+  `has_milestone`/`up_keys` scoping unchanged.
+- Deleted with their view (dead-code rule): `read_recent`,
+  `read_recent_days`, `group_cluster_events`; their law-bearing tests
+  (retraction display, epoch scoping, operator-pollution display) ported
+  to the new surface in tests/test_progress_ledger.py +
+  test_session_state.py.
+
+Verification: suite 787 passed + 17 subtests; truncation gate ok;
+app.js ?v= bumped to 20260729a (cache-bust law).

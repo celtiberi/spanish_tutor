@@ -719,11 +719,14 @@ class TestLearnerEpochThroughSession:
         ]
         assert [e["kind"] for e in lines] == ["planted", "epoch", "planted"]
 
-    def test_display_keeps_both_sides_with_boundary(
+    def test_display_shows_only_the_fresh_epoch(
         self, tutor_session_factory
     ):
-        """History is real: the rail shows BOTH planted events, separated by
-        the visible epoch boundary row (never a retraction)."""
+        """History is real ON DISK (append-only: planted/epoch/planted all
+        remain raw, pinned above); the DISPLAY shows the current epoch only
+        (2026-07-29 concept rail: a state view must not present pre-reset
+        events as the reset learner's current truth — the day view's
+        boundary row died with the day view)."""
         from tutor import progress_ledger as pl
 
         ctx = tutor_session_factory()
@@ -732,20 +735,13 @@ class TestLearnerEpochThroughSession:
         session.reset_sheet()
         session._progress_note("planted", "hola", item_kind="lexicon")
 
-        days = pl.read_recent_days(ledger_path=ctx.progress_path)
-        assert len(days) == 1
-        kinds = [e["kind"] for e in days[0]["events"]]
-        assert kinds == ["planted", "epoch", "planted"]
-        assert days[0]["summary"] == {"planted": 2, "epoch": 1}
+        nodes = pl.concept_nodes(ledger_path=ctx.progress_path)
+        assert [(n["kind"], n["key"]) for n in nodes] == [("planted", "hola")]
 
         payload = pl.build_progress_payload(
             session.sheet, ledger_path=ctx.progress_path
         )
-        events = payload["clusters"][0]["events"]
-        boundary = [e for e in events if e["kind"] == "epoch"]
-        assert len(boundary) == 1
-        assert boundary[0]["display_state"] == "boundary"
-        assert boundary[0]["display"] == "Fresh start — progress reset"
-        assert [
-            e["key"] for e in events if e["kind"] == "planted"
-        ] == ["hola", "hola"]
+        items = [n for g in payload["groups"] for n in g["items"]]
+        assert [n["kind"] for n in items] == ["planted"]
+        # one node for the re-planted item, counting only this epoch
+        assert items[0]["events_count"] == 1

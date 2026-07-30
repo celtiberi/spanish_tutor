@@ -128,6 +128,14 @@ def _normalize_schedule_entry(entry: dict) -> None:
                 entry[k] = None
     if "scaffold" in entry and entry["scaffold"] is not None:
         entry["scaffold"] = str(entry["scaffold"])
+    if "frames_seen" in entry:
+        frames = entry["frames_seen"]
+        if isinstance(frames, list):
+            entry["frames_seen"] = [
+                str(f).strip()[:60] for f in frames if str(f).strip()
+            ][:32]
+        else:
+            entry.pop("frames_seen", None)
 
 
 def normalize_schedule_fields(sheet: dict) -> dict:

@@ -83,11 +83,15 @@ REPAIR_CLEAR_REPLY = (
 
 # Budget arc turn 2: realizes the SECOND introduce plan («buenos días», R-D
 # single ≤6-word micro-gloss) — consumes the last budget slot.
+# t2 introduces the router's second plan. Key changed buenos días→soy
+# 2026-07-29 (encounter-variety round: _known_seed is mid-stream, openers
+# sort last — the second content candidate after «me llamo» is «soy»).
 ARC_INTRO2_REPLY = (
     "<tutor>\n"
     "  <acknowledge>¡Perfecto!</acknowledge>\n"
-    "  <model>Por la mañana decimos **buenos días** (good morning).</model>\n"
-    "  <try>Di: **buenos días**.</try>\n"
+    "  <model>Para presentarte también dices **soy** (I am): Soy "
+    "Marisol.</model>\n"
+    "  <try>Di: **Soy** y tu nombre.</try>\n"
     "</tutor>"
 )
 
@@ -180,15 +184,17 @@ def test_golden_gate_fault_repair(tutor_session_factory):
     assert not mg.get("introduced_at") and not mg.get("next_due")
     assert ctx.save_calls[n_open:] == ["_commit_sheet"]
 
-    # CHAR_PIN: the planned «hola» lapsed silently in BOTH attempts (absent
-    # from the final reply) — budget unconsumed, no ledger write.
-    assert "introduce_planned:hola:R-E" in turn.notes
+    # CHAR_PIN: the planned key lapsed silently in BOTH attempts (absent
+    # from the final reply) — budget unconsumed, no ledger write. Key
+    # changed hola:R-E → me llamo:R-D 2026-07-29 (encounter-variety round:
+    # _known_seed is mid-stream, openers sort last).
+    assert "introduce_planned:me llamo:R-D" in turn.notes
     assert not any(n.startswith("introduced:") for n in turn.notes)
     assert s.pedagogy_memory.intro_budget_remaining() == 2
 
     obs = _observe(
         ctx, turn, save_slice=slice(n_open, None),
-        sheet_keys=(("lexicon", "mucho gusto"), ("lexicon", "hola")),
+        sheet_keys=(("lexicon", "mucho gusto"), ("lexicon", "me llamo")),
     )
     obs["learner"] = "Muy bien, gracias."
     obs["repair"] = {
@@ -271,7 +277,7 @@ def test_golden_comprehension_repair(tutor_session_factory):
     # the batch-4 unlawful class was introduce STARVATION on new_input —
     # this is its exact inverse; budget still consumable).
     assert "mode_reason=default_conversation" in turn2.notes
-    assert "introduce_planned:hola:R-E" in turn2.notes
+    assert "introduce_planned:me llamo:R-D" in turn2.notes
     assert "phase_consumed=True" in turn2.notes
     assert s.phase_state.turns_in_phase == 2
     assert s.phase_state.frozen_turns == 1
@@ -352,9 +358,9 @@ def test_golden_budget_arc(tutor_session_factory):
     ctx = tutor_session_factory(
         seed_sheet=_known_seed(),
         replies=[
-            OPEN_KNOWN_REPLY,      # open: plan «hola» emitted, not realized
-            TURN_INTRO_REPLY,      # t1: «hola» + R-E anchor → introduced
-            ARC_INTRO2_REPLY,      # t2: «buenos días» + R-D gloss → introduced
+            OPEN_KNOWN_REPLY,      # open: plan «me llamo» emitted, not realized
+            TURN_INTRO_REPLY,      # t1: «me llamo» + R-D gloss → introduced
+            ARC_INTRO2_REPLY,      # t2: «soy» + R-D gloss → introduced
             ARC_PLAIN_REPLY_3,     # t3: nothing new (R-G refused the plan)
             ARC_PLAIN_REPLY_4,     # t4: task-phase turn, uptake recovered
         ],
@@ -364,7 +370,7 @@ def test_golden_budget_arc(tutor_session_factory):
 
     open_res = s.open_session()
     assert open_res.error is None
-    assert "introduce_planned:hola:R-E" in open_res.notes
+    assert "introduce_planned:me llamo:R-D" in open_res.notes
     assert s.pedagogy_memory.intro_budget_remaining() == 2
     views.append(_arc_view(ctx, s, open_res, 0))
 
@@ -373,7 +379,7 @@ def test_golden_budget_arc(tutor_session_factory):
     t1 = s.user_turn("Muy bien, gracias. El pan (bread?) es muy rico.")
     assert t1.error is None
     assert "uptake_flagged:pan" in t1.notes
-    assert "introduced:hola" in t1.notes
+    assert "introduced:me llamo" in t1.notes
     assert s.pedagogy_memory.intro_budget_remaining() == 1
     assert s.mode_state.content_uptake_last_turn == 2
     views.append(_arc_view(ctx, s, t1, 1))
@@ -384,8 +390,8 @@ def test_golden_budget_arc(tutor_session_factory):
     assert t2.error is None
     assert not any(n.startswith("uptake_flagged:") for n in t2.notes)
     assert s.mode_state.content_uptake_last_turn == 2  # unchanged
-    assert "introduce_planned:buenos días:R-D" in t2.notes
-    assert "introduced:buenos días" in t2.notes
+    assert "introduce_planned:soy:R-D" in t2.notes
+    assert "introduced:soy" in t2.notes
     assert s.pedagogy_memory.intro_budget_remaining() == 0
     views.append(_arc_view(ctx, s, t2, 2))
 
@@ -416,9 +422,9 @@ def test_golden_budget_arc(tutor_session_factory):
 
     # CHAR_PIN: both introductions honesty-lawful (schedule fields only).
     assert s.pedagogy_memory.introduced_this_session == [
-        "hola", "buenos días",
+        "me llamo", "soy",
     ]
-    for key in ("hola", "buenos días"):
+    for key in ("me llamo", "soy"):
         entry = s.sheet["lexicon"][key]
         assert entry["status"] == "unknown"
         assert float(entry["confidence"] or 0.0) == 0.0

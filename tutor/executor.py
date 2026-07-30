@@ -76,6 +76,11 @@ Use the character sheet, session facts, and what they just said.
 ```
 - **acknowledge**: react to *their* content (Spanish first)
 - **model**: natural Spanish they should hear (not a vocab bullet list)
+- **explain**: normally 1–2 lines. The FIRST introduction of a new
+  structural item this session (verb form, copula, or other pack
+  pattern — not a passing re-mention) earns a real beat — 2–3 lines:
+  what it means and when you'd use it. Never conjugation tables in chat;
+  the app's Morphology card carries verb paradigms.
 - **try**: next conversational beat — prefer a real Spanish question
 - Words should read like a good tutor texting, not a labeled drill
 

@@ -52,7 +52,14 @@ SCHEDULE_FIELDS = frozenset({
     "next_due",
     "interval_days",
     "successive_successes",
+    "frames_seen",
 })
+
+# frames_seen safety cap (design-encounter-variety round, Grok OQ3 AMEND):
+# NO semantic drop — a dropped frame would falsify the "not on that list"
+# direction. The cap only guards against a pathological writer; the real
+# frame space is far smaller.
+FRAMES_SAFETY_CAP = 32
 
 # Ability fields the scheduler must never move.
 _PROTECTED_FIELDS = ("confidence", "status", "solid_uses")
@@ -632,3 +639,46 @@ def is_introduced(sheet: dict, key: str, kind: str) -> bool:
         return False
     entry = block.get(key)
     return isinstance(entry, dict) and bool(entry.get("introduced_at"))
+
+
+def frames_seen_of(sheet: dict, key: str, kind: str) -> list[str]:
+    """Query: the frames this item has been elicited in (exposure history)."""
+    if kind not in _SECTION:
+        raise ValueError(f"unknown kind {kind!r} (expected one of {KINDS})")
+    block = sheet.get(_SECTION[kind])
+    if not isinstance(block, dict):
+        return []
+    entry = block.get(key)
+    if not isinstance(entry, dict):
+        return []
+    frames = entry.get("frames_seen")
+    return [str(f) for f in frames] if isinstance(frames, list) else []
+
+
+def record_frame(sheet: dict, key: str, kind: str, frame: str) -> dict:
+    """Append an elicit frame to the entry's exposure history (frames_seen).
+
+    Encounter-variety round (docs/design-encounter-variety.md, 2026-07-29,
+    Grok-countersigned): exposure history, NEVER ability evidence — it
+    feeds the due-elicit direction line only, no read path into promotion.
+    Deduped, order-preserving, safety-capped with no semantic drop (a
+    dropped frame would falsify the "not on that list" direction). Empty
+    frame or an entry not on the sheet records nothing (silence records
+    nothing). Mutates and returns the sheet (module idiom)."""
+    f = (frame or "").strip()
+    if not f:
+        return sheet
+    if kind not in _SECTION:
+        raise ValueError(f"unknown kind {kind!r} (expected one of {KINDS})")
+    block = sheet.get(_SECTION[kind])
+    entry = block.get(key) if isinstance(block, dict) else None
+    if not isinstance(entry, dict):
+        return sheet
+    frames = entry.get("frames_seen")
+    if not isinstance(frames, list):
+        frames = []
+    frames = [str(x) for x in frames]
+    if f in frames or len(frames) >= FRAMES_SAFETY_CAP:
+        return sheet
+    _write(entry, {"frames_seen": frames + [f]})
+    return sheet

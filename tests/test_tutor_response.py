@@ -40,6 +40,22 @@ class TestTutorResponse(unittest.TestCase):
         self.assertNotIn("<recast>", visible)
         self.assertNotIn("</tutor>", visible)
 
+    def test_model_precedes_explain_in_visible(self):
+        # 2026-07-29 encantado incident: the why of a new word must never
+        # precede the word — compose order is model THEN explain.
+        raw = """
+        <tutor>
+          <acknowledge>¡Hola!</acknowledge>
+          <explain depth="brief">Like English "enchanted" — delighted.</explain>
+          <model>**Encantado** — mucho gusto.</model>
+          <try>Di: **Encantado**.</try>
+        </tutor>
+        """
+        visible = compose_visible(parse_tutor_response(raw))
+        self.assertLess(
+            visible.index("Encantado"), visible.index("enchanted")
+        )
+
     def test_process_tutor_raw(self):
         raw = "<tutor><continue>¡Hola!</continue></tutor>"
         vis, parts = process_tutor_raw(raw)
