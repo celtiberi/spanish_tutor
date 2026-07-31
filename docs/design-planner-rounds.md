@@ -1163,3 +1163,51 @@ in 343 turns of adversarial simulation.
 (B0 first next run), abort-on-repeated-error, resume when quota resets;
 arms/metrics/bounds/N all stand as frozen. No promotion decision is
 possible until B0 has ≥20 clean sessions.
+
+---
+
+## BLIND TEACHING-QUALITY GRADE (2026-07-30) — B0 wins compliance, LOSES responsiveness
+
+Rubric frozen before grading (evals/blind_rubric_v1.md); 15 transcripts
+from the completed A and B0 referee arms, arm labels stripped, order
+shuffled, key withheld until scoring was done. Grader: Grok (CALIBRATION
+pass — Grok is the referee elsewhere, so per its own rule this is not the
+reference standard; a non-Grok grader is required before promotion).
+
+| dimension | A (~50k tok) | B0 (~4.5k tok) | delta |
+|---|---|---|---|
+| **responsiveness** | 3.50 | **2.57** | **−0.93** |
+| teaching_move | 3.50 | 3.14 | −0.36 |
+| scaffolding | 3.75 | 3.86 | +0.11 |
+| spanish_level | 3.88 | 3.43 | −0.45 |
+| coherence | 3.62 | 2.86 | −0.77 |
+| **composite** | **3.65** | **3.17** | **−0.48** |
+
+Frozen bound was B0 ≥ A − 0.5: **3.17 ≥ 3.15 — passes by 0.02.** That is
+a tie with the kill line, not a win, and it passes on a composite that
+AVERAGES AWAY the collapse in the dimension every incident lives in.
+
+**The finding that matters:** the context diet buys rule-compliance and
+pays for it in listening. Blind one-liners on B0 transcripts name the
+mechanism:
+- "Four refusals of false places (casa/parque/oficina) and the tutor
+  still drills the next fake location."
+- "Endless me-llamo role-play after the learner already produced it
+  correctly."
+B0 keeps its BUDGETS and BANS (which is why still_fail fell 0.32→0.21)
+but loses the learner's established world — that they are on a boat, that
+they already answered, what they have told the tutor about themselves.
+The full-context arm gets that implicitly from full history; B0's floor
+has a session manifest of what was TAUGHT and none of what the LEARNER
+established.
+
+**Diagnosis (actionable):** completeness_v1 is missing a floor member —
+a code-derived LEARNER-FACTS manifest (their own asserted content this
+session, from their own utterances). This is not "more context"; it is
+the specific omission the grades expose.
+
+**Recommendation change: do NOT promote B0, even flagged-to-default.**
+The soak may finish for power, but the promotion question is now
+answered by quality, not by N: a tutor that breaks fewer rules while
+listening worse is not the tutor this project wants. Fix the missing
+floor member, re-run both arms, re-grade blind with a NON-Grok grader.
