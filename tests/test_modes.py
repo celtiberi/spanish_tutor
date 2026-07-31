@@ -269,23 +269,6 @@ class TestSelectMode(unittest.TestCase):
         self.assertEqual(d.mode, Mode.ASSOCIATION)
         self.assertTrue(d.hard_break)
 
-    def test_boredom_never_drill(self):
-        sheet = default_sheet()
-        sheet["skills"]["IP-01"] = {"status": "emerging", "confidence": 0.3}
-        sheet["affect"] = {"boredom_risk": "high", "energy": "frustrated_or_bored"}
-        note_error_pattern(sheet, "estar_yo_estoy_vs_esta", "a", resolved=False)
-        note_error_pattern(sheet, "estar_yo_estoy_vs_esta", "b", resolved=False)
-        state = ModeSessionState()
-        state.turns_since_hard_break = 5
-        d = select_mode(
-            sheet,
-            learner="this is boring",
-            observations={"blank_sheet": False, "signals": []},
-            mode_state=state,
-        )
-        self.assertEqual(d.mode, Mode.CONVERSATION)
-        self.assertEqual(d.reason, "boredom_new_topic")
-
 
 class TestGuardSixEscapeHatchClosed(unittest.TestCase):
     """2026-07-28 repetition forensics: guard 6 (concrete noun first-time)

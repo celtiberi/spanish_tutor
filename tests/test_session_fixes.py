@@ -250,9 +250,6 @@ class TestNoPersonalCapture(unittest.TestCase):
 
 
 class TestTopicFatigueAffect(unittest.TestCase):
-    def test_you_always_talk_sets_boredom(self):
-        s2 = apply_rule_updates(_known_sheet(), "You always talk about the boat")
-        self.assertEqual(s2["affect"]["boredom_risk"], "high")
 
     def test_boredom_decays_at_session_open(self):
         sheet = _known_sheet()
@@ -309,22 +306,6 @@ class TestKnownOpenHooks(unittest.TestCase):
         self.assertNotIn("CARE RULE", d.instructions)
         self.assertIn("WITHOUT any name", d.instructions)
         self.assertIn("never invent or guess one", d.instructions)
-
-    def test_open_with_boredom_skips_hooks(self):
-        sheet = _known_sheet()
-        sheet["identity"]["engagement_notes"] = "Lives on a boat."
-        sheet["skills"]["IP-01"] = {"status": "emerging", "confidence": 0.5}
-        sheet["affect"]["boredom_risk"] = "high"
-        d = select_mode(
-            sheet,
-            is_open=True,
-            observations={"blank_sheet": False, "signals": []},
-            mode_state=ModeSessionState(),
-            pack_topics=["Numbers, tener, questions"],
-        )
-        self.assertNotIn("Lives on a boat", d.instructions)
-        self.assertIn("FRESH", d.instructions)
-        self.assertIn("Numbers, tener, questions", d.instructions)
 
 
 class TestImageConceptWordBoundaries(unittest.TestCase):
@@ -642,21 +623,6 @@ class TestPackTopics(unittest.TestCase):
         topics = pack_topic_titles(Path(DEFAULT_PACK_DIR))
         self.assertGreaterEqual(len(topics), 4)
         self.assertTrue(any("Greetings" in t for t in topics))
-
-    def test_boredom_instruction_uses_pack_topics(self):
-        sheet = _known_sheet()
-        sheet["affect"]["boredom_risk"] = "high"
-        sheet["skills"]["IP-01"] = {"status": "emerging", "confidence": 0.5}
-        d = select_mode(
-            sheet,
-            learner="ok",
-            observations={"blank_sheet": False, "signals": []},
-            mode_state=ModeSessionState(),
-            pack_topics=["Present tense: regular -ar/-er/-ir verbs"],
-        )
-        self.assertEqual(d.reason, "boredom_new_topic")
-        self.assertIn("Present tense", d.instructions)
-        self.assertNotIn("boat", d.instructions)
 
 
 class TestModeImageAttachVisibility(unittest.TestCase):

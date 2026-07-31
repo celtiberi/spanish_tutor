@@ -55,12 +55,6 @@ class TestSheetCore(unittest.TestCase):
         self.assertLess(g["confidence"], 0.5)
         self.assertLess(s["skills"]["IP-02"]["confidence"], 0.5)
 
-    def test_meta_sets_boredom(self):
-        s = apply_rule_updates(
-            default_sheet(), "what are we even doing right now?")
-        self.assertEqual(s["affect"]["boredom_risk"], "high")
-        s = recompute_next_best(s)
-        self.assertEqual(s["next_best"]["can_do"], "IP-08")
 
     def test_sheet_delta_strip(self):
         raw = (

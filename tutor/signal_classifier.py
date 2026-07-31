@@ -35,7 +35,6 @@ INTENT_SIGNALS = frozenset({
     "non_understanding",  # did not understand and is stuck (maps to meta w/o spanish_ok)
     "spanish_ok",         # produced their OWN Spanish content (not just echoing ours)
     "english_only",       # message is essentially English
-    "boredom",            # bored/frustrated with repetition
     # §2.1a (BINDING, 2026-07-28) — OBSERVATIONAL, shadow-only:
     "content_offer",      # volunteers off-script meaning (not an answer to the outstanding try)
     "self_flagged_form",  # marks one of their OWN forms as uncertain («uvia (rain)», quotes)
@@ -48,7 +47,7 @@ OBSERVATIONAL_SIGNALS = frozenset({"content_offer", "self_flagged_form"})
 
 _SYSTEM = """You label ONE message from an adult A1 Spanish learner to their tutor.
 Return STRICT JSON only: {"signals": [..]} — a subset of:
-help_request, topic_request, meta_comprehension, non_understanding, spanish_ok, english_only, boredom, content_offer, self_flagged_form
+help_request, topic_request, meta_comprehension, non_understanding, spanish_ok, english_only, content_offer, self_flagged_form
 
 Definitions:
 - help_request: they ask how to say/write a word or phrase (any phrasing, any language).
@@ -58,7 +57,6 @@ Definitions:
 - spanish_ok: the message contains their OWN attempted Spanish content (imperfect is fine;
   quoting the tutor's words back does not count).
 - english_only: essentially all English.
-- boredom: bored/annoyed/wants variety.
 - content_offer: they volunteer their OWN meaning — a description, personal fact, or new
   subject beyond a minimal answer to the tutor's question (off-script content they chose
   to attempt).

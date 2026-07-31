@@ -165,12 +165,13 @@ class TestStillFailFloor:
         assert "Do NOT introduce ANY new Spanish" in recovery_msg
         assert "Estoy bien" not in recovery_msg  # no code-authored Spanish
 
-    def test_unstrippable_probe_gets_held_never_shipped(
+    def test_every_rung_failing_still_ships_something(
         self, tutor_session_factory
     ):
-        # Probe-only replies through BOTH remaining rungs (repair, then the
-        # constrained recovery) → rung (b′): hold. Nothing of the faulting
-        # payload reaches the learner; the client renders a system notice.
+        # THE ANTI-SILENCE LAW (junk audit 2026-07-30, priority #1: "a
+        # silent tutor is not a tutor"). Probe-only replies defeat repair,
+        # strip, AND constrained recovery — the learner STILL gets a turn.
+        # A repeated question is a bad turn; silence ends the exchange.
         ctx = tutor_session_factory(
             seed_sheet=_known_wellbeing_seed(),
             replies=[OPEN_OK_REPLY, PROBE_ONLY_REPLY, PROBE_ONLY_REPLY,
@@ -180,11 +181,19 @@ class TestStillFailFloor:
         assert s.open_session().error is None
         turn = s.user_turn("Estoy muy bien, gracias.")
         assert turn.error is None
-        assert any(
-            n.startswith("output_gate_held:") for n in turn.notes
-        )
-        assert turn.reply == ""
-        assert turn.parts.get("gate_hold") is True
-        assert "Sí o no" not in (turn.reply or "")
-        # Operator surface: the session counts its still-fails.
+        assert any(n.startswith("output_gate_degraded:") for n in turn.notes)
+        assert turn.reply.strip(), "learner must never get silence"
+        assert not turn.parts.get("gate_hold")
+        # Operator surface: the session still counts its still-fails.
         assert getattr(s, "gate_still_fail_count", 0) >= 1
+
+    def test_harmful_content_is_scrubbed_before_degraded_ship(self):
+        # Degraded ≠ shipping garbage: tool/sheet JSON and mid-sentence
+        # truncation are removed first (the two HARMFUL_TO_SHOW classes).
+        from tutor.turn_pipeline import _scrub_harmful
+
+        leak = 'Muy bien. {"lexicon": {"hola": 0.8}, "status": "known"}'
+        assert "lexicon" not in _scrub_harmful(leak)
+        assert "Muy bien" in _scrub_harmful(leak)
+        assert _scrub_harmful("Estoy bien. Y tú puedes decir") == "Estoy bien."
+        assert _scrub_harmful("Hola. ¿Cómo estás?") == "Hola. ¿Cómo estás?"

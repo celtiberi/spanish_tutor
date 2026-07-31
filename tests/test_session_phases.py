@@ -104,18 +104,6 @@ class TestBuildPhasePlan(unittest.TestCase):
         # round(14×0.7)=10, free = 14-10 = 4 → close borrows 1 (free 3)
         self.assertEqual(b, {"new_input": 10, "free": 3, "close": 1})
 
-    def test_boredom_high_puts_task_first_after_retrieval(self):
-        s = _known_sheet()
-        s["affect"] = {"boredom_risk": "high"}
-        plan = build_phase_plan(
-            s, due_count=1, blank=False, pack_topics=PACK_TOPICS,
-        )
-        self.assertEqual(
-            _order(plan),
-            ["retrieval", "task", "new_input", "free", "close"],
-        )
-        task = next(p for p in plan.phases if p.activity == "task")
-        self.assertEqual(task.item_refs, PACK_TOPICS)
 
     def test_close_is_last_in_every_variant(self):
         # PEDAGOGY §1.2 (USER-ratified 2026-07-28): EVERYONE gets a close —

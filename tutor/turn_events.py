@@ -122,6 +122,7 @@ class TurnEventKind(str, Enum):
     OUTPUT_GATE_ERROR = "output_gate_error"
     OUTPUT_GATE_STRIPPED = "output_gate_stripped"
     OUTPUT_GATE_RECOVERED = "output_gate_recovered"
+    OUTPUT_GATE_DEGRADED = "output_gate_degraded"
     OUTPUT_GATE_HELD = "output_gate_held"
     # -- post-model recorders (stage "record") ------------------------------
     INTRODUCED = "introduced"
@@ -340,6 +341,10 @@ NOTE_CATALOG: dict[TurnEventKind, NoteSpec] = {s.kind: s for s in [
           "(still_fail floor rung b — constrained regeneration passed; the "
           "learner gets a real turn instead of silence)",
           ["turn_pipeline._gate_floor"], [], "log-only", False),
+    _spec(TurnEventKind.OUTPUT_GATE_DEGRADED, "output_gate_degraded:", False,
+          "<faults> (floor rung c — best available shipped with harmful "
+          "content scrubbed; silence is worse than an imperfect turn)",
+          ["turn_pipeline._gate_floor"], [], "log-only", False),
     _spec(TurnEventKind.OUTPUT_GATE_HELD, "output_gate_held:", False,
           "<faults> (still_fail floor rung b′ — payload never shipped; "
           "client renders a non-teaching hold)",
@@ -554,6 +559,9 @@ _RENDER = {
     _K.RENDER_DROPPED: lambda e: f"render_dropped:{e.key}",
     _K.OUTPUT_GATE_STRIPPED: lambda e: "output_gate_stripped",
     _K.OUTPUT_GATE_RECOVERED: lambda e: "output_gate_recovered",
+    _K.OUTPUT_GATE_DEGRADED: lambda e: (
+        "output_gate_degraded:" + ",".join(e.payload.get("faults") or [])
+    ),
     _K.OUTPUT_GATE_HELD: lambda e: (
         "output_gate_held:" + ",".join(e.payload.get("faults") or [])
     ),
@@ -646,7 +654,8 @@ def _parse_tail(kind: TurnEventKind, tail: str) -> tuple[str, dict]:
         key, _, reason = tail.rpartition(":")
         return key, {"reason": reason}
     if kind in (_K.OUTPUT_GATE_SOFT_FAIL, _K.OUTPUT_GATE_FAIL,
-                _K.OUTPUT_GATE_STILL_FAIL, _K.OUTPUT_GATE_HELD):
+                _K.OUTPUT_GATE_STILL_FAIL, _K.OUTPUT_GATE_HELD,
+                _K.OUTPUT_GATE_DEGRADED):
         return "", {"faults": tail.split(",") if tail else []}
     if kind is _K.PLAN_GATE_FAIL:
         return "", {"errors": tail.split(",") if tail else []}

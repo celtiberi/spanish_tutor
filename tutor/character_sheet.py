@@ -1367,7 +1367,6 @@ def apply_rule_updates(
         low,
     ):
         aff["last_meta"] = text[:200]  # truncation-ok: affect note storage
-        aff["boredom_risk"] = "high"
         aff["energy"] = "frustrated_or_bored"
     elif re.search(
         # Topic fatigue: complaints about repetition, not general frustration
@@ -1378,7 +1377,6 @@ def apply_rule_updates(
         low,
     ):
         aff["last_meta"] = text[:200]  # truncation-ok: affect note storage
-        aff["boredom_risk"] = "high"
     elif re.search(
         r"\b(little time|only have|don'?t have (much|a lot of) time|"
         r"gotta go|have to go|in a hurry|in a rush|quick session|"

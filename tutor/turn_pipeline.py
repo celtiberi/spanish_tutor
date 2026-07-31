@@ -1081,9 +1081,34 @@ GATE_CRITICAL_FAULTS = frozenset({
     "gate:probe_loop",
 })
 
-# The still_fail FLOOR (§6 amendment, same review): faults in this set may
-# NEVER ship after a failed repair — the ladder is strip-part → hold.
+# The still_fail FLOOR (§6 amendment, same review): faults in this set force
+# the ladder — strip-part → constrained recovery → degraded ship.
 GATE_SHIP_BAN_FAULTS = GATE_CRITICAL_FAULTS
+
+# Faults whose CONTENT is harmful to display (not merely imperfect
+# teaching): tool/sheet JSON dumps and mid-sentence truncation. These are
+# scrubbed from the payload before any degraded ship; every other fault
+# ships degraded rather than leaving the learner with silence (junk audit
+# 2026-07-30 priority #1).
+_HARMFUL_TO_SHOW = frozenset({"gate:sheet_leak", "gate:truncated"})
+
+_JSON_BLOCK_RE = __import__("re").compile(
+    r"```[a-z]*\s*[\[{].*?[\]}]\s*```|(?<![\w])[\[{][^\n]*[\"'][a-z_]+[\"']\s*:"
+    r"[^\n]*[\]}]", __import__("re").S | __import__("re").I,
+)
+
+
+def _scrub_harmful(text: str) -> str:
+    """Remove displayable-garbage: fenced/inline JSON-ish dumps, then cut a
+    mid-sentence truncation back to the last complete sentence. Surface
+    cleanup of OUR OWN reply text — not judgment about meaning (§4.2)."""
+    t = _JSON_BLOCK_RE.sub(" ", str(text or "")).strip()
+    if t and t[-1] not in ".!?¡¿…":
+        for stop in range(len(t) - 1, 0, -1):
+            if t[stop] in ".!?…":
+                return t[: stop + 1].strip()
+        return ""
+    return t
 
 
 def stage_gate_context(session, ctx: TurnContext) -> None:
@@ -1305,9 +1330,40 @@ def _gate_floor(session, ctx: TurnContext, residual: set) -> None:
                 _settle_pixels(session, ctx)
                 return
 
+    # (c) DEGRADED SHIP — the harm ranking (junk audit 2026-07-30, Grok
+    # priority #1: "a silent tutor is not a tutor"). My first floor made
+    # never-ship terminal, and it produced SILENCE for a learner who said
+    # "I do not understand" (session 133545). Silence ends the exchange;
+    # a suboptimal turn does not. So the terminal rung ships the best
+    # available attempt EXCEPT for content that is harmful to display —
+    # tool/sheet JSON and mid-sentence truncation are scrubbed first,
+    # because that content is garbage, not merely imperfect teaching.
+    harmful = residual & _HARMFUL_TO_SHOW
+    visible_now, parts_now = _ptr(ctx.raw or "")
+    if harmful:
+        pd = parts_now.as_dict()
+        cleaned = {
+            k: _scrub_harmful(str(pd.get(k) or ""))
+            for k in ("acknowledge", "recast", "model", "explain",
+                      "try", "continue")
+        }
+        candidate = compose_raw(cleaned)
+        vis_c, _p = _ptr(candidate)
+        if vis_c.strip():
+            ctx.raw = candidate
+            visible_now = vis_c
+    if visible_now.strip():
+        ctx.ev.emit(
+            EV.OUTPUT_GATE_DEGRADED,
+            payload={"faults": sorted(residual)}, stage="gate",
+        )
+        _settle_pixels(session, ctx)
+        return
+
+    # (b′) HOLD — reachable only when nothing displayable survives at all
+    # (empty or wholly-harmful content). This is the true floor.
     ctx.raw = ""
     ctx.gate_hold = True
-    # Nothing ships on a hold — orphaned image candidates drop with it.
     for img in ctx.teach_images or []:
         concept = str((img or {}).get("concept") or "?")
         ctx.render_drops.append(("image", concept, "gate_hold"))

@@ -123,7 +123,6 @@ def build_phase_plan(
     topics = [str(t) for t in (pack_topics or []) if t]
     aff = _affect(sheet)
     energy = str(aff.get("energy") or "").lower()
-    boredom_high = str(aff.get("boredom_risk") or "").lower() == "high"
 
     if blank:
         ni = max(1, round(est * BLANK_NEW_INPUT_SHARE))
@@ -154,15 +153,15 @@ def build_phase_plan(
         budgets["retrieval"] += 1
         budgets["free"] = max(1, budgets["free"] - 1)
 
+    # Boredom re-ordering DELETED 2026-07-30 (junk audit): boredom_risk was
+    # set in 0 of 207 real turns — a phase-order branch that never ran.
     order = list(ACTIVITY_TYPES)
-    if boredom_high:
-        order = ["retrieval", "task", "new_input", "free"]
 
     phases: list[PhaseSpec] = []
     for activity in order:
         if activity not in budgets:
             continue
-        refs = list(topics) if (activity == "task" and boredom_high) else []
+        refs = []
         phases.append(PhaseSpec(activity, budgets[activity], refs))
     return _with_close(phases)
 

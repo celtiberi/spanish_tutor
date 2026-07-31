@@ -381,11 +381,6 @@ def _affect_energy(sheet: dict) -> str:
     return str(aff.get("energy") or "unknown").lower()
 
 
-def _boredom_high(sheet: dict) -> bool:
-    aff = sheet.get("affect") or {}
-    return str(aff.get("boredom_risk") or "").lower() == "high"
-
-
 def _can_hard_break(state: ModeSessionState) -> bool:
     # ≤1 hard break per 3 turns; never two consecutive
     if state.turns_since_hard_break < 3 and state.hard_breaks_this_session > 0:
@@ -668,17 +663,10 @@ def _select_mode_impl(
             ),
         )
 
-    # 1) Boredom — new topic chat, never drill
-    if _boredom_high(sheet) and "meta_comprehension" not in signals:
-        return ModeDecision(
-            Mode.CONVERSATION,
-            reason="boredom_new_topic",
-            instructions=(
-                "Change to a FRESH topic they have not done this session — "
-                "no drills, fun adult chat."
-                + topic_line
-            ),
-        )
+    # Boredom routing DELETED 2026-07-30 (junk audit): affect.boredom_risk
+    # was set in 0 of 207 real turns; the branch sat ABOVE comprehension
+    # repair in the guard chain. P6 stays theory; machinery returns only
+    # under the omission-ledger revive condition.
 
     # 1b) Comprehension repair — they didn't understand OUR Spanish
     #     MUST stay on same idea: explain + image + re-ask simplified SAME question
@@ -853,11 +841,6 @@ def _select_mode_impl(
             "name; never invent or guess one."
             " Warm SIMPLE A1 Spanish only; no intermediate idioms.",
         ]
-        if _boredom_high(sheet):
-            lines.append(
-                "Sheet shows topic fatigue — open on something FRESH."
-                + topic_line
-            )
         # Skip re-probing can-dos they already own
         if _conf("IP-04") >= 0.55 or "estoy" in shown:
             lines.append(
