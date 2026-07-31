@@ -1085,11 +1085,22 @@ GATE_CRITICAL_FAULTS = frozenset({
 # the ladder — strip-part → constrained recovery → degraded ship.
 GATE_SHIP_BAN_FAULTS = GATE_CRITICAL_FAULTS
 
-# Faults whose CONTENT is harmful to display (not merely imperfect
-# teaching): tool/sheet JSON dumps and mid-sentence truncation. These are
-# scrubbed from the payload before any degraded ship; every other fault
-# ships degraded rather than leaving the learner with silence (junk audit
-# 2026-07-30 priority #1).
+# HARM PARTITION (Grok countersign 2026-07-30, ITEM 1b — my first cut
+# shipped every non-garbage fault "degraded", which re-legalized fail-open
+# for the exact probe-loop class the floor was built to stop).
+#
+# INTEGRITY residuals may never reach the learner as Marisol's teaching
+# text: a repeated probe, an English wall, or a naked new item is ACTIVELY
+# BAD TEACHING, not merely imperfect. Garbage classes (leak/truncation)
+# are scrubbed first, then judged the same way.
+_INTEGRITY_HOLD = frozenset({
+    "gate:sheet_leak", "gate:truncated", "gate:probe_loop",
+    "gate:english_wall", "gate:unscaffolded_new_item",
+})
+# Contract misses that are still COMMUNICATION — imperfect teaching beats
+# silence, so these ship degraded with the fault logged.
+_DEGRADE_OK = frozenset({"gate:missing_recast", "pedagogy:no_teach_move"})
+# Content classes scrubbed before any ship/hold decision (surface hygiene).
 _HARMFUL_TO_SHOW = frozenset({"gate:sheet_leak", "gate:truncated"})
 
 _JSON_BLOCK_RE = __import__("re").compile(
@@ -1352,7 +1363,8 @@ def _gate_floor(session, ctx: TurnContext, residual: set) -> None:
         if vis_c.strip():
             ctx.raw = candidate
             visible_now = vis_c
-    if visible_now.strip():
+    integrity = residual & _INTEGRITY_HOLD
+    if visible_now.strip() and not integrity:
         ctx.ev.emit(
             EV.OUTPUT_GATE_DEGRADED,
             payload={"faults": sorted(residual)}, stage="gate",
@@ -1360,8 +1372,11 @@ def _gate_floor(session, ctx: TurnContext, residual: set) -> None:
         _settle_pixels(session, ctx)
         return
 
-    # (b′) HOLD — reachable only when nothing displayable survives at all
-    # (empty or wholly-harmful content). This is the true floor.
+    # (b′) HOLD — the integrity floor. Reached when an integrity residual
+    # survives recovery, or nothing displayable remains. The CLIENT renders
+    # a non-teaching system notice: a hold must never present as blank
+    # silence (that presentation bug caused session 133545), and it must
+    # never present as Marisol teaching text carrying these faults.
     ctx.raw = ""
     ctx.gate_hold = True
     for img in ctx.teach_images or []:

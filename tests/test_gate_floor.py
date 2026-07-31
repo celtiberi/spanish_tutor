@@ -165,13 +165,15 @@ class TestStillFailFloor:
         assert "Do NOT introduce ANY new Spanish" in recovery_msg
         assert "Estoy bien" not in recovery_msg  # no code-authored Spanish
 
-    def test_every_rung_failing_still_ships_something(
+    def test_integrity_residual_holds_and_never_ships(
         self, tutor_session_factory
     ):
-        # THE ANTI-SILENCE LAW (junk audit 2026-07-30, priority #1: "a
-        # silent tutor is not a tutor"). Probe-only replies defeat repair,
-        # strip, AND constrained recovery — the learner STILL gets a turn.
-        # A repeated question is a bad turn; silence ends the exchange.
+        # THE HARM PARTITION (§6 amended 2026-07-30, Grok ITEM 1b): a
+        # probe_loop residual is ACTIVELY BAD TEACHING — the class this
+        # floor exists to stop — so it HOLDS even though holding costs a
+        # teaching turn. My first cut shipped it "degraded", which was
+        # fail-open rebranded. The learner is never left blank: the hold
+        # renders as a client-owned non-teaching notice (parts.gate_hold).
         ctx = tutor_session_factory(
             seed_sheet=_known_wellbeing_seed(),
             replies=[OPEN_OK_REPLY, PROBE_ONLY_REPLY, PROBE_ONLY_REPLY,
@@ -181,11 +183,24 @@ class TestStillFailFloor:
         assert s.open_session().error is None
         turn = s.user_turn("Estoy muy bien, gracias.")
         assert turn.error is None
-        assert any(n.startswith("output_gate_degraded:") for n in turn.notes)
-        assert turn.reply.strip(), "learner must never get silence"
-        assert not turn.parts.get("gate_hold")
-        # Operator surface: the session still counts its still-fails.
+        assert any(n.startswith("output_gate_held:") for n in turn.notes)
+        assert "Sí o no" not in (turn.reply or "")
+        # Never blank silence: the client is told to render the notice.
+        assert turn.parts.get("gate_hold") is True
         assert getattr(s, "gate_still_fail_count", 0) >= 1
+
+    def test_soft_residual_degrades_rather_than_holding(self):
+        # The other half of the partition: missing_recast / no_teach_move
+        # are contract misses that still COMMUNICATE — imperfect teaching
+        # beats silence, so they ship degraded.
+        from tutor.turn_pipeline import _DEGRADE_OK, _INTEGRITY_HOLD
+
+        assert "gate:probe_loop" in _INTEGRITY_HOLD
+        assert "gate:english_wall" in _INTEGRITY_HOLD
+        assert "gate:unscaffolded_new_item" in _INTEGRITY_HOLD
+        assert "pedagogy:no_teach_move" in _DEGRADE_OK
+        assert "gate:missing_recast" in _DEGRADE_OK
+        assert not (_INTEGRITY_HOLD & _DEGRADE_OK), "a fault has one home"
 
     def test_harmful_content_is_scrubbed_before_degraded_ship(self):
         # Degraded ≠ shipping garbage: tool/sheet JSON and mid-sentence
