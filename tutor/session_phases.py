@@ -114,7 +114,6 @@ def build_phase_plan(
     - due_count == 0 → park the retrieval phase; its budget moves to free
       so the session length stays ≈ the estimate.
     - due_count >= 3 → retrieval +1 turn, free -1 (min 1).
-    - boredom_risk high → task phase runs first after retrieval, item_refs
       seeded from pack topic titles.
     - EVERY plan (blank / limited_time included) ends with a 1-turn close
       phase (_with_close: borrowed from free when free ≥ 2, else additive).

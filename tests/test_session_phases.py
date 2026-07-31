@@ -331,7 +331,6 @@ class TestPhaseTurnConsumed(unittest.TestCase):
             "time_pressure_chat",
             "learner_topic_request",
             "learner_help_request",
-            "boredom_new_topic",
             "grammar_question_inline",
             "blank_open_placement",
         ):

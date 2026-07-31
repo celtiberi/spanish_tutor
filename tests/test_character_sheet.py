@@ -282,24 +282,6 @@ class TestSheetCore(unittest.TestCase):
         never = s["coverage"]["never_touched"]
         self.assertNotIn("roleplay_tasks", never)
 
-    def test_tool_delta_clears_false_boredom_for_time(self):
-        s = apply_delta(
-            default_sheet(),
-            {
-                "affect": {
-                    "last_meta": "Has only a little time today",
-                    "boredom_risk": "high",
-                    "energy": "limited_time",
-                },
-                "next_best": {
-                    "can_do": "IP-08",
-                    "activity": "short_roleplay",
-                    "reason": "learner signalled boredom/plan confusion — new task (TBLT)",
-                },
-            },
-        )
-        self.assertNotEqual(s["affect"]["boredom_risk"], "high")
-        self.assertNotIn("boredom", (s["next_best"].get("reason") or "").lower())
 
     def test_tool_schema_shape(self):
         t = UPDATE_CHARACTER_SHEET_TOOL

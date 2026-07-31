@@ -284,7 +284,6 @@ PHASE_FREEZE_REASONS = frozenset({
     "time_pressure_chat",
     "learner_topic_request",
     "learner_help_request",
-    "boredom_new_topic",
     "grammar_question_inline",
     "meta_comprehension_stay_on_topic",
     "blank_open_placement",  # placement open happens before the plan engages

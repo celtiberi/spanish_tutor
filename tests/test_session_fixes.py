@@ -249,15 +249,6 @@ class TestNoPersonalCapture(unittest.TestCase):
         self.assertEqual(custom.name, "eval_sheet.profile.json")
 
 
-class TestTopicFatigueAffect(unittest.TestCase):
-
-    def test_boredom_decays_at_session_open(self):
-        sheet = _known_sheet()
-        sheet["affect"]["boredom_risk"] = "high"
-        s2 = clear_session_scoped_affect(sheet)
-        self.assertEqual(s2["affect"]["boredom_risk"], "medium")
-
-
 class TestNextBestDeadlock(unittest.TestCase):
     def test_ip03_skipped_when_name_known(self):
         s2 = apply_rule_updates(_known_sheet(), "estoy bien hoy")

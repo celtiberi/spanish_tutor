@@ -112,7 +112,7 @@ The tutor teaches only pack inventory. Denylisted forms (gustar, hacer, open-wor
 **Incident:** my own "pack-legal" replacement examples were 50% illegal (Grok REJECT, example-bleed review); the fix agent later had to rewrite my pack-illegal café-price info-gap. The pack law binds the authors, not just the model.
 
 ### 2.7 Affect is a signal, not decoration (GUIDELINE — r4; partially built)
-Boredom reshapes topics and phase order; limited time compresses the session; anxiety (WTC proxy — DEBT, §8) shifts toward input over forced production. Time pressure is never mistaken for boredom.
+Limited time compresses the session; anxiety (WTC proxy — DEBT, §8) shifts toward input over forced production. **Boredom machinery DELETED 2026-07-30** (junk audit): affect.boredom_risk fired in 0 of 207 real turns and its guard sat above comprehension repair — P6 stays theory, code returns only on the omission-ledger revive condition (evals/omission_ledger.jsonl). Theory may idle: a principle needs no runtime until an observed failure demands one.
 
 ---
 
@@ -183,7 +183,7 @@ Failing tests are reported with output; skipped steps are named; agents return r
 
 ## §6. Behavior contract (the tutor's runtime constitution, priority order)
 
-1. **Safety guards** (uptake §2.1): time → topic_request → help_request → boredom → comprehension_repair — always preempt, always freeze the phase clock.
+1. **Safety guards** (uptake §2.1): time → topic_request → help_request → comprehension_repair — always preempt, always freeze the phase clock. (boredom guard DELETED 2026-07-30, junk audit — never fired in 207 turns.)
 2. **Phase plan** (§1.2): what kind of turn this is (retrieval / new_input / task / free).
 3. **Mode runtime**: which intervention, if any (cf_recast, form_focus, association, transfer) — budgeted, recency-gated.
 4. **Content blocks**: due re-encounters (retrieval), introduce plan (new_input — owns the phase exclusively, §2.2), task goal + private info (task).

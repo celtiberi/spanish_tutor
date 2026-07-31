@@ -387,8 +387,6 @@ def clear_session_scoped_affect(sheet: dict) -> dict:
         aff["energy"] = "unknown"
     # Boredom decays across sessions: a new chat is a fresh chance. One more
     # complaint re-raises it; without decay "high" locks new-topic mode forever.
-    if aff.get("boredom_risk") == "high":
-        aff["boredom_risk"] = "medium"
     meta = aff.get("last_meta")
     if meta and _SESSION_META_TIME.search(str(meta)):
         aff["last_meta"] = None
@@ -424,7 +422,6 @@ def default_sheet() -> dict:
             "needs_english_scaffold": True,
         },
         "affect": {
-            "boredom_risk": "unknown",
             "last_meta": None,
             "energy": "unknown",
         },
@@ -642,7 +639,6 @@ def format_sheet_human(sheet: dict) -> str:
     aff = sheet.get("affect") or {}
     lines.append("")
     lines.append("## Affect")
-    lines.append(f"- boredom_risk: {aff.get('boredom_risk')}")
     lines.append(f"- last_meta: {aff.get('last_meta')}")
     cov = sheet.get("coverage") or {}
     lines.append("")
@@ -1359,7 +1355,7 @@ def apply_rule_updates(
     f = fold(text)
     low = text.lower()
 
-    # Affect: boredom vs limited time (not the same)
+    # Affect: energy / time pressure (boredom machinery deleted 2026-07-30)
     aff = s.setdefault("affect", {})
     if re.search(
         r"\b(what are we|why are we|boring|stuck|better way|this again|"
@@ -1385,9 +1381,6 @@ def apply_rule_updates(
     ):
         aff["last_meta"] = text[:200]  # truncation-ok: affect note storage
         aff["energy"] = "limited_time"
-        # Do NOT treat time pressure as boredom
-        if aff.get("boredom_risk") != "high":
-            aff["boredom_risk"] = "low"
 
     skills = s.setdefault("skills", default_skills_block())
 
@@ -1500,17 +1493,6 @@ def apply_delta(sheet: dict, delta: dict) -> dict:
 
     if "affect" in delta and isinstance(delta["affect"], dict):
         aff = {**s.get("affect", {}), **delta["affect"]}
-        # Normalize mistaken "boredom" for time-only notes
-        meta = str(aff.get("last_meta") or "").lower()
-        energy = str(aff.get("energy") or "").lower()
-        if aff.get("boredom_risk") == "high" and (
-            "time" in meta or "time" in energy or energy == "limited_time"
-        ):
-            if not re.search(
-                r"\b(bor(ed|ing)|stuck|what are we|why are we|hate)\b", meta
-            ):
-                aff["boredom_risk"] = "low"
-                aff["energy"] = aff.get("energy") or "limited_time"
         s["affect"] = aff
 
     if "receptive" in delta and isinstance(delta["receptive"], dict):
@@ -1537,16 +1519,6 @@ def apply_delta(sheet: dict, delta: dict) -> dict:
             nb["stretch"] = nb["activity"]
         if nb.get("stretch") and not nb.get("activity"):
             nb["activity"] = nb["stretch"]
-        # Soften bogus boredom reasons when energy is limited_time
-        reason = str(nb.get("reason") or "").lower()
-        if "boredom" in reason and (s.get("affect") or {}).get("energy") == "limited_time":
-            nb["reason"] = (
-                "limited time — keep tasks short; "
-                + (nb.get("reason") or "").replace(
-                    "learner signalled boredom/plan confusion — new task (TBLT)",
-                    "short stretch",
-                )
-            )
 
     touched_skills: list[str] = []
     touched_grammar: list[str] = []
@@ -1667,7 +1639,6 @@ UPDATE_CHARACTER_SHEET_TOOL = {
         "Do not claim solid_uses; observation records it (claimed counts "
         "are capped at the code-observed count, and 'known' requires "
         "observed uses — it cannot be granted by claim). "
-        "Limited time ≠ boredom (use energy=limited_time). "
         "For repeated construction errors (e.g. yo está), set error_patterns "
         "examples. Do not record learner names or personal facts; ability "
         "evidence only. Student never sees this tool."
@@ -1753,7 +1724,6 @@ UPDATE_CHARACTER_SHEET_TOOL = {
             "affect": {
                 "type": "object",
                 "properties": {
-                    "boredom_risk": {"type": "string"},
                     "last_meta": {"type": "string"},
                     "energy": {"type": "string"},
                 },
@@ -1828,14 +1798,7 @@ def recompute_next_best(sheet: dict, *, preferred_name: str | None = None) -> di
     avoid = "worksheet_drills_and_form_only_units"
     reason = "default exploratory talk (CLT)"
 
-    # Boredom only when explicitly high — last_meta alone is not boredom
-    # (e.g. "I only have a little time" is limited_time, not boredom).
-    if affect.get("boredom_risk") == "high":
-        can_do = "IP-08"
-        stretch_key = "change_activity"
-        avoid = "another_greeting_or_register_retry"
-        reason = "learner signalled boredom/plan confusion — new task (TBLT)"
-    elif evidence_mass < 0.35:
+    if evidence_mass < 0.35:
         can_do = None
         stretch_key = "open_chat_and_notice"
         avoid = "drill_greetings_if_already_easy"
@@ -1900,10 +1863,7 @@ def recompute_next_best(sheet: dict, *, preferred_name: str | None = None) -> di
 
     act = STRETCH_ACTIVITIES.get(stretch_key) or STRETCH_ACTIVITIES["open_chat_and_notice"]
     # Only when energy was set *this session* (session open clears stale labels)
-    if (
-        is_session_scoped_energy(affect.get("energy"))
-        and affect.get("boredom_risk") != "high"
-    ):
+    if is_session_scoped_energy(affect.get("energy")):
         avoid = "dragging_out_session_when_time_limited"
         if "limited time" not in reason.lower():
             reason = f"limited time — keep it short | {reason}"
@@ -1913,7 +1873,7 @@ def recompute_next_best(sheet: dict, *, preferred_name: str | None = None) -> di
     form_focus = None
     error_pattern = None
     active = active_error_patterns(s)
-    if active and affect.get("boredom_risk") != "high":
+    if active:
         top = active[0]
         error_pattern = top["id"]
         form_focus = top.get("form_id")
