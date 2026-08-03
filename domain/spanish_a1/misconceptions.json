@@ -1,0 +1,440 @@
+{
+  "estar_yo_estoy_vs_esta": {
+    "label": "yo + estoy (not está) for self",
+    "form_id": "present_estar_person",
+    "can_dos": [
+      "IP-04",
+      "IP-07"
+    ],
+    "teach_hint": "Learner confuses *estoy* (I am) with *está* (he/she/it/usted is). Recast *Yo está…* → *Estoy…* / *Yo estoy…*; weave first-person location and wellbeing with *estoy*.",
+    "detect": [
+      [
+        "\\byo\\s+est[aá]\\b",
+        "yo está"
+      ],
+      [
+        "\\best[aá]\\s+bien\\b(?!.*\\bestoy\\b)",
+        "está bien for self?"
+      ],
+      [
+        "\\best[aá]\\s+en\\s+(mi|el|la|rio|río)\\b",
+        "está en … for self location?"
+      ]
+    ],
+    "resolve": [
+      "\\byo\\s+estoy\\b",
+      "\\bestoy\\s+(bien|en|aquí|aca|acá)\\b"
+    ]
+  },
+  "me_llamo_es": {
+    "label": "me llamo (not me llama es)",
+    "form_id": null,
+    "can_dos": [
+      "IP-03"
+    ],
+    "teach_hint": "Recast *Me llama es X* / *Me llamo es X* → *Me llamo X*.",
+    "detect": [
+      [
+        "\\bme\\s+llam[oa]\\s+es\\b",
+        "me llamo/llama es"
+      ],
+      [
+        "\\bme\\s+llama\\s+[A-Za-zÁÉÍÓÚáéíóúñÑ]{2,}\\b",
+        "me llama Name"
+      ]
+    ],
+    "resolve": [
+      "\\bme\\s+llamo\\s+[A-Za-zÁÉÍÓÚáéíóúñÑ]{2,}\\b"
+    ]
+  },
+  "tengo_not_tango": {
+    "label": "tengo (not tango)",
+    "form_id": "tener_age_possession",
+    "can_dos": [
+      "IP-07"
+    ],
+    "teach_hint": "Recast *tango* → *tengo* (I have).",
+    "detect": [
+      [
+        "\\btango\\b",
+        "tango→tengo"
+      ]
+    ],
+    "resolve": [
+      "\\btengo\\b"
+    ]
+  },
+  "soy_de_origin": {
+    "label": "soy de + place",
+    "form_id": "present_ser",
+    "can_dos": [
+      "IP-07"
+    ],
+    "teach_hint": "Origin needs *de*: *Soy de Estados Unidos* (not *Soy Estados Unidos*).",
+    "detect": [
+      [
+        "\\bsoy\\s+(estados|ee\\.?uu\\.?|usa|guatemala|mexico|méxico)\\b",
+        "soy Place without de"
+      ]
+    ],
+    "resolve": [
+      "\\bsoy\\s+de\\b"
+    ]
+  },
+  "ser_estar_confuse": {
+    "label": "ser vs estar (feelings / location / temporary state)",
+    "form_id": "present_estar_person",
+    "can_dos": [
+      "IP-04",
+      "IP-07"
+    ],
+    "teach_hint": "Feelings and location use *estar* (*Estoy nerviosa*, *Estoy en casa*). *Ser* is for identity/origin (*Soy estudiante*, *Soy de…*). Recast *Soy nerviosa* → *Estoy nerviosa*; *Soy bien* → *Estoy bien*.",
+    "detect": [
+      [
+        "\\bsoy\\s+(nervios[oa]|bien|mal|cansad[oa]|feliz|triste|enferm[oa])\\b",
+        "soy + feeling"
+      ],
+      [
+        "\\bsoy\\s+en\\s+\\w+",
+        "soy en + place"
+      ],
+      [
+        "\\bestoy\\s+(estudiante|profesor|maestro|doctor)\\b",
+        "estoy + identity"
+      ]
+    ],
+    "resolve": [
+      "\\bestoy\\s+(nervios[oa]|bien|mal|cansad[oa]|feliz|triste|enferm[oa]|en)\\b",
+      "\\bsoy\\s+(estudiante|de)\\b"
+    ]
+  },
+  "gender_number_article": {
+    "label": "article/noun gender-number agreement",
+    "form_id": null,
+    "can_dos": [
+      "IP-06",
+      "IT-01"
+    ],
+    "teach_hint": "Match article and noun: *el edificio* / *los edificios* / *la casa* / *las casas*. Recast *la edificios* → *los edificios*; *el casas* → *las casas*.",
+    "detect": [
+      [
+        "\\bla\\s+(edificios|barcos|botes|libros|cafés|cafes|rios|ríos|amigos)\\b",
+        "la + plural masc"
+      ],
+      [
+        "\\bel\\s+(casas|amigas|comidas|músicas|musicas)\\b",
+        "el + plural fem"
+      ],
+      [
+        "\\blas\\s+(edificios|barcos|botes|libros)\\b",
+        "las + masc plural"
+      ],
+      [
+        "\\blos\\s+(casas|amigas|comidas)\\b",
+        "los + fem plural"
+      ],
+      [
+        "\\bme\\s+gusta\\s+los?\\s+\\w+s\\b",
+        "me gusta + plural"
+      ],
+      [
+        "\\bme\\s+gusta\\s+las?\\s+\\w+s\\b",
+        "me gusta + plural"
+      ]
+    ],
+    "resolve": [
+      "\\blos\\s+edificios\\b",
+      "\\blas\\s+casas\\b",
+      "\\bme\\s+gustan\\s+(los|las)\\b"
+    ]
+  },
+  "weather_hace": {
+    "label": "weather: hace calor/frío (not está calor)",
+    "form_id": null,
+    "can_dos": [
+      "IP-04",
+      "IP-07"
+    ],
+    "teach_hint": "Weather heat/cold uses *hace*: *Hace calor*, *Hace frío*, *Hace buen tiempo*. Not *está calor* / *es calor*. (*Está caliente* is for things, not the weather.)",
+    "detect": [
+      [
+        "\\best[aá]\\s+(un\\s+poco\\s+(de\\s+)?)?calor\\b",
+        "está calor"
+      ],
+      [
+        "\\best[aá]\\s+mucho\\s+calor\\b",
+        "está mucho calor"
+      ],
+      [
+        "\\best[aá]\\s+(un\\s+poco\\s+(de\\s+)?)?fr[ií]o\\b",
+        "está frío weather?"
+      ],
+      [
+        "\\bes\\s+(un\\s+poco\\s+(de\\s+)?)?calor\\b",
+        "es calor"
+      ],
+      [
+        "\\bes\\s+fr[ií]o\\s+hoy\\b",
+        "es frío hoy"
+      ],
+      [
+        "\\bhay\\s+calor\\b",
+        "hay calor"
+      ]
+    ],
+    "resolve": [
+      "\\bhace\\s+(mucho\\s+|un\\s+poco\\s+de\\s+)?calor\\b",
+      "\\bhace\\s+(mucho\\s+|un\\s+poco\\s+de\\s+)?fr[ií]o\\b",
+      "\\bhace\\s+buen\\s+tiempo\\b"
+    ]
+  },
+  "greeting_agreement_buenos_buenas": {
+    "label": "buenos/buenas agreement in greetings",
+    "form_id": "gender_articles",
+    "can_dos": [
+      "IP-01"
+    ],
+    "teach_hint": "Fixed phrases agree: buenos días (m) but buenas tardes/noches (f). Recast *buenos tardes → buenas tardes.",
+    "detect": [],
+    "resolve": [],
+    "source": "M-1.1"
+  },
+  "register_tu_with_usted_person": {
+    "label": "tú forms with an usted person",
+    "form_id": "register_tu_usted",
+    "can_dos": [
+      "IP-02"
+    ],
+    "teach_hint": "estás/te llamas directed at a boss, elder, or stranger — switch to está usted / se llama.",
+    "detect": [],
+    "resolve": [],
+    "source": "M-1.2"
+  },
+  "mucho_gusto_literal": {
+    "label": "mucho gusto read literally",
+    "form_id": null,
+    "can_dos": [
+      "IP-03"
+    ],
+    "teach_hint": "It is a fixed pleased-to-meet-you formula, not about taste; reply igualmente.",
+    "detect": [],
+    "resolve": [],
+    "source": "M-1.4"
+  },
+  "gender_exception_rule": {
+    "label": "-o/-a rule applied to exception nouns",
+    "form_id": "gender_exception_nouns",
+    "can_dos": [],
+    "teach_hint": "el día/mapa/problema, la mano/foto/moto — drill as a closed set; learner produces el problema / los problemas + one original.",
+    "detect": [],
+    "resolve": [],
+    "source": "M-2.1"
+  },
+  "greek_ma_feminine": {
+    "label": "-ma (Greek) nouns made feminine",
+    "form_id": "gender_exception_nouns",
+    "can_dos": [],
+    "teach_hint": "problema/idioma/programa/sistema are masculine: el problema.",
+    "detect": [],
+    "resolve": [],
+    "source": "M-2.2"
+  },
+  "gender_from_meaning": {
+    "label": "gender justified by real-world meaning",
+    "form_id": "gender_articles",
+    "can_dos": [],
+    "teach_hint": "Gender belongs to the WORD, not the object (*la vestido from 'a dress is feminine'). Teach: learn noun with its article.",
+    "detect": [],
+    "resolve": [],
+    "source": "M-2.3"
+  },
+  "plural_s_only": {
+    "label": "plural always just adds -s",
+    "form_id": "plural_formation",
+    "can_dos": [],
+    "teach_hint": "vowel+s, consonant+es, z→ces: *papels → papeles, *lápizs → lápices.",
+    "detect": [],
+    "resolve": [],
+    "source": "M-2.4"
+  },
+  "el_vs_el_accent": {
+    "label": "el (the) vs él (he) accent",
+    "form_id": "gender_articles",
+    "can_dos": [],
+    "teach_hint": "Accent distinguishes words: él es… vs el libro. Contrast in writing.",
+    "detect": [],
+    "resolve": [],
+    "source": "M-2.5"
+  },
+  "pronoun_every_sentence": {
+    "label": "subject pronoun in every clause",
+    "form_id": "subject_pronouns_prodrop",
+    "can_dos": [],
+    "teach_hint": "Spanish drops pronouns unless contrasting: Soy de México, not Yo soy… Yo no soy… every line.",
+    "detect": [],
+    "resolve": [],
+    "source": "M-3.1"
+  },
+  "usted_second_person_verb": {
+    "label": "usted with 2nd-person verb",
+    "form_id": "subject_pronouns_prodrop",
+    "can_dos": [],
+    "teach_hint": "usted/ustedes take THIRD-person forms: usted es, not *usted eres.",
+    "detect": [],
+    "resolve": [],
+    "source": "M-3.2"
+  },
+  "profession_article": {
+    "label": "article before unmodified profession",
+    "form_id": "profession_no_article",
+    "can_dos": [],
+    "teach_hint": "Soy estudiante, not *soy un estudiante (article returns with an adjective: es un profesor excelente).",
+    "detect": [],
+    "resolve": [],
+    "source": "M-3.3"
+  },
+  "vosotros_in_latam": {
+    "label": "vosotros hunted in a Latin American context",
+    "form_id": "subject_pronouns_prodrop",
+    "can_dos": [],
+    "teach_hint": "ustedes is BOTH formal and informal plural in Latin America; vosotros is Spain.",
+    "detect": [],
+    "resolve": [],
+    "source": "M-3.4"
+  },
+  "ser_for_location": {
+    "label": "ser for physical location",
+    "form_id": "ser_estar_contrast",
+    "can_dos": [],
+    "teach_hint": "Where → estar: Madrid está en España (the strongest evidence against the permanent/temporary shortcut).",
+    "detect": [],
+    "resolve": [],
+    "source": "M-4.1"
+  },
+  "permanent_temporary_shortcut": {
+    "label": "ser=permanent / estar=temporary shortcut",
+    "form_id": "ser_estar_contrast",
+    "can_dos": [],
+    "teach_hint": "The shortcut misfires (está muerto; Madrid está…). Teach what/how/where instead.",
+    "detect": [],
+    "resolve": [],
+    "source": "M-4.2"
+  },
+  "ser_estar_interchangeable": {
+    "label": "ser/estar treated as interchangeable",
+    "form_id": "ser_estar_contrast",
+    "can_dos": [],
+    "teach_hint": "Don't correct item-by-item: teach the decision rule, then have the learner SAY the reason (what/how/where) before answering.",
+    "detect": [],
+    "resolve": [],
+    "source": "M-4.5"
+  },
+  "accent_esta_vs_esta": {
+    "label": "está written without its accent",
+    "form_id": "present_estar_person",
+    "can_dos": [],
+    "teach_hint": "esta (this) vs está (is) — the accent is part of the verb's spelling, never optional.",
+    "detect": [],
+    "resolve": [],
+    "source": "M-4.4"
+  },
+  "infinitive_unconjugated": {
+    "label": "bare infinitive as the verb",
+    "form_id": "present_regular_ar_er_ir",
+    "can_dos": [],
+    "teach_hint": "*Yo hablar español → hablo. The infinitive is the dictionary form, not a usable present.",
+    "detect": [],
+    "resolve": [],
+    "source": "M-5.1"
+  },
+  "wrong_ending_family": {
+    "label": "one ending set for all families",
+    "form_id": "present_regular_ar_er_ir",
+    "can_dos": [],
+    "teach_hint": "-ar endings on -er/-ir verbs (*comas for comes): theme vowel follows the family.",
+    "detect": [],
+    "resolve": [],
+    "source": "M-5.2"
+  },
+  "er_ir_overdistinguish": {
+    "label": "-er/-ir imagined to differ everywhere",
+    "form_id": "present_regular_ar_er_ir",
+    "can_dos": [],
+    "teach_hint": "They differ ONLY in nosotros/vosotros: comemos vs vivimos.",
+    "detect": [],
+    "resolve": [],
+    "source": "M-5.3"
+  },
+  "estar_plus_infinitive": {
+    "label": "estar + infinitive for progressive",
+    "form_id": "present_regular_ar_er_ir",
+    "can_dos": [],
+    "teach_hint": "*Estoy comer → como. Simple present covers 'am eating' at A1 (no progressive yet).",
+    "detect": [],
+    "resolve": [],
+    "source": "M-5.4"
+  },
+  "question_do_auxiliary": {
+    "label": "do-auxiliary inserted in questions",
+    "form_id": "negation_questions_no_auxiliary",
+    "can_dos": [],
+    "teach_hint": "*¿Haces tú hablar inglés? → ¿Hablas inglés? Intonation or inversion, never an auxiliary.",
+    "detect": [],
+    "resolve": [],
+    "source": "M-5.5"
+  },
+  "age_with_ser": {
+    "label": "age with ser/estar",
+    "form_id": "tener_age_possession",
+    "can_dos": [],
+    "teach_hint": "*Soy veinte años → Tengo veinte años (always include años).",
+    "detect": [],
+    "resolve": [],
+    "source": "M-6.1"
+  },
+  "tener_regularized": {
+    "label": "tener conjugated as regular -er",
+    "form_id": "tener_age_possession",
+    "can_dos": [],
+    "teach_hint": "*teno/*tenes → tengo, tienes (memorize the six as a unit).",
+    "detect": [],
+    "resolve": [],
+    "source": "M-6.2"
+  },
+  "compound_number_split": {
+    "label": "compound numbers mis-split",
+    "form_id": "numbers_0_100",
+    "can_dos": [],
+    "teach_hint": "21–29 ONE word (veintidós); 31–99 three words (treinta y dos). Probe: veintidós ↔ treinta y dos.",
+    "detect": [],
+    "resolve": [],
+    "source": "M-6.3"
+  },
+  "age_question_calque": {
+    "label": "how-old question calqued from English",
+    "form_id": "tener_age_possession",
+    "can_dos": [],
+    "teach_hint": "*¿Cómo viejo eres? → ¿Cuántos años tienes/tiene usted?",
+    "detect": [],
+    "resolve": [],
+    "source": "M-6.4"
+  },
+  "cuanto_agreement": {
+    "label": "cuánto not agreeing with its noun",
+    "form_id": "question_words_inventory",
+    "can_dos": [],
+    "teach_hint": "cuánto/a/os/as agrees in gender AND number: ¿Cuántas sillas hay?",
+    "detect": [],
+    "resolve": [],
+    "source": "M-6.5"
+  },
+  "porque_vs_por_que": {
+    "label": "porque (because) vs ¿por qué? (why)",
+    "form_id": "question_words_inventory",
+    "can_dos": [],
+    "teach_hint": "Question form is two words with an accent: ¿Por qué…? Answer: porque…",
+    "detect": [],
+    "resolve": [],
+    "source": "M-6.6"
+  }
+}

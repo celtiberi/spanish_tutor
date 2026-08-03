@@ -1,0 +1,310 @@
+{
+  "present_estar_person": {
+    "supports": [
+      "IP-04"
+    ],
+    "priority": "high",
+    "error_example": "esta bien for 'I am fine'",
+    "label": "estar — person (states / location)",
+    "lemma": "estar",
+    "pos": "verb",
+    "paradigm": [
+      {
+        "form": "estoy",
+        "person": "yo",
+        "gloss": "I am"
+      },
+      {
+        "form": "estás",
+        "person": "tú",
+        "gloss": "you are"
+      },
+      {
+        "form": "está",
+        "person": "usted/él/ella",
+        "gloss": "you(formal)/he/she is"
+      },
+      {
+        "form": "estamos",
+        "person": "nosotros",
+        "gloss": "we are"
+      },
+      {
+        "form": "están",
+        "person": "ustedes/ellos",
+        "gloss": "you all/they are"
+      }
+    ],
+    "note": "Feelings & place. Not identity (use ser). Accents are part of the spelling (está, estás).",
+    "watch": "estoy ≠ esta / está"
+  },
+  "register_tu_usted": {
+    "supports": [
+      "IP-02",
+      "IP-08"
+    ],
+    "priority": "medium",
+    "error_example": "tú forms with a boss/stranger in formal role",
+    "label": "tú vs usted",
+    "lemma": "address",
+    "pos": "register",
+    "paradigm": [
+      {
+        "form": "¿Cómo estás?",
+        "person": "tú",
+        "gloss": "How are you? (informal)"
+      },
+      {
+        "form": "¿Cómo está usted?",
+        "person": "usted",
+        "gloss": "How are you? (formal)"
+      },
+      {
+        "form": "¿Cómo te llamas?",
+        "person": "tú",
+        "gloss": "What's your name?"
+      },
+      {
+        "form": "¿Cómo se llama?",
+        "person": "usted",
+        "gloss": "What's your name? (formal)"
+      }
+    ],
+    "note": "Match form to the person (dockmaster, stranger → usted).",
+    "watch": "Don't mix tú endings with usted"
+  },
+  "present_ser": {
+    "supports": [
+      "IP-07",
+      "PR-01"
+    ],
+    "priority": "medium",
+    "error_example": "wrong copula for identity",
+    "label": "ser — identity / origin",
+    "lemma": "ser",
+    "pos": "verb",
+    "paradigm": [
+      {
+        "form": "soy",
+        "person": "yo",
+        "gloss": "I am"
+      },
+      {
+        "form": "eres",
+        "person": "tú",
+        "gloss": "you are"
+      },
+      {
+        "form": "es",
+        "person": "usted/él/ella",
+        "gloss": "you(formal)/he/she is"
+      },
+      {
+        "form": "somos",
+        "person": "nosotros",
+        "gloss": "we are"
+      },
+      {
+        "form": "son",
+        "person": "ustedes/ellos",
+        "gloss": "you all/they are"
+      }
+    ],
+    "note": "Who/what you are; origin with de. No article before unmodified profession (Soy profesor).",
+    "watch": "Soy de… (not soy Estados Unidos)"
+  },
+  "gender_articles": {
+    "supports": [
+      "IP-01"
+    ],
+    "priority": "low",
+    "error_example": "buenos tardes",
+    "label": "gender + articles (light)",
+    "lemma": "el / la",
+    "pos": "article",
+    "paradigm": [
+      {
+        "form": "el café",
+        "person": "m",
+        "gloss": "the coffee"
+      },
+      {
+        "form": "la pizza",
+        "person": "f",
+        "gloss": "the pizza"
+      },
+      {
+        "form": "los tacos",
+        "person": "m pl",
+        "gloss": "the tacos"
+      },
+      {
+        "form": "rica / rico",
+        "person": "adj",
+        "gloss": "agrees with noun"
+      }
+    ],
+    "note": "Adjective often matches the noun (la pizza es rica).",
+    "watch": "la pizza es rica (not rico)"
+  },
+  "present_regular_ar_er_ir": {
+    "supports": [
+      "IP-06",
+      "IP-07",
+      "IP-08"
+    ],
+    "priority": "medium",
+    "error_example": "wrong person ending",
+    "label": "present regular endings (hablar / comer / vivir)",
+    "lemma": "—ar / —er / —ir",
+    "pos": "verb",
+    "paradigm": [
+      {
+        "form": "hablo",
+        "person": "yo",
+        "gloss": "I speak (all families: yo → -o)"
+      },
+      {
+        "form": "comes",
+        "person": "tú",
+        "gloss": "you eat"
+      },
+      {
+        "form": "vive",
+        "person": "usted/él/ella",
+        "gloss": "you(formal)/he/she lives"
+      },
+      {
+        "form": "hablamos / comemos / vivimos",
+        "person": "nosotros",
+        "gloss": "we speak/eat/live"
+      }
+    ],
+    "note": "-er and -ir differ ONLY in nosotros/vosotros (comemos vs vivimos).",
+    "watch": "*yo hablar (no bare infinitive); *¿haces tú hablar…? (no do-auxiliary)"
+  },
+  "numbers_0_100": {
+    "supports": [
+      "IP-07"
+    ],
+    "priority": "low",
+    "error_example": "veinte y dos / cuarenta cinco (wrong split; 21-29 one word, 31-99 tens y units)",
+    "label": "numbers 0–100",
+    "lemma": "números",
+    "pos": "numeral",
+    "paradigm": [
+      {
+        "form": "uno / una",
+        "person": "1",
+        "gloss": "one (un before masc noun)"
+      },
+      {
+        "form": "dieciséis … diecinueve",
+        "person": "16–19",
+        "gloss": "one word, accented"
+      },
+      {
+        "form": "veintidós … veintinueve",
+        "person": "21–29",
+        "gloss": "ONE word (veintidós)"
+      },
+      {
+        "form": "treinta y dos … noventa y nueve",
+        "person": "31–99",
+        "gloss": "THREE words (tens y units)"
+      },
+      {
+        "form": "cien",
+        "person": "100",
+        "gloss": "exactly 100"
+      }
+    ],
+    "note": "Age, counts, prices. 21–29 one word; 31–99 tens y units.",
+    "watch": "*veinte y dos, *cuarentaycinco"
+  },
+  "tener_age_possession": {
+    "supports": [
+      "IP-07"
+    ],
+    "priority": "medium",
+    "error_example": "age with ser (*soy veinte años)",
+    "label": "tener — have / age",
+    "lemma": "tener",
+    "pos": "verb",
+    "paradigm": [
+      {
+        "form": "tengo",
+        "person": "yo",
+        "gloss": "I have"
+      },
+      {
+        "form": "tienes",
+        "person": "tú",
+        "gloss": "you have"
+      },
+      {
+        "form": "tiene",
+        "person": "usted/él",
+        "gloss": "you/he has"
+      },
+      {
+        "form": "tenemos",
+        "person": "nosotros",
+        "gloss": "we have"
+      }
+    ],
+    "note": "Possession, age (tengo X años), time expressions.",
+    "watch": "tengo not tango; age with tener not ser"
+  },
+  "ser_estar_contrast": {
+    "supports": [
+      "IP-04",
+      "IP-07"
+    ],
+    "priority": "high",
+    "error_example": "*Madrid es en España / *soy cansado (what/how/where rule)"
+  },
+  "plural_formation": {
+    "supports": [
+      "IP-07"
+    ],
+    "priority": "low",
+    "error_example": "*papels, *lápizs (vowel+s, consonant+es, z→ces)"
+  },
+  "gender_exception_nouns": {
+    "supports": [
+      "IP-07"
+    ],
+    "priority": "low",
+    "error_example": "*la problema, *el mano (el día/mapa/problema, la mano/foto/moto; -ma masc)"
+  },
+  "subject_pronouns_prodrop": {
+    "supports": [
+      "IP-03",
+      "IP-07"
+    ],
+    "priority": "medium",
+    "error_example": "Yo soy… Yo no soy… (pronoun every clause; usted with 2nd-person verb)"
+  },
+  "negation_questions_no_auxiliary": {
+    "supports": [
+      "IP-07"
+    ],
+    "priority": "medium",
+    "error_example": "*¿Haces tú hablar inglés? (no before verb; no do-auxiliary)"
+  },
+  "question_words_inventory": {
+    "supports": [
+      "IP-07"
+    ],
+    "priority": "medium",
+    "error_example": "*¿Cuánto sillas? (qué/quién/dónde/cómo/cuándo/cuánto-agree/por qué; ¿ + accents)"
+  },
+  "profession_no_article": {
+    "supports": [
+      "IP-03"
+    ],
+    "priority": "low",
+    "error_example": "*Soy un estudiante (no article before unmodified profession)"
+  }
+}

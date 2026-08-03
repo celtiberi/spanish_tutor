@@ -1,0 +1,45 @@
+{
+  "level": "CEFR A1 grammar-core slice (absolute beginner). Latin American Spanish default; note European forms only where they differ. Default register with adult strangers: usted.",
+  "deferred_do_not_introduce": [
+    "alphabet/spelling",
+    "possessives as a system (mi/tu/su…)",
+    "family vocab set (EXCEPT hermano(s)/hermana(s) with tener)",
+    "days/dates/clock time",
+    "hay (recognition only)",
+    "ir",
+    "food/drink nouns beyond the closed set",
+    "colors",
+    "demonstratives",
+    "cuál",
+    "money/costar",
+    "numbers above 100",
+    "tener que + infinitive",
+    "tener hambre/sed/frío",
+    "neuter lo",
+    "al/del contractions",
+    "stem-changing verbs (querer, poder)",
+    "irregular yo-forms (hago…)"
+  ],
+  "out_of_scope_decline_briefly": [
+    "any past tense",
+    "future",
+    "conditional",
+    "compound tenses",
+    "subjunctive",
+    "imperative",
+    "irregular verbs other than ser/estar/tener",
+    "reflexives beyond me llamo / te llamas / se llama",
+    "object pronouns (lo, la, le…)",
+    "gustar-type constructions",
+    "voseo (acknowledge, then defer)",
+    "regional slang",
+    "present progressive (estar + -ando/-iendo)"
+  ],
+  "recognition_only": [
+    "hay",
+    "event-location ser (La fiesta es en mi casa)",
+    "meaning-changing pairs (es/está aburrido, es/está listo)",
+    "courtesy set beyond light practice (por favor, de nada, perdón, disculpe/disculpa)",
+    "incidental input words (days, places, mi/su, también)"
+  ]
+}

@@ -274,13 +274,17 @@ Two-phase (TEACHER_CONTEXT=`plan`, the default): PLAN turns carry the full rules
 
 ## 13. Domain data
 
-`domain/spanish_a1/` — the domain-model **data** for the level (no prose, no path law):
+`domain/spanish_a1/` — the domain-model **data** for the level (no prose, no path law). This directory IS the level slice; editing it changes what the teacher teaches and grades, zero code edits (S10, executed 2026-08-03):
 
 - `association_table.json` — target inventory (~175 keys; themes, clusters, false-friend slots)
+- `can_dos.json` — can-do inventory + theme→can-do routing + per-can-do phrase chunks + stretch-activity labels
+- `grammar_forms.json` — supporting forms (supports/priority/error_example) merged with their teaching paradigms
+- `domain_scope.json` — level + deferred / out-of-scope / recognition-only lists
+- `misconceptions.json` — error-pattern catalog (labels, form links, pack M-ID provenance, detect/resolve regexes as data)
 - `asset_sidecar.json` — teach-image metadata keyed by table keys
 - `migration_deprecations.json` — retired-key escape hatch for sidecar validation
 
-The prose course pack (`pack.md` + units), `corpus.py` (its retrieval seam), and the scenes JSON were **deleted 2026-08-03** (full-code audit S1/S2/S9): the character sheet carries the domain targets + scope, and the model plans from sheet + PEDAGOGY.md. Can-do / form inventories currently live in `tutor/can_dos.py` pending the S10 consolidation into `domain/` (see the audit doc).
+`tutor/domain_data.py` loads + validates the four S10 files at startup (all problems listed, loud failure — no silent default); `tutor/can_dos.py` / `tutor/character_sheet.py` bind their public names (`CAN_DOS`, `FORM_INVENTORY`, `MORPHOLOGY_BY_FORM`, `DOMAIN_SCOPE`, `ERROR_PATTERN_CATALOG`) from it and keep mechanics only. The prose course pack (`pack.md` + units), `corpus.py` (its retrieval seam), and the scenes JSON were **deleted 2026-08-03** (full-code audit S1/S2/S9): the character sheet carries the domain targets + scope, and the model plans from sheet + PEDAGOGY.md.
 
 ---
 
@@ -303,7 +307,7 @@ The prose course pack (`pack.md` + units), `corpus.py` (its retrieval seam), and
 | `tutor/tutor_response.py` | Tag parse / compose |
 | `tutor/teach_assets.py` / `image_gen.py` | Images |
 | `tutor/session_memory.py` / `session_state.py` | Per-chat memory + aggregate session state |
-| `tutor/can_dos.py` | Can-dos, morphology, focus-panel projection |
+| `tutor/can_dos.py` / `domain_data.py` | Can-do/form mechanics + focus-panel projection over the `domain/` data (validating loader) |
 | `tutor/exchange_render.py` / `turn_morph.py` | Realized-exchange projections for the rail (ENGINEERING §1.1b) |
 | `tutor/session_log.py` | Lazy dated session logs + model traffic log |
 | `tutor/ai_student.py` | AI learner simulator (evals) |
@@ -396,7 +400,7 @@ git config core.hooksPath .githooks   # once per clone
 3. **Plan staleness** — the model replans rarely; revive-condition for any forced replan is a live transcript showing plan/window drift (S9 ruling — the traffic log captures the evidence).  
 4. **Image gen latency** — first miss can take seconds; then cached.  
 5. **Serverless vs local** — sheet path and STT differ on Vercel.  
-6. **`tutor/can_dos.py` content-as-code** — pending S10 consolidation into `domain/`.
+6. **Content-as-code** — DONE 2026-08-03 (S10): the domain model lives in `domain/spanish_a1/` as data; `can_dos.py` / `character_sheet.py` keep mechanics only. Watch that new teaching content lands in the JSON, not back in Python literals.
 
 ---
 

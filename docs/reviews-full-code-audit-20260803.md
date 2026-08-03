@@ -712,3 +712,82 @@ test_character_sheet quarantine ×3 + grade-feed visibility ×3;
 test_grade_log GRADE_LOG_PATH env ×3; test_progress_ledger UNCHECKED ×3;
 test_providers_tools honest-tool_result; test_inventory_coverage sidecar
 test extended to pin no-cache-failure + [no-hide].
+
+## EXECUTION — S10: the domain model becomes DATA (chunk 7, FINAL, 2026-08-03)
+
+Suite 732 passed; `scripts/check_teacher_truncation.py` ok.  Goldens
+byte-stable (content-identical migration — nothing regenerated).  NOT
+COMMITTED (this chunk).
+
+**domain/spanish_a1/ is now the complete single source of truth** for the
+level slice.  Four new data files, GENERATED from the live literals (the
+byte-identical guarantee — no hand transcription), then verified equal:
+`can_dos.json` (sections: can_dos / can_do_themes / morphology_by_can_do /
+stretch_activities), `grammar_forms.json` (FORM_INVENTORY flat-merged with
+each form's MORPHOLOGY_BY_FORM entry — one record per form id, field names
+never collide; the loader splits them back), `domain_scope.json`
+(verbatim), `misconceptions.json` (ERROR_PATTERN_CATALOG with detect
+(pattern, note) tuples as 2-element arrays; entries without pack "source"
+keep no key).  Plus `domain/spanish_a1/README.md` (this dir IS the domain
+model; edits change teaching, no code edit).
+
+**tutor/domain_data.py** NEW — the one validating loader (association_table
+pattern): reads + validates all four files, raises ONE ValueError listing
+ALL problems (schema, cross-refs: misconception form_id→grammar_forms,
+supports/can_dos refs/form_hooks→can_dos, theme routed to at most one
+can-do, duplicate source, partial morphology, required stretch fallback),
+compiles every detect/resolve regex at load (re.I; a non-compiling pattern
+is malformed data).  `cached_default_domain()` module-level cache;
+consuming modules bind at import, so a missing/corrupt domain file is a
+STARTUP error (import fails loudly), never a silent default.  `load_domain
+(pack_dir)` is the session-capable entry exactly like
+load_association_table — recorded: NO production caller passes a custom
+pack_dir today (smokes/conftest pass DEFAULT_PACK_DIR), so no dead
+per-session domain plumbing was added (§4.6).
+
+**tutor/can_dos.py** literals DELETED (CAN_DOS, CAN_DO_THEMES,
+FORM_INVENTORY, MORPHOLOGY_BY_FORM, MORPHOLOGY_BY_CANDO,
+STRETCH_ACTIVITIES); public names re-bound from the loader (zero consumer
+churn); THEME_TO_CAN_DO stays the derived inversion.  KEPT IN CODE (calls
+recorded): LEGACY_SKILL_TO_CANDO — it maps this codebase's own pre-can-do
+key names (migration machinery, not domain content); mechanics
+(default_*_entry/blocks, morphology_blocks_*, build_focus_panel,
+migrate_skills) unchanged.
+
+**tutor/character_sheet.py** DOMAIN_SCOPE + ERROR_PATTERN_CATALOG literals
+(+ the _mined helper) DELETED → loader binds; detect_error_pattern_hits /
+detect_error_pattern_resolves now iterate the load-compiled patterns (same
+catalog order, same folded-then-raw case-insensitive match — behavior
+pinned identical).  KEPT IN CODE: ERROR_PATTERN_ALIASES +
+normalize_error_pattern_id fuzz rules (tool-id normalization machinery);
+_GRAMMAR_COVERAGE / DEFAULT_COVERAGE noted as adjacent content-in-code
+OUTSIDE the S10 ruling — flagged here, not moved.
+
+**logs/base_character_sheet.json** (stopgap preview) deleted, not
+regenerated — the datasets are the inspectable artifacts.
+
+**Migration discipline:** generator dumped the JSON FROM the literals and a
+reference snapshot; post-rewire verification diffed every loaded symbol
+against the snapshot (all equal, order preserved, tuples restored) before
+the literals were considered gone.  The equality check survives as
+tests/test_domain_data.py TestLoadedSymbolsEqualJson — loaded symbols ==
+JSON content per the documented mapping, forever.
+
+**tests/test_domain_data.py** NEW (18 tests): files parse; loaded symbols
+equal JSON (incl. detect-tuple + themes-tuple shape and catalog order);
+compiled-at-load census; cross-refs (form_id/can_do/form_hooks/source
+unique/CAN_DO_THEMES themes exist in the association table/scope lists
+disjoint+deduped); malformed-data-raises suite over a mutated pack copy
+(missing file, bad JSON names the file, bad regex, dangling form_id,
+duplicate source, double-routed theme, unknown supports, partial
+morphology, missing stretch fallback, multi-problem error lists all);
+mechanics-read-the-data pins.  Existing inventory/catalog tests
+(test_error_patterns, test_progress_ledger routing invariant,
+test_inventory_coverage) pass unchanged — they now validate data through
+the same names.
+
+**Docs:** system-overview §13 rewritten (7 data files + loader), §14
+can_dos.py row, §19 watch-out 6 → DONE with a don't-regress note; README
+directory map row.  ENGINEERING.md untouched (its CAN_DO_THEMES/
+FORM_INVENTORY citations name symbols that still exist and still route in
+code — accurate as written).

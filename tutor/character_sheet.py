@@ -19,6 +19,7 @@ from .can_dos import (
     default_skills_block,
     migrate_skills,
 )
+from .domain_data import cached_default_domain
 # Phase 2 (docs/reviews-architecture-refactor.md): the fold policies live in
 # textnorm. fold_prose (imported as the historical local name `fold`) is the
 # NFD prose-scan fold for error-pattern/affect regexes; fold_id is the
@@ -162,253 +163,19 @@ def now_iso() -> str:
     return datetime.datetime.now().astimezone().replace(microsecond=0).isoformat()
 
 
-# Closed catalog of high-value recurring constructions (not full Spanish grammar).
-# Detected from learner text; count≥2 → teach/recast priority.
-ERROR_PATTERN_CATALOG: dict[str, dict] = {
-    "estar_yo_estoy_vs_esta": {
-        "label": "yo + estoy (not está) for self",
-        "form_id": "present_estar_person",
-        "can_dos": ["IP-04", "IP-07"],
-        "teach_hint": (
-            "Learner confuses *estoy* (I am) with *está* (he/she/it/usted is). "
-            "Recast *Yo está…* → *Estoy…* / *Yo estoy…*; weave first-person location "
-            "and wellbeing with *estoy*."
-        ),
-        # (regex, example_note) — any match hits the pattern
-        "detect": [
-            (r"\byo\s+est[aá]\b", "yo está"),
-            (r"\best[aá]\s+bien\b(?!.*\bestoy\b)", "está bien for self?"),
-            (r"\best[aá]\s+en\s+(mi|el|la|rio|río)\b", "está en … for self location?"),
-        ],
-        # Success signal that this pattern is improving
-        "resolve": [
-            r"\byo\s+estoy\b",
-            r"\bestoy\s+(bien|en|aquí|aca|acá)\b",
-        ],
-    },
-    "me_llamo_es": {
-        "label": "me llamo (not me llama es)",
-        "form_id": None,
-        "can_dos": ["IP-03"],
-        "teach_hint": "Recast *Me llama es X* / *Me llamo es X* → *Me llamo X*.",
-        "detect": [
-            (r"\bme\s+llam[oa]\s+es\b", "me llamo/llama es"),
-            (r"\bme\s+llama\s+[A-Za-zÁÉÍÓÚáéíóúñÑ]{2,}\b", "me llama Name"),
-        ],
-        "resolve": [r"\bme\s+llamo\s+[A-Za-zÁÉÍÓÚáéíóúñÑ]{2,}\b"],
-    },
-    "tengo_not_tango": {
-        "label": "tengo (not tango)",
-        "form_id": "tener_age_possession",
-        "can_dos": ["IP-07"],
-        "teach_hint": "Recast *tango* → *tengo* (I have).",
-        "detect": [(r"\btango\b", "tango→tengo")],
-        "resolve": [r"\btengo\b"],
-    },
-    "soy_de_origin": {
-        "label": "soy de + place",
-        "form_id": "present_ser",
-        "can_dos": ["IP-07"],
-        "teach_hint": "Origin needs *de*: *Soy de Estados Unidos* (not *Soy Estados Unidos*).",
-        "detect": [
-            (r"\bsoy\s+(estados|ee\.?uu\.?|usa|guatemala|mexico|méxico)\b",
-             "soy Place without de"),
-        ],
-        "resolve": [r"\bsoy\s+de\b"],
-    },
-    "ser_estar_confuse": {
-        "label": "ser vs estar (feelings / location / temporary state)",
-        "form_id": "present_estar_person",
-        "can_dos": ["IP-04", "IP-07"],
-        "teach_hint": (
-            "Feelings and location use *estar* (*Estoy nerviosa*, *Estoy en casa*). "
-            "*Ser* is for identity/origin (*Soy estudiante*, *Soy de…*). "
-            "Recast *Soy nerviosa* → *Estoy nerviosa*; *Soy bien* → *Estoy bien*."
-        ),
-        "detect": [
-            (r"\bsoy\s+(nervios[oa]|bien|mal|cansad[oa]|feliz|triste|enferm[oa])\b",
-             "soy + feeling"),
-            (r"\bsoy\s+en\s+\w+", "soy en + place"),
-            (r"\bestoy\s+(estudiante|profesor|maestro|doctor)\b", "estoy + identity"),
-        ],
-        "resolve": [
-            r"\bestoy\s+(nervios[oa]|bien|mal|cansad[oa]|feliz|triste|enferm[oa]|en)\b",
-            r"\bsoy\s+(estudiante|de)\b",
-        ],
-    },
-    "gender_number_article": {
-        "label": "article/noun gender-number agreement",
-        "form_id": None,
-        "can_dos": ["IP-06", "IT-01"],
-        "teach_hint": (
-            "Match article and noun: *el edificio* / *los edificios* / *la casa* / "
-            "*las casas*. Recast *la edificios* → *los edificios*; *el casas* → *las casas*."
-        ),
-        "detect": [
-            # la + plural masculine-looking nouns (common A1 slip)
-            (r"\bla\s+(edificios|barcos|botes|libros|cafés|cafes|rios|ríos|amigos)\b",
-             "la + plural masc"),
-            (r"\bel\s+(casas|amigas|comidas|músicas|musicas)\b", "el + plural fem"),
-            (r"\blas\s+(edificios|barcos|botes|libros)\b", "las + masc plural"),
-            (r"\blos\s+(casas|amigas|comidas)\b", "los + fem plural"),
-            # me gusta + plural (should often be gustan) — light detect
-            (r"\bme\s+gusta\s+los?\s+\w+s\b", "me gusta + plural"),
-            (r"\bme\s+gusta\s+las?\s+\w+s\b", "me gusta + plural"),
-        ],
-        "resolve": [
-            r"\blos\s+edificios\b",
-            r"\blas\s+casas\b",
-            r"\bme\s+gustan\s+(los|las)\b",
-        ],
-    },
-    "weather_hace": {
-        "label": "weather: hace calor/frío (not está calor)",
-        "form_id": None,
-        "can_dos": ["IP-04", "IP-07"],
-        "teach_hint": (
-            "Weather heat/cold uses *hace*: *Hace calor*, *Hace frío*, *Hace buen tiempo*. "
-            "Not *está calor* / *es calor*. (*Está caliente* is for things, not the weather.)"
-        ),
-        "detect": [
-            (r"\best[aá]\s+(un\s+poco\s+(de\s+)?)?calor\b", "está calor"),
-            (r"\best[aá]\s+mucho\s+calor\b", "está mucho calor"),
-            (r"\best[aá]\s+(un\s+poco\s+(de\s+)?)?fr[ií]o\b", "está frío weather?"),
-            (r"\bes\s+(un\s+poco\s+(de\s+)?)?calor\b", "es calor"),
-            (r"\bes\s+fr[ií]o\s+hoy\b", "es frío hoy"),
-            (r"\bhay\s+calor\b", "hay calor"),
-        ],
-        "resolve": [
-            r"\bhace\s+(mucho\s+|un\s+poco\s+de\s+)?calor\b",
-            r"\bhace\s+(mucho\s+|un\s+poco\s+de\s+)?fr[ií]o\b",
-            r"\bhace\s+buen\s+tiempo\b",
-        ],
-    },
-}
-
-# Misconception vocabulary absorbed from the deleted course pack
-# (2026-08-03, USER: "the character sheet IS the course pack").  These are
-# DIAGNOSIS ids for the model — the teacher identifies the pattern and
-# records it via the sheet tool; detect/resolve stay EMPTY by design
-# (regex judgment of Spanish was retired 2026-08-03).  "source" = the
-# pack's original M-ID, for provenance.
-def _mined(label, form_id, hint, source, can_dos=()):
-    return {
-        "label": label, "form_id": form_id, "can_dos": list(can_dos),
-        "teach_hint": hint, "detect": [], "resolve": [], "source": source,
-    }
-
-
-ERROR_PATTERN_CATALOG.update({
-    "greeting_agreement_buenos_buenas": _mined(
-        "buenos/buenas agreement in greetings", "gender_articles",
-        "Fixed phrases agree: buenos días (m) but buenas tardes/noches (f). "
-        "Recast *buenos tardes → buenas tardes.", "M-1.1", ["IP-01"]),
-    "register_tu_with_usted_person": _mined(
-        "tú forms with an usted person", "register_tu_usted",
-        "estás/te llamas directed at a boss, elder, or stranger — switch to "
-        "está usted / se llama.", "M-1.2", ["IP-02"]),
-    "mucho_gusto_literal": _mined(
-        "mucho gusto read literally", None,
-        "It is a fixed pleased-to-meet-you formula, not about taste; reply "
-        "igualmente.", "M-1.4", ["IP-03"]),
-    "gender_exception_rule": _mined(
-        "-o/-a rule applied to exception nouns", "gender_exception_nouns",
-        "el día/mapa/problema, la mano/foto/moto — drill as a closed set; "
-        "learner produces el problema / los problemas + one original.",
-        "M-2.1"),
-    "greek_ma_feminine": _mined(
-        "-ma (Greek) nouns made feminine", "gender_exception_nouns",
-        "problema/idioma/programa/sistema are masculine: el problema.",
-        "M-2.2"),
-    "gender_from_meaning": _mined(
-        "gender justified by real-world meaning", "gender_articles",
-        "Gender belongs to the WORD, not the object (*la vestido from 'a "
-        "dress is feminine'). Teach: learn noun with its article.", "M-2.3"),
-    "plural_s_only": _mined(
-        "plural always just adds -s", "plural_formation",
-        "vowel+s, consonant+es, z→ces: *papels → papeles, *lápizs → "
-        "lápices.", "M-2.4"),
-    "el_vs_el_accent": _mined(
-        "el (the) vs él (he) accent", "gender_articles",
-        "Accent distinguishes words: él es… vs el libro. Contrast in "
-        "writing.", "M-2.5"),
-    "pronoun_every_sentence": _mined(
-        "subject pronoun in every clause", "subject_pronouns_prodrop",
-        "Spanish drops pronouns unless contrasting: Soy de México, not Yo "
-        "soy… Yo no soy… every line.", "M-3.1"),
-    "usted_second_person_verb": _mined(
-        "usted with 2nd-person verb", "subject_pronouns_prodrop",
-        "usted/ustedes take THIRD-person forms: usted es, not *usted eres.",
-        "M-3.2"),
-    "profession_article": _mined(
-        "article before unmodified profession", "profession_no_article",
-        "Soy estudiante, not *soy un estudiante (article returns with an "
-        "adjective: es un profesor excelente).", "M-3.3"),
-    "vosotros_in_latam": _mined(
-        "vosotros hunted in a Latin American context", "subject_pronouns_prodrop",
-        "ustedes is BOTH formal and informal plural in Latin America; "
-        "vosotros is Spain.", "M-3.4"),
-    "ser_for_location": _mined(
-        "ser for physical location", "ser_estar_contrast",
-        "Where → estar: Madrid está en España (the strongest evidence "
-        "against the permanent/temporary shortcut).", "M-4.1"),
-    "permanent_temporary_shortcut": _mined(
-        "ser=permanent / estar=temporary shortcut", "ser_estar_contrast",
-        "The shortcut misfires (está muerto; Madrid está…). Teach "
-        "what/how/where instead.", "M-4.2"),
-    "ser_estar_interchangeable": _mined(
-        "ser/estar treated as interchangeable", "ser_estar_contrast",
-        "Don't correct item-by-item: teach the decision rule, then have the "
-        "learner SAY the reason (what/how/where) before answering.",
-        "M-4.5"),
-    "accent_esta_vs_esta": _mined(
-        "está written without its accent", "present_estar_person",
-        "esta (this) vs está (is) — the accent is part of the verb's "
-        "spelling, never optional.", "M-4.4"),
-    "infinitive_unconjugated": _mined(
-        "bare infinitive as the verb", "present_regular_ar_er_ir",
-        "*Yo hablar español → hablo. The infinitive is the dictionary form, "
-        "not a usable present.", "M-5.1"),
-    "wrong_ending_family": _mined(
-        "one ending set for all families", "present_regular_ar_er_ir",
-        "-ar endings on -er/-ir verbs (*comas for comes): theme vowel "
-        "follows the family.", "M-5.2"),
-    "er_ir_overdistinguish": _mined(
-        "-er/-ir imagined to differ everywhere", "present_regular_ar_er_ir",
-        "They differ ONLY in nosotros/vosotros: comemos vs vivimos.",
-        "M-5.3"),
-    "estar_plus_infinitive": _mined(
-        "estar + infinitive for progressive", "present_regular_ar_er_ir",
-        "*Estoy comer → como. Simple present covers 'am eating' at A1 (no "
-        "progressive yet).", "M-5.4"),
-    "question_do_auxiliary": _mined(
-        "do-auxiliary inserted in questions", "negation_questions_no_auxiliary",
-        "*¿Haces tú hablar inglés? → ¿Hablas inglés? Intonation or "
-        "inversion, never an auxiliary.", "M-5.5"),
-    "age_with_ser": _mined(
-        "age with ser/estar", "tener_age_possession",
-        "*Soy veinte años → Tengo veinte años (always include años).",
-        "M-6.1"),
-    "tener_regularized": _mined(
-        "tener conjugated as regular -er", "tener_age_possession",
-        "*teno/*tenes → tengo, tienes (memorize the six as a unit).",
-        "M-6.2"),
-    "compound_number_split": _mined(
-        "compound numbers mis-split", "numbers_0_100",
-        "21–29 ONE word (veintidós); 31–99 three words (treinta y dos). "
-        "Probe: veintidós ↔ treinta y dos.", "M-6.3"),
-    "age_question_calque": _mined(
-        "how-old question calqued from English", "tener_age_possession",
-        "*¿Cómo viejo eres? → ¿Cuántos años tienes/tiene usted?", "M-6.4"),
-    "cuanto_agreement": _mined(
-        "cuánto not agreeing with its noun", "question_words_inventory",
-        "cuánto/a/os/as agrees in gender AND number: ¿Cuántas sillas hay?",
-        "M-6.5"),
-    "porque_vs_por_que": _mined(
-        "porque (because) vs ¿por qué? (why)", "question_words_inventory",
-        "Question form is two words with an accent: ¿Por qué…? Answer: "
-        "porque…", "M-6.6"),
-})
+# Closed catalog of high-value recurring constructions (not full Spanish
+# grammar).  Detected from learner text; count>=2 -> teach/recast priority.
+# S10 (full-code-audit 2026-08-03): the catalog is DATA —
+# domain/spanish_a1/misconceptions.json — loaded/validated at import by
+# tutor/domain_data.py.  detect entries are (regex, note) tuples; the mined
+# pack entries carry "source" (the deleted pack's M-ID) for provenance and
+# keep detect/resolve EMPTY by design (regex judgment of Spanish was retired
+# 2026-08-03 — the teacher diagnoses; regexes only serve bookkeeping).
+# Regexes are COMPILED at load; malformed data is a startup error (no-hide).
+_DOMAIN = cached_default_domain()
+ERROR_PATTERN_CATALOG: dict[str, dict] = _DOMAIN.misconceptions
+_DETECT_COMPILED = _DOMAIN.detect_compiled
+_RESOLVE_COMPILED = _DOMAIN.resolve_compiled
 
 ERROR_PATTERN_PRIORITY_THRESHOLD = 2  # count at/above → force teaching focus
 # Consecutive correct uses before we drop form focus from next_best
@@ -714,40 +481,8 @@ def compute_progress_score(sheet: dict | None) -> dict:
 # docs/reviews-sheet-vocabulary.md).  Rides in the sheet payload so the
 # model can plan from one artifact — without it, nothing stops
 # out-of-scope drift (past tense etc.).
-DOMAIN_SCOPE: dict = {
-    "level": (
-        "CEFR A1 grammar-core slice (absolute beginner). Latin American "
-        "Spanish default; note European forms only where they differ. "
-        "Default register with adult strangers: usted."
-    ),
-    "deferred_do_not_introduce": [
-        "alphabet/spelling", "possessives as a system (mi/tu/su…)",
-        "family vocab set (EXCEPT hermano(s)/hermana(s) with tener)",
-        "days/dates/clock time", "hay (recognition only)", "ir",
-        "food/drink nouns beyond the closed set", "colors",
-        "demonstratives", "cuál", "money/costar", "numbers above 100",
-        "tener que + infinitive", "tener hambre/sed/frío",
-        "neuter lo", "al/del contractions",
-        "stem-changing verbs (querer, poder)",
-        "irregular yo-forms (hago…)",
-    ],
-    "out_of_scope_decline_briefly": [
-        "any past tense", "future", "conditional", "compound tenses",
-        "subjunctive", "imperative",
-        "irregular verbs other than ser/estar/tener",
-        "reflexives beyond me llamo / te llamas / se llama",
-        "object pronouns (lo, la, le…)", "gustar-type constructions",
-        "voseo (acknowledge, then defer)", "regional slang",
-        "present progressive (estar + -ando/-iendo)",
-    ],
-    "recognition_only": [
-        "hay", "event-location ser (La fiesta es en mi casa)",
-        "meaning-changing pairs (es/está aburrido, es/está listo)",
-        "courtesy set beyond light practice (por favor, de nada, perdón, "
-        "disculpe/disculpa)",
-        "incidental input words (days, places, mi/su, también)",
-    ],
-}
+# S10: the scope is DATA — domain/spanish_a1/domain_scope.json.
+DOMAIN_SCOPE: dict = _DOMAIN.domain_scope
 
 
 def _untouched_targets(lex: dict, table: dict | None = None) -> dict:
@@ -1365,17 +1100,22 @@ def _note_evidence(grammar_entry: dict, note: str, *, limit: int = 5) -> None:
 
 
 def detect_error_pattern_hits(learner: str) -> list[tuple[str, str]]:
-    """Return [(pattern_id, example_snippet), ...] for known error constructions."""
+    """Return [(pattern_id, example_snippet), ...] for known error constructions.
+
+    S10: patterns are compiled at load (domain_data) — same catalog order,
+    same case-insensitive match over folded-then-raw text as the historical
+    per-call ``re.search``.
+    """
     text = learner or ""
     if not text.strip() or text.startswith("🎤") or text.startswith("⏳"):
         return []
     f = fold(text)
     hits: list[tuple[str, str]] = []
-    for pid, cat in ERROR_PATTERN_CATALOG.items():
-        for pat, note in cat.get("detect") or []:
-            if re.search(pat, f, re.I) or re.search(pat, text, re.I):
+    for pid, pats in _DETECT_COMPILED.items():
+        for rx, note in pats:
+            if rx.search(f) or rx.search(text):
                 # Prefer a short raw span as example
-                m = re.search(pat, text, re.I) or re.search(pat, f, re.I)
+                m = rx.search(text) or rx.search(f)
                 snippet = (m.group(0) if m else note)[:80]
                 hits.append((pid, snippet))
                 break
@@ -1387,9 +1127,9 @@ def detect_error_pattern_resolves(learner: str) -> list[str]:
     text = learner or ""
     f = fold(text)
     out: list[str] = []
-    for pid, cat in ERROR_PATTERN_CATALOG.items():
-        for pat in cat.get("resolve") or []:
-            if re.search(pat, f, re.I) or re.search(pat, text, re.I):
+    for pid, pats in _RESOLVE_COMPILED.items():
+        for rx in pats:
+            if rx.search(f) or rx.search(text):
                 out.append(pid)
                 break
     return out

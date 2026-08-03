@@ -49,8 +49,9 @@ with browser fallback. Audio notes: `docs/web-and-audio.md`.
 PEDAGOGY.md                  # teaching law (the model receives the rules on plan turns)
 ENGINEERING.md               # engineering / honesty / process law
 prompts/                     # exactly 3: conversational_tutor, tutor_persona, ai_student
-domain/spanish_a1/           # domain data: association_table.json (target inventory),
-                             #   asset_sidecar.json, migration_deprecations.json
+domain/spanish_a1/           # THE domain model as data: association_table.json,
+                             #   can_dos.json, grammar_forms.json, domain_scope.json,
+                             #   misconceptions.json, asset_sidecar.json (see its README)
 tutor/web_app.py             # FastAPI UI + session cookies
 tutor/conv_session.py        # session engine
 tutor/turn_pipeline.py       # staged turn: context → model → gate → record → log

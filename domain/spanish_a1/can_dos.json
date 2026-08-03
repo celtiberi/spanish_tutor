@@ -1,0 +1,334 @@
+{
+  "can_dos": {
+    "IP-01": {
+      "mode": "interpersonal",
+      "band": "NL-NM",
+      "statement": "I can greet a peer and respond to a simple greeting.",
+      "priority": "high",
+      "form_hooks": [
+        "present_estar_person"
+      ],
+      "coverage_topics": [
+        "greetings_time_of_day"
+      ],
+      "activity": "natural_open_chat"
+    },
+    "IP-02": {
+      "mode": "interpersonal",
+      "band": "NM",
+      "statement": "I can greet and ask how someone is in a formal situation.",
+      "priority": "medium",
+      "form_hooks": [
+        "register_tu_usted"
+      ],
+      "coverage_topics": [
+        "register_tu_usted",
+        "greetings_time_of_day"
+      ],
+      "activity": "brief_formal_exchange_in_role"
+    },
+    "IP-03": {
+      "mode": "interpersonal",
+      "band": "NL-NM",
+      "statement": "I can say my name and ask another person's name.",
+      "priority": "high",
+      "form_hooks": [],
+      "coverage_topics": [
+        "introduce_self"
+      ],
+      "activity": "introduce_in_conversation"
+    },
+    "IP-04": {
+      "mode": "interpersonal",
+      "band": "NL-NM",
+      "statement": "I can say how I am and ask how you are with practiced phrases.",
+      "priority": "high",
+      "form_hooks": [
+        "present_estar_person"
+      ],
+      "coverage_topics": [
+        "estar_basic"
+      ],
+      "activity": "small_talk_wellbeing"
+    },
+    "IP-05": {
+      "mode": "interpersonal",
+      "band": "NL",
+      "statement": "I can end a short exchange politely.",
+      "priority": "medium",
+      "form_hooks": [],
+      "coverage_topics": [
+        "leave_taking"
+      ],
+      "activity": "close_exchange_naturally"
+    },
+    "IP-06": {
+      "mode": "interpersonal",
+      "band": "NM",
+      "statement": "I can express simple preferences on familiar topics.",
+      "priority": "medium",
+      "form_hooks": [
+        "present_regular_ar_er_ir"
+      ],
+      "coverage_topics": [
+        "food",
+        "preferences"
+      ],
+      "activity": "share_preferences"
+    },
+    "IP-07": {
+      "mode": "interpersonal",
+      "band": "NM",
+      "statement": "I can ask and answer simple personal questions.",
+      "priority": "medium",
+      "form_hooks": [
+        "present_ser",
+        "tener_age_possession"
+      ],
+      "coverage_topics": [
+        "ser_basic",
+        "family"
+      ],
+      "activity": "personal_qa_chat"
+    },
+    "IP-08": {
+      "mode": "interpersonal",
+      "band": "NM",
+      "statement": "I can complete a short social/transactional role task (4–8 turns).",
+      "priority": "medium",
+      "form_hooks": [
+        "register_tu_usted"
+      ],
+      "coverage_topics": [
+        "roleplay_tasks"
+      ],
+      "activity": "mini_roleplay_task"
+    },
+    "IT-01": {
+      "mode": "interpretive",
+      "band": "NL-NM",
+      "statement": "I can get the gist of a short familiar-topic dialogue.",
+      "priority": "high",
+      "form_hooks": [],
+      "coverage_topics": [
+        "greetings_time_of_day"
+      ],
+      "activity": "input_plus_meaning_check"
+    },
+    "IT-02": {
+      "mode": "interpretive",
+      "band": "NL",
+      "statement": "I can recognize high-frequency words and phrases in context.",
+      "priority": "low",
+      "form_hooks": [],
+      "coverage_topics": [],
+      "activity": "notice_words_in_input"
+    },
+    "PR-01": {
+      "mode": "presentational",
+      "band": "NL-NM",
+      "statement": "I can produce a few practiced sentences about myself.",
+      "priority": "low",
+      "form_hooks": [
+        "present_ser"
+      ],
+      "coverage_topics": [
+        "introduce_self",
+        "ser_basic"
+      ],
+      "activity": "short_self_info"
+    }
+  },
+  "can_do_themes": {
+    "IP-01": [
+      "greetings"
+    ],
+    "IP-03": [
+      "introductions"
+    ],
+    "IP-04": [
+      "how_are_you",
+      "states"
+    ],
+    "IP-05": [
+      "farewells"
+    ],
+    "IP-06": [
+      "food",
+      "drinks",
+      "preferences"
+    ],
+    "IP-07": [
+      "family",
+      "people",
+      "places",
+      "question_words"
+    ]
+  },
+  "morphology_by_can_do": {
+    "IP-01": {
+      "label": "Greeting chunks",
+      "lemma": "saludos",
+      "pos": "phrase",
+      "paradigm": [
+        {
+          "form": "Hola",
+          "person": "—",
+          "gloss": "Hi"
+        },
+        {
+          "form": "Buenos días",
+          "person": "—",
+          "gloss": "Good morning"
+        },
+        {
+          "form": "Buenas tardes",
+          "person": "—",
+          "gloss": "Good afternoon"
+        },
+        {
+          "form": "Mucho gusto",
+          "person": "—",
+          "gloss": "Nice to meet you"
+        }
+      ],
+      "note": "Social glue — use and move on once easy.",
+      "watch": ""
+    },
+    "IP-03": {
+      "label": "Name exchange",
+      "lemma": "llamarse",
+      "pos": "verb phrase",
+      "paradigm": [
+        {
+          "form": "Me llamo…",
+          "person": "yo",
+          "gloss": "My name is…"
+        },
+        {
+          "form": "Soy…",
+          "person": "yo",
+          "gloss": "I am… (name)"
+        },
+        {
+          "form": "¿Cómo te llamas?",
+          "person": "tú",
+          "gloss": "What's your name?"
+        },
+        {
+          "form": "¿Cómo se llama?",
+          "person": "usted",
+          "gloss": "What's your name? (formal)"
+        }
+      ],
+      "note": "Me llamo X — no *me llamo es*.",
+      "watch": "me llamo ≠ me llama es"
+    },
+    "IP-05": {
+      "label": "Leave-taking",
+      "lemma": "despedidas",
+      "pos": "phrase",
+      "paradigm": [
+        {
+          "form": "Adiós",
+          "person": "—",
+          "gloss": "Goodbye"
+        },
+        {
+          "form": "Hasta luego",
+          "person": "—",
+          "gloss": "See you later"
+        },
+        {
+          "form": "Hasta mañana",
+          "person": "—",
+          "gloss": "See you tomorrow"
+        },
+        {
+          "form": "Muchas gracias",
+          "person": "—",
+          "gloss": "Thank you very much"
+        }
+      ],
+      "note": "Close the exchange politely.",
+      "watch": ""
+    },
+    "IP-06": {
+      "label": "Preferences (gustar / preferir)",
+      "lemma": "gustar / preferir",
+      "pos": "verb",
+      "paradigm": [
+        {
+          "form": "Me gusta…",
+          "person": "—",
+          "gloss": "I like… (one thing)"
+        },
+        {
+          "form": "Me gustan…",
+          "person": "—",
+          "gloss": "I like… (several)"
+        },
+        {
+          "form": "No me gusta…",
+          "person": "—",
+          "gloss": "I don't like…"
+        },
+        {
+          "form": "Prefiero…",
+          "person": "yo",
+          "gloss": "I prefer…"
+        }
+      ],
+      "note": "Gustar agrees with what is liked, not the person.",
+      "watch": "me gusta el té / me gustan ambos"
+    }
+  },
+  "stretch_activities": {
+    "open_chat_and_notice": {
+      "can_do": null,
+      "activity": "open_chat_notice_abilities",
+      "description": "Easy conversation; notice what they can already do (CLT)."
+    },
+    "IP-01": {
+      "activity": "natural_open_chat",
+      "description": "Greet and respond in real talk — not a greeting quiz."
+    },
+    "IP-02": {
+      "activity": "brief_formal_exchange_in_role",
+      "description": "One natural formal exchange in a role, then move on."
+    },
+    "IP-03": {
+      "activity": "introduce_in_conversation",
+      "description": "Names in the same conversation (Me llamo / ¿Cómo te llamas?)."
+    },
+    "IP-04": {
+      "activity": "small_talk_wellbeing",
+      "description": "How are you exchange with recast if needed."
+    },
+    "IP-05": {
+      "activity": "close_exchange_naturally",
+      "description": "Practice leave-taking as the chat winds down."
+    },
+    "IP-06": {
+      "activity": "share_preferences",
+      "description": "Talk likes/preferences on familiar topics."
+    },
+    "IP-07": {
+      "activity": "personal_qa_chat",
+      "description": "Simple personal Q&A (where from, etc.) in scope."
+    },
+    "IP-08": {
+      "activity": "mini_roleplay_task",
+      "description": "Short role task (meet, exchange, leave) — TBLT."
+    },
+    "IT-01": {
+      "activity": "input_plus_meaning_check",
+      "description": "Short dialogue + one meaning question (CI)."
+    },
+    "change_activity": {
+      "can_do": "IP-08",
+      "activity": "change_activity_roleplay_or_new_topic",
+      "description": "Learner bored — new task or domain, not more of the same."
+    }
+  }
+}

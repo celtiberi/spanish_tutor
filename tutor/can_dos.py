@@ -1,136 +1,33 @@
-"""ACTFL-oriented Novice can-dos for Spanish (product slice).
+"""Can-do / form mechanics over the domain-model DATA.
 
-Source of truth for statements: docs/spanish-can-dos-novice.md
-This module is the machine-readable index used by the character sheet.
+S10 (full-code-audit 2026-08-03): the content that used to live here as
+Python literals — the can-do inventory, theme routing, grammar-form
+inventory, paradigms, phrase chunks, stretch-activity labels — is DATA in
+``domain/spanish_a1/`` (``can_dos.json`` + ``grammar_forms.json``), loaded
+and validated by ``tutor/domain_data.py`` at import.  Editing those files
+changes what the teacher teaches and grades; this module keeps only
+mechanics (default entries, migration, focus-panel projection).
+
+The public names below are bound from the loader so consumers don't churn;
+the JSON is the source of truth.
 """
 
 from __future__ import annotations
 
+from .domain_data import cached_default_domain
+
+_DOMAIN = cached_default_domain()
+
 # Interpersonal + light interpretive/presentational for live chat.
-CAN_DOS: dict[str, dict] = {
-    "IP-01": {
-        "mode": "interpersonal",
-        "band": "NL-NM",
-        "statement": "I can greet a peer and respond to a simple greeting.",
-        "priority": "high",
-        "form_hooks": ["present_estar_person"],
-        "coverage_topics": ["greetings_time_of_day"],
-        "activity": "natural_open_chat",
-    },
-    "IP-02": {
-        "mode": "interpersonal",
-        "band": "NM",
-        "statement": "I can greet and ask how someone is in a formal situation.",
-        "priority": "medium",
-        "form_hooks": ["register_tu_usted"],
-        "coverage_topics": ["register_tu_usted", "greetings_time_of_day"],
-        "activity": "brief_formal_exchange_in_role",
-    },
-    "IP-03": {
-        "mode": "interpersonal",
-        "band": "NL-NM",
-        "statement": "I can say my name and ask another person's name.",
-        "priority": "high",
-        "form_hooks": [],
-        "coverage_topics": ["introduce_self"],
-        "activity": "introduce_in_conversation",
-    },
-    "IP-04": {
-        "mode": "interpersonal",
-        "band": "NL-NM",
-        "statement": "I can say how I am and ask how you are with practiced phrases.",
-        "priority": "high",
-        "form_hooks": ["present_estar_person"],
-        "coverage_topics": ["estar_basic"],
-        "activity": "small_talk_wellbeing",
-    },
-    "IP-05": {
-        "mode": "interpersonal",
-        "band": "NL",
-        "statement": "I can end a short exchange politely.",
-        "priority": "medium",
-        "form_hooks": [],
-        "coverage_topics": ["leave_taking"],
-        "activity": "close_exchange_naturally",
-    },
-    "IP-06": {
-        "mode": "interpersonal",
-        "band": "NM",
-        "statement": "I can express simple preferences on familiar topics.",
-        "priority": "medium",
-        "form_hooks": ["present_regular_ar_er_ir"],
-        "coverage_topics": ["food", "preferences"],
-        "activity": "share_preferences",
-    },
-    "IP-07": {
-        "mode": "interpersonal",
-        "band": "NM",
-        "statement": "I can ask and answer simple personal questions.",
-        "priority": "medium",
-        "form_hooks": ["present_ser", "tener_age_possession"],
-        "coverage_topics": ["ser_basic", "family"],
-        "activity": "personal_qa_chat",
-    },
-    "IP-08": {
-        "mode": "interpersonal",
-        "band": "NM",
-        "statement": "I can complete a short social/transactional role task (4–8 turns).",
-        "priority": "medium",
-        "form_hooks": ["register_tu_usted"],
-        "coverage_topics": ["roleplay_tasks"],
-        "activity": "mini_roleplay_task",
-    },
-    "IT-01": {
-        "mode": "interpretive",
-        "band": "NL-NM",
-        "statement": "I can get the gist of a short familiar-topic dialogue.",
-        "priority": "high",
-        "form_hooks": [],
-        "coverage_topics": ["greetings_time_of_day"],
-        "activity": "input_plus_meaning_check",
-    },
-    "IT-02": {
-        "mode": "interpretive",
-        "band": "NL",
-        "statement": "I can recognize high-frequency words and phrases in context.",
-        "priority": "low",
-        "form_hooks": [],
-        "coverage_topics": [],
-        "activity": "notice_words_in_input",
-    },
-    "PR-01": {
-        "mode": "presentational",
-        "band": "NL-NM",
-        "statement": "I can produce a few practiced sentences about myself.",
-        "priority": "low",
-        "form_hooks": ["present_ser"],
-        "coverage_topics": ["introduce_self", "ser_basic"],
-        "activity": "short_self_info",
-    },
-}
+CAN_DOS: dict[str, dict] = _DOMAIN.can_dos
 
 # Journey routing: association-table THEMES whose items visibly support a
 # can-do (r8 progress round, docs/pedagogy-research-r8-progress-measurement
 # .md, Grok Q3 ruling: themes are content domains, NOT functions — they may
 # route supporting items UNDER a can-do, never stand in for one). Unmapped
-# themes stay ordinary theme groups on the rail. Code-owned; a theme may
-# serve at most ONE can-do (validated in tests).
-CAN_DO_THEMES: dict[str, tuple[str, ...]] = {
-    "IP-01": ("greetings",),
-    "IP-03": ("introductions",),
-    # copulas REMOVED (build countersign item 2): ser is identity/
-    # description, not wellbeing — ser/estar route per-form via
-    # FORM_INVENTORY supports instead of a theme-level dump.
-    "IP-04": ("how_are_you", "states"),
-    # courtesy REMOVED: IP-05's statement is leave-taking only; mid-
-    # exchange politeness stays an ordinary theme until a politeness
-    # can-do exists. numbers REMOVED: age/quantity substrate reaches
-    # IP-07 via the numbers_0_20 / tener_age_possession form routes, not
-    # a 29-lemma theme dump.
-    "IP-05": ("farewells",),
-    "IP-06": ("food", "drinks", "preferences"),
-    "IP-07": ("family", "people", "places", "question_words"),
-}
+# themes stay ordinary theme groups on the rail. A theme may serve at most
+# ONE can-do (validated at load + in tests).
+CAN_DO_THEMES: dict[str, tuple[str, ...]] = _DOMAIN.can_do_themes
 
 THEME_TO_CAN_DO: dict[str, str] = {
     theme: cid for cid, themes in CAN_DO_THEMES.items() for theme in themes
@@ -138,83 +35,20 @@ THEME_TO_CAN_DO: dict[str, str] = {
 
 
 # Supporting forms (not can-dos) — focus-on-form only inside communication.
-FORM_INVENTORY: dict[str, dict] = {
-    "present_estar_person": {
-        "supports": ["IP-04"],
-        "priority": "high",
-        "error_example": "esta bien for 'I am fine'",
-    },
-    "register_tu_usted": {
-        "supports": ["IP-02", "IP-08"],
-        "priority": "medium",
-        "error_example": "tú forms with a boss/stranger in formal role",
-    },
-    "present_ser": {
-        "supports": ["IP-07", "PR-01"],
-        "priority": "medium",
-        "error_example": "wrong copula for identity",
-    },
-    "gender_articles": {
-        "supports": ["IP-01"],
-        "priority": "low",
-        "error_example": "buenos tardes",
-    },
-    "present_regular_ar_er_ir": {
-        "supports": ["IP-06", "IP-07", "IP-08"],
-        "priority": "medium",
-        "error_example": "wrong person ending",
-    },
-    "numbers_0_100": {
-        "supports": ["IP-07"],
-        "priority": "low",
-        "error_example": "veinte y dos / cuarenta cinco (wrong split; 21-29 one word, 31-99 tens y units)",
-    },
-    "tener_age_possession": {
-        "supports": ["IP-07"],
-        "priority": "medium",
-        "error_example": "age with ser (*soy veinte años)",
-    },
-    # Absorbed from the deleted course pack's frozen form inventories
-    # (2026-08-03, USER: "the character sheet IS the course pack") — the
-    # target forms the sheet must measure (domain-model grammar targets).
-    "ser_estar_contrast": {
-        "supports": ["IP-04", "IP-07"],
-        "priority": "high",
-        "error_example": "*Madrid es en España / *soy cansado (what/how/where rule)",
-    },
-    "plural_formation": {
-        "supports": ["IP-07"],
-        "priority": "low",
-        "error_example": "*papels, *lápizs (vowel+s, consonant+es, z→ces)",
-    },
-    "gender_exception_nouns": {
-        "supports": ["IP-07"],
-        "priority": "low",
-        "error_example": "*la problema, *el mano (el día/mapa/problema, la mano/foto/moto; -ma masc)",
-    },
-    "subject_pronouns_prodrop": {
-        "supports": ["IP-03", "IP-07"],
-        "priority": "medium",
-        "error_example": "Yo soy… Yo no soy… (pronoun every clause; usted with 2nd-person verb)",
-    },
-    "negation_questions_no_auxiliary": {
-        "supports": ["IP-07"],
-        "priority": "medium",
-        "error_example": "*¿Haces tú hablar inglés? (no before verb; no do-auxiliary)",
-    },
-    "question_words_inventory": {
-        "supports": ["IP-07"],
-        "priority": "medium",
-        "error_example": "*¿Cuánto sillas? (qué/quién/dónde/cómo/cuándo/cuánto-agree/por qué; ¿ + accents)",
-    },
-    "profession_no_article": {
-        "supports": ["IP-03"],
-        "priority": "low",
-        "error_example": "*Soy un estudiante (no article before unmodified profession)",
-    },
-}
+FORM_INVENTORY: dict[str, dict] = _DOMAIN.form_inventory
 
-# Legacy skill keys → can-do ids (migrate old sheets / patterns)
+# Teaching-facing morphology for the web focus rail (not full grammar units).
+MORPHOLOGY_BY_FORM: dict[str, dict] = _DOMAIN.morphology_by_form
+
+# Phrase chunks by can-do (when forms alone aren't enough)
+MORPHOLOGY_BY_CANDO: dict[str, dict] = _DOMAIN.morphology_by_cando
+
+# Human activity labels for next_best.stretch (CLT/TBLT shaped)
+STRETCH_ACTIVITIES: dict[str, dict] = _DOMAIN.stretch_activities
+
+# Legacy skill keys → can-do ids (migrate old sheets / patterns).  Stays in
+# CODE: it maps this codebase's own pre-can-do key names, i.e. migration
+# machinery, not domain content (S10 call, recorded in the audit stamp).
 LEGACY_SKILL_TO_CANDO = {
     "greet_informal": "IP-01",
     "greet_formal": "IP-02",
@@ -224,56 +58,6 @@ LEGACY_SKILL_TO_CANDO = {
     "simple_preferences": "IP-06",
     "ask_name": "IP-03",
     "can_follow_short_dialogue": "IT-01",
-}
-
-# Human activity labels for next_best.stretch (CLT/TBLT shaped)
-STRETCH_ACTIVITIES = {
-    "open_chat_and_notice": {
-        "can_do": None,
-        "activity": "open_chat_notice_abilities",
-        "description": "Easy conversation; notice what they can already do (CLT).",
-    },
-    "IP-01": {
-        "activity": "natural_open_chat",
-        "description": "Greet and respond in real talk — not a greeting quiz.",
-    },
-    "IP-02": {
-        "activity": "brief_formal_exchange_in_role",
-        "description": "One natural formal exchange in a role, then move on.",
-    },
-    "IP-03": {
-        "activity": "introduce_in_conversation",
-        "description": "Names in the same conversation (Me llamo / ¿Cómo te llamas?).",
-    },
-    "IP-04": {
-        "activity": "small_talk_wellbeing",
-        "description": "How are you exchange with recast if needed.",
-    },
-    "IP-05": {
-        "activity": "close_exchange_naturally",
-        "description": "Practice leave-taking as the chat winds down.",
-    },
-    "IP-06": {
-        "activity": "share_preferences",
-        "description": "Talk likes/preferences on familiar topics.",
-    },
-    "IP-07": {
-        "activity": "personal_qa_chat",
-        "description": "Simple personal Q&A (where from, etc.) in scope.",
-    },
-    "IP-08": {
-        "activity": "mini_roleplay_task",
-        "description": "Short role task (meet, exchange, leave) — TBLT.",
-    },
-    "IT-01": {
-        "activity": "input_plus_meaning_check",
-        "description": "Short dialogue + one meaning question (CI).",
-    },
-    "change_activity": {
-        "can_do": "IP-08",
-        "activity": "change_activity_roleplay_or_new_topic",
-        "description": "Learner bored — new task or domain, not more of the same.",
-    },
 }
 
 
@@ -307,161 +91,6 @@ def default_skills_block() -> dict:
 
 def default_grammar_block() -> dict:
     return {fid: default_form_entry(fid) for fid in FORM_INVENTORY}
-
-
-# Teaching-facing morphology for the web focus rail (not full grammar units).
-MORPHOLOGY_BY_FORM: dict[str, dict] = {
-    "present_estar_person": {
-        "label": "estar — person (states / location)",
-        "lemma": "estar",
-        "pos": "verb",
-        "paradigm": [
-            {"form": "estoy", "person": "yo", "gloss": "I am"},
-            {"form": "estás", "person": "tú", "gloss": "you are"},
-            {"form": "está", "person": "usted/él/ella", "gloss": "you(formal)/he/she is"},
-            {"form": "estamos", "person": "nosotros", "gloss": "we are"},
-            {"form": "están", "person": "ustedes/ellos", "gloss": "you all/they are"},
-        ],
-        "note": "Feelings & place. Not identity (use ser). Accents are part of the spelling (está, estás).",
-        "watch": "estoy ≠ esta / está",
-    },
-    "present_ser": {
-        "label": "ser — identity / origin",
-        "lemma": "ser",
-        "pos": "verb",
-        "paradigm": [
-            {"form": "soy", "person": "yo", "gloss": "I am"},
-            {"form": "eres", "person": "tú", "gloss": "you are"},
-            {"form": "es", "person": "usted/él/ella", "gloss": "you(formal)/he/she is"},
-            {"form": "somos", "person": "nosotros", "gloss": "we are"},
-            {"form": "son", "person": "ustedes/ellos", "gloss": "you all/they are"},
-        ],
-        "note": "Who/what you are; origin with de. No article before unmodified profession (Soy profesor).",
-        "watch": "Soy de… (not soy Estados Unidos)",
-    },
-    "register_tu_usted": {
-        "label": "tú vs usted",
-        "lemma": "address",
-        "pos": "register",
-        "paradigm": [
-            {"form": "¿Cómo estás?", "person": "tú", "gloss": "How are you? (informal)"},
-            {"form": "¿Cómo está usted?", "person": "usted", "gloss": "How are you? (formal)"},
-            {"form": "¿Cómo te llamas?", "person": "tú", "gloss": "What's your name?"},
-            {"form": "¿Cómo se llama?", "person": "usted", "gloss": "What's your name? (formal)"},
-        ],
-        "note": "Match form to the person (dockmaster, stranger → usted).",
-        "watch": "Don't mix tú endings with usted",
-    },
-    "present_regular_ar_er_ir": {
-        "label": "present regular endings (hablar / comer / vivir)",
-        "lemma": "—ar / —er / —ir",
-        "pos": "verb",
-        "paradigm": [
-            {"form": "hablo", "person": "yo", "gloss": "I speak (all families: yo → -o)"},
-            {"form": "comes", "person": "tú", "gloss": "you eat"},
-            {"form": "vive", "person": "usted/él/ella", "gloss": "you(formal)/he/she lives"},
-            {"form": "hablamos / comemos / vivimos", "person": "nosotros", "gloss": "we speak/eat/live"},
-        ],
-        "note": "-er and -ir differ ONLY in nosotros/vosotros (comemos vs vivimos).",
-        "watch": "*yo hablar (no bare infinitive); *¿haces tú hablar…? (no do-auxiliary)",
-    },
-    "tener_age_possession": {
-        "label": "tener — have / age",
-        "lemma": "tener",
-        "pos": "verb",
-        "paradigm": [
-            {"form": "tengo", "person": "yo", "gloss": "I have"},
-            {"form": "tienes", "person": "tú", "gloss": "you have"},
-            {"form": "tiene", "person": "usted/él", "gloss": "you/he has"},
-            {"form": "tenemos", "person": "nosotros", "gloss": "we have"},
-        ],
-        "note": "Possession, age (tengo X años), time expressions.",
-        "watch": "tengo not tango; age with tener not ser",
-    },
-    "gender_articles": {
-        "label": "gender + articles (light)",
-        "lemma": "el / la",
-        "pos": "article",
-        "paradigm": [
-            {"form": "el café", "person": "m", "gloss": "the coffee"},
-            {"form": "la pizza", "person": "f", "gloss": "the pizza"},
-            {"form": "los tacos", "person": "m pl", "gloss": "the tacos"},
-            {"form": "rica / rico", "person": "adj", "gloss": "agrees with noun"},
-        ],
-        "note": "Adjective often matches the noun (la pizza es rica).",
-        "watch": "la pizza es rica (not rico)",
-    },
-    "numbers_0_100": {
-        "label": "numbers 0–100",
-        "lemma": "números",
-        "pos": "numeral",
-        "paradigm": [
-            {"form": "uno / una", "person": "1", "gloss": "one (un before masc noun)"},
-            {"form": "dieciséis … diecinueve", "person": "16–19", "gloss": "one word, accented"},
-            {"form": "veintidós … veintinueve", "person": "21–29", "gloss": "ONE word (veintidós)"},
-            {"form": "treinta y dos … noventa y nueve", "person": "31–99", "gloss": "THREE words (tens y units)"},
-            {"form": "cien", "person": "100", "gloss": "exactly 100"},
-        ],
-        "note": "Age, counts, prices. 21–29 one word; 31–99 tens y units.",
-        "watch": "*veinte y dos, *cuarentaycinco",
-    },
-}
-
-# Phrase chunks by can-do (when forms alone aren't enough)
-MORPHOLOGY_BY_CANDO: dict[str, dict] = {
-    "IP-01": {
-        "label": "Greeting chunks",
-        "lemma": "saludos",
-        "pos": "phrase",
-        "paradigm": [
-            {"form": "Hola", "person": "—", "gloss": "Hi"},
-            {"form": "Buenos días", "person": "—", "gloss": "Good morning"},
-            {"form": "Buenas tardes", "person": "—", "gloss": "Good afternoon"},
-            {"form": "Mucho gusto", "person": "—", "gloss": "Nice to meet you"},
-        ],
-        "note": "Social glue — use and move on once easy.",
-        "watch": "",
-    },
-    "IP-03": {
-        "label": "Name exchange",
-        "lemma": "llamarse",
-        "pos": "verb phrase",
-        "paradigm": [
-            {"form": "Me llamo…", "person": "yo", "gloss": "My name is…"},
-            {"form": "Soy…", "person": "yo", "gloss": "I am… (name)"},
-            {"form": "¿Cómo te llamas?", "person": "tú", "gloss": "What's your name?"},
-            {"form": "¿Cómo se llama?", "person": "usted", "gloss": "What's your name? (formal)"},
-        ],
-        "note": "Me llamo X — no *me llamo es*.",
-        "watch": "me llamo ≠ me llama es",
-    },
-    "IP-05": {
-        "label": "Leave-taking",
-        "lemma": "despedidas",
-        "pos": "phrase",
-        "paradigm": [
-            {"form": "Adiós", "person": "—", "gloss": "Goodbye"},
-            {"form": "Hasta luego", "person": "—", "gloss": "See you later"},
-            {"form": "Hasta mañana", "person": "—", "gloss": "See you tomorrow"},
-            {"form": "Muchas gracias", "person": "—", "gloss": "Thank you very much"},
-        ],
-        "note": "Close the exchange politely.",
-        "watch": "",
-    },
-    "IP-06": {
-        "label": "Preferences (gustar / preferir)",
-        "lemma": "gustar / preferir",
-        "pos": "verb",
-        "paradigm": [
-            {"form": "Me gusta…", "person": "—", "gloss": "I like… (one thing)"},
-            {"form": "Me gustan…", "person": "—", "gloss": "I like… (several)"},
-            {"form": "No me gusta…", "person": "—", "gloss": "I don't like…"},
-            {"form": "Prefiero…", "person": "yo", "gloss": "I prefer…"},
-        ],
-        "note": "Gustar agrees with what is liked, not the person.",
-        "watch": "me gusta el té / me gustan ambos",
-    },
-}
 
 
 def morphology_blocks_for_can_do(can_do_id: str | None) -> list[dict]:
