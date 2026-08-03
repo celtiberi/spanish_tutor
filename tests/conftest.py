@@ -346,8 +346,6 @@ def tutor_session_factory(monkeypatch, tmp_path, request):
     monkeypatch.setattr(config, "TEACHER_MODE", "planned")
     monkeypatch.setattr(config, "SIGNAL_CLASSIFIER_MODEL", "off")
     monkeypatch.setattr(config, "SIGNAL_CLASSIFIER_BLOCKING", False)
-    monkeypatch.setattr(config, "FOCUS_BLOCKING", False)
-    monkeypatch.setattr(config, "FOCUS_ASYNC", False)
     monkeypatch.setattr(config, "SHEET_TOOLS", False)
     # Gate rewrite path deleted 2026-08-01; constant is always False.
     monkeypatch.setattr(config, "GATE_REPAIR", False)
@@ -392,7 +390,6 @@ def tutor_session_factory(monkeypatch, tmp_path, request):
             use_tools=False,
             label=label,
             log=False,  # no logs/sessions writes
-            focus_model="off",
         )
         ctx = SimpleNamespace(
             session=session,

@@ -24,9 +24,6 @@ from pathlib import Path
 # --- env clamps BEFORE config-dependent imports (re-patched after import too) ---
 os.environ.setdefault("TEACHER_MODE", "planned")
 os.environ.setdefault("TEACH_IMAGE_GENERATE", "0")
-os.environ.setdefault("FOCUS_MODEL", "off")
-os.environ.setdefault("FOCUS_ASYNC", "false")
-os.environ.setdefault("FOCUS_BLOCKING", "false")
 os.environ.setdefault("SHEET_TOOLS", "false")
 # Full teacher context while testing (project gate)
 os.environ.setdefault("TEACHER_CONTEXT_TRUNCATE", "false")
@@ -46,9 +43,6 @@ def _patch_runtime_for_smoke() -> None:
     """Module-level flags may already be bound; force smoke-safe values."""
     config.load_env()
     config.TEACHER_MODE = "planned"
-    config.FOCUS_ASYNC = False
-    config.FOCUS_BLOCKING = False
-    config.FOCUS_MODEL = "off"
     try:
         import tutor.teach_assets as teach_assets
 
@@ -66,25 +60,6 @@ def _apply_mode_state(session: ConversationalSession, seed: dict | None) -> None
             ms.form_focus_cooldown = dict(v)
         elif hasattr(ms, k):
             setattr(ms, k, v)
-
-
-def _apply_phase_state(session: ConversationalSession, seed: dict | None) -> None:
-    """Advance the session PhaseState to a later plan phase (e.g. task).
-
-    Mechanical seeding only — the plan itself stays code-built from the seed
-    sheet; we just move the clock so a trajectory can exercise a later phase
-    without burning live turns."""
-    if not seed:
-        return
-    ps = session.phase_state
-    try:
-        ps.index = int(seed.get("index", ps.index))
-    except (TypeError, ValueError):
-        pass
-    try:
-        ps.turns_in_phase = int(seed.get("turns_in_phase", ps.turns_in_phase))
-    except (TypeError, ValueError):
-        pass
 
 
 def _skill_conf(sheet: dict, cid: str) -> float:
@@ -127,12 +102,10 @@ def run_conv_trajectory(
         use_tools=False,
         label=f"conv-smoke-{traj['id']}",
         log=False,  # do not write logs/sessions/*
-        focus_model="off",
     )
     # Re-assert planned path regardless of ambient env
     session.teacher_mode = "planned"
     _apply_mode_state(session, traj.get("seed_mode_state"))
-    _apply_phase_state(session, traj.get("seed_phase_state"))
 
     turns_out: list[dict] = []
     conf_series: dict[str, list[float]] = {cid: [] for cid in SNAPSHOT_SKILLS}

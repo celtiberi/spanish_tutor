@@ -5,20 +5,19 @@ Batch 1 pinned the aggregate WITHOUT behavior change; batch 2 landed the
 DECLARED deltas — this file's diff is the review artifact. Pinned now:
 
 1. ``SessionState.fresh`` builds every store/attribute exactly the way the
-   pre-aggregate ``ConversationalSession.__init__`` block did (including
-   phase-plan equivalence with ``build_session_phase_state``).
+   pre-aggregate ``ConversationalSession.__init__`` block did.
 2. Unified ``reset(kind)``: "new_chat" / "sheet_reset" reset EVERY
    session-scoped field (``UNIFIED_RESET``); "open_session" is a deprecated
    alias for "new_chat"; "full" replays construction; unknown kinds raise.
    Costs ruling: the per-chat tracker resets (the on-disk cost ledger is
-   append-only forever). The phase plan is rebuilt from the CURRENT sheet.
+   append-only forever).
 3. The delegate properties keep the historical attribute surface working
    (including the ``__new__`` partial-session escape used by
    tests/test_debug_requests.py).
 4. RESET_COVERAGE characterization: each production reset path resets
    exactly the fields the table documents — the new-chat LEAK CLOSURE
-   (intro budget / asked_topics / cooldowns / phase clock / task state must
-   NOT survive a new chat) is asserted through the real web endpoint.
+   (intro budget / asked_topics / cooldowns must NOT survive a new chat)
+   is asserted through the real web endpoint.
 5. Progress-ledger epoch (declared delta 3): ``reset_sheet`` appends a
    learner-epoch mark; the same milestone key re-mints for the fresh
    learner; display keeps both sides with the boundary row.
@@ -43,18 +42,12 @@ from tutor.session_state import (
 )
 
 SENTINEL_TOPIC = "size:__sentinel__"
-SENTINEL_TASK = object()
 
 
 def _fresh_state(**over) -> SessionState:
-    kw = {
-        "source_label": "unittest",
-        "pack_topics": ["Comida", "Viaje"],
-        "due_count": 0,
-        "blank": True,
-    }
+    kw = {"source_label": "unittest"}
     kw.update(over)
-    return SessionState.fresh(default_sheet(), **kw)
+    return SessionState.fresh(**kw)
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +61,6 @@ class TestFresh:
         assert st.history == []
         assert st.messages_for_ui == []
         assert st.focus_panel is None
-        assert st.focus_key is None
         assert st.focus_meta == {"source": "static"}
         assert st.focus_version == 0
         assert st.focus_inflight is False
@@ -78,33 +70,20 @@ class TestFresh:
         assert st.pedagogy_memory.turns == 0
         assert st.pedagogy_memory.sheet_seeded is False
         assert st.mode_state.learner_turn_index == 0
-        assert st.task_state is None
         assert st.last_mode_decision is None
         assert st.debug_requests.maxlen == DEBUG_RING_SIZE
         assert len(st.debug_requests) == 0
         assert st.costs.source == "unittest"
         assert st.progress_session_id == ""
 
-    def test_phase_plan_identical_to_conv_session_builder(self):
-        """fresh() must build the SAME plan build_session_phase_state built
-        pre-aggregate (same sheet, same pack)."""
-        from tutor import config
-        from tutor.conv_session import build_session_phase_state
-        from tutor.corpus import pack_topic_titles
-        from tutor.pedagogy_contract import is_blank_learner
-        from tutor.retrieval_scheduler import due_items
-
-        sheet = default_sheet()
-        pack_dir = config.DEFAULT_PACK_DIR
-        st = SessionState.fresh(
-            sheet,
-            source_label="unittest",
-            pack_topics=pack_topic_titles(pack_dir),
-            due_count=len(due_items(sheet)),
-            blank=is_blank_learner(sheet),
-        )
-        expected = build_session_phase_state(sheet, pack_dir)
-        assert st.phase_state.snapshot() == expected.snapshot()
+    def test_no_phase_or_task_state(self):
+        # Session-phase clock + task runtime DELETED 2026-08-03
+        # (full-code-audit S9) — the aggregate carries neither.
+        st = _fresh_state()
+        assert not hasattr(st, "phase_state")
+        assert not hasattr(st, "task_state")
+        assert "phase_state" not in SESSION_STATE_FIELDS
+        assert "task_state" not in SESSION_STATE_FIELDS
 
 
 # ---------------------------------------------------------------------------
@@ -118,11 +97,8 @@ def _mutate_everything(st: SessionState) -> dict[str, int]:
     st.pedagogy_memory.asked_topics.add(SENTINEL_TOPIC)
     st.pedagogy_memory.turns = 99
     st.mode_state.english_only_streak = 77
-    st.phase_state.frozen_turns = 55
-    st.task_state = SENTINEL_TASK
     st.costs._by_category["__sentinel__"] = {"usd": 0.0}
     st.focus_panel = {"__sentinel__": True}
-    st.focus_key = "__sentinel__"
     st.focus_meta = {"source": "__sentinel__"}
     st.focus_version = 44
     st.focus_inflight = True
@@ -146,24 +122,22 @@ class TestResetFull:
         assert st.history == []
         assert st.messages_for_ui == []
         assert st.focus_panel is None
-        assert st.focus_key is None
         assert st.focus_meta == {"source": "static"}
         assert st.focus_version == 0
         assert st.focus_inflight is False
         assert st.image_warm_inflight == set()
         assert st.last_plan is None
         assert st.last_mode_decision is None
-        assert st.task_state is None
         assert st.progress_session_id == ""
         # Stores are RECONSTRUCTED (construction replay), not scrubbed
-        for f in ("pedagogy_memory", "mode_state", "phase_state",
+        for f in ("pedagogy_memory", "mode_state",
                   "debug_requests", "costs", "focus_lock",
                   "image_warm_lock"):
             assert id(getattr(st, f)) != pre_ids[f], f
         assert SENTINEL_TOPIC not in st.pedagogy_memory.asked_topics
         assert st.pedagogy_memory.turns == 0
         assert st.mode_state.english_only_streak == 0
-        assert st.phase_state.snapshot() == twin.phase_state.snapshot()
+        assert twin.mode_state.english_only_streak == 0
         assert len(st.debug_requests) == 0
         assert st.debug_requests.maxlen == DEBUG_RING_SIZE
         assert st.costs.source == "resetter"
@@ -221,63 +195,20 @@ class TestUnifiedResetKinds:
         assert st.image_warm_inflight == set()
 
     def test_leak_class_closed_at_unit_level(self):
-        """The census leak fields: intro budget, asked_topics, cooldowns,
-        phase clock, task state — all fresh after new_chat."""
+        """The census leak fields: intro budget, asked_topics, cooldowns —
+        all fresh after new_chat."""
         st = _fresh_state()
         st.pedagogy_memory.introduced_this_session.extend(["hola", "pan"])
         st.pedagogy_memory.asked_topics.add("size:ciudad")
         st.mode_state.form_focus_cooldown["weather_hace"] = 3
         st.mode_state.content_uptake_last_turn = 4
         st.mode_state.learner_turn_index = 6
-        st.phase_state.index = 2
-        st.phase_state.turns_in_phase = 1
-        from tutor.task_runtime import TaskState
-
-        st.task_state = TaskState(scene_id="boat_likes")
         st.reset("new_chat")
         assert st.pedagogy_memory.intro_budget_remaining() == 2
         assert st.pedagogy_memory.asked_topics == set()
         assert st.mode_state.form_focus_cooldown == {}
         assert st.mode_state.content_uptake_last_turn == -999
         assert st.mode_state.learner_turn_index == 0
-        assert st.phase_state.index == 0
-        assert st.phase_state.turns_in_phase == 0
-        assert st.task_state is None
-
-    def test_phase_plan_rebuilt_from_current_sheet(self):
-        """A new chat on a LEARNED sheet must rebuild the phase plan from
-        that sheet (due count / blank flag recomputed), not replay the
-        construction-time inputs."""
-        from tutor.pedagogy_contract import is_blank_learner
-        from tutor.retrieval_scheduler import due_items
-
-        st = _fresh_state()  # blank construction-time sheet
-        blank_snapshot = st.phase_state.snapshot()
-
-        learned = default_sheet()
-        learned["lexicon"]["pan"] = {
-            "status": "fragile", "confidence": 0.4, "first_seen": "2026-07-01",
-            "introduced_at": "2026-07-01", "next_due": "2026-07-02",
-            "interval_days": 1, "successive_successes": 0,
-        }
-        learned["skills"]["IP-01"] = {"status": "known", "confidence": 0.9}
-        assert not is_blank_learner(learned)
-        assert len(due_items(learned)) == 1
-
-        st.reset("new_chat", sheet=learned)
-        twin = SessionState.fresh(
-            learned,
-            source_label="unittest",
-            pack_topics=["Comida", "Viaje"],
-            due_count=len(due_items(learned)),
-            blank=is_blank_learner(learned),
-        )
-        assert st.phase_state.snapshot() == twin.phase_state.snapshot()
-        assert st.phase_state.snapshot() != blank_snapshot
-        # The remembered args updated: a later plain reset replays the
-        # learned sheet, not the stale construction-time one.
-        st.reset("new_chat")
-        assert st.phase_state.snapshot() == twin.phase_state.snapshot()
 
 
 # ---------------------------------------------------------------------------
@@ -286,19 +217,11 @@ class TestUnifiedResetKinds:
 
 
 def _restore_kwargs() -> dict:
-    return {
-        "sheet": default_sheet(),
-        "source_label": "unittest",
-        "pack_topics": ["Comida", "Viaje"],
-        "due_count": 0,
-        "blank": True,
-    }
+    return {"source_label": "unittest"}
 
 
 class TestSnapshotRoundTrip:
     def _worked_state(self) -> SessionState:
-        from tutor.task_runtime import TaskState
-
         st = _fresh_state()
         st.history = [
             {"role": "user", "content": "(session open)"},
@@ -308,7 +231,6 @@ class TestSnapshotRoundTrip:
             {"role": "tutor", "content": "¡Hola!", "input_mode": "text"},
         ]
         st.focus_panel = {"focus": {"title": "Greetings"}}
-        st.focus_key = "abc123"
         st.focus_meta = {"source": "ai"}
         st.focus_version = 7
         st.last_plan = {"phase": "new_input"}
@@ -332,14 +254,6 @@ class TestSnapshotRoundTrip:
         s.set_cooldown("weather_hace", 3)
         s.note_content_uptake()
         s.english_only_streak = 1
-        s.open_scene_ids = ["boat_meet_captain"]
-        # phase progressed + a bound task
-        st.phase_state.tick(consumed=True)
-        st.phase_state.tick(consumed=False)
-        st.task_state = TaskState(
-            scene_id="boat_likes", slots_filled={"item": "pan"},
-            turns_on_task=2,
-        )
         return st
 
     def test_round_trip_snapshot_equality(self):
@@ -367,12 +281,6 @@ class TestSnapshotRoundTrip:
         assert ms.learner_turn_index == 2
         assert ms.last_error_hit_turn == {"weather_hace": 2}
         assert ms.content_uptake_last_turn == 2
-        # phase restored from the snapshot, not rebuilt
-        assert restored.phase_state.index == st.phase_state.index
-        assert restored.phase_state.frozen_turns == 1
-        assert restored.task_state is not None
-        assert restored.task_state.scene_id == "boat_likes"
-        assert restored.task_state.slots_filled == {"item": "pan"}
 
     def test_excluded_runtime_fields_rebuilt_fresh(self):
         """Locks, inflight flags, debug ring and costs are excluded BY
@@ -404,7 +312,6 @@ class TestDelegates:
         session = tutor_session.session
         assert session.pedagogy_memory is session.state.pedagogy_memory
         assert session.mode_state is session.state.mode_state
-        assert session.phase_state is session.state.phase_state
         assert session.costs is session.state.costs
         assert session.debug_requests is session.state.debug_requests
         assert session._focus_lock is session.state.focus_lock
@@ -453,11 +360,8 @@ def _was_reset(field: str, st: SessionState, pre_ids: dict[str, int]) -> bool:
             SENTINEL_TOPIC not in st.pedagogy_memory.asked_topics
         ),
         "mode_state": lambda: st.mode_state.english_only_streak != 77,
-        "phase_state": lambda: id(st.phase_state) != pre_ids["phase_state"],
-        "task_state": lambda: st.task_state is not SENTINEL_TASK,
         "costs": lambda: "__sentinel__" not in st.costs._by_category,
         "focus_panel": lambda: st.focus_panel != {"__sentinel__": True},
-        "focus_key": lambda: st.focus_key != "__sentinel__",
         "focus_meta": lambda: (
             (st.focus_meta or {}).get("source") != "__sentinel__"
         ),
@@ -533,13 +437,16 @@ class TestCoverageTableShape:
         """The batch-1 census (5 paths / 5 subsets bug class) preserved as
         the audit trail of exactly what the unification changed."""
         assert RESET_COVERAGE["new-chat"]["pre_batch2"] == frozenset({
-            "history", "messages_for_ui", "focus_panel", "focus_key",
+            "history", "messages_for_ui", "focus_panel",
             "costs",
         })
         assert RESET_COVERAGE["open-session"]["pre_batch2"] == frozenset({
             "costs", "history", "messages_for_ui",
         })
-        assert len(RESET_COVERAGE["sheet-reset"]["pre_batch2"]) == 12
+        # 12 pre-batch2 fields minus phase_state/task_state/focus_key
+        # (deleted 2026-08-03 with the session-phase machinery + the focus
+        # enricher).
+        assert len(RESET_COVERAGE["sheet-reset"]["pre_batch2"]) == 9
 
 
 class TestCoverageCharacterization:
@@ -653,9 +560,6 @@ class TestCoverageCharacterization:
         assert session.pedagogy_memory.intro_budget_remaining() == 2
         assert session.mode_state.english_only_streak == 0
         assert session.mode_state.form_focus_cooldown == {}
-        assert id(session.phase_state) != pre_ids["phase_state"]
-        assert session.phase_state.index == 0
-        assert session.task_state is None
         # Kept on purpose: same live session id for the progress rail
         assert session.progress_session_id == "__sentinel__"
         # New chat ≠ new learner: reconstructed memory re-seeded from sheet
@@ -669,7 +573,7 @@ class TestCoverageCharacterization:
         assert st.costs.source == "freshcheck"
         assert st.debug_requests.maxlen == DEBUG_RING_SIZE
         assert st.history == [] and st.messages_for_ui == []
-        assert st.task_state is None and st.last_plan is None
+        assert st.last_plan is None
         # progress_session_id assigned post-logger (log=False → "-nolog")
         assert st.progress_session_id.endswith("-freshcheck-nolog")
 

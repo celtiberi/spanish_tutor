@@ -35,9 +35,6 @@ from pathlib import Path
 # --- env clamps BEFORE any tutor import (run_conv_smoke pattern) ---
 os.environ.setdefault("TEACHER_MODE", "planned")
 os.environ.setdefault("TEACH_IMAGE_GENERATE", "0")
-os.environ.setdefault("FOCUS_MODEL", "off")
-os.environ.setdefault("FOCUS_ASYNC", "false")
-os.environ.setdefault("FOCUS_BLOCKING", "false")
 os.environ.setdefault("SHEET_TOOLS", "false")
 # Voice is browser-triggered on the web path and never fires in this
 # headless harness (verified: zero `tts` rows in run ledgers) — clamped
@@ -64,9 +61,6 @@ def _patch_runtime_for_smoke(config) -> None:
     """Module-level flags may already be bound; force smoke-safe values."""
     config.load_env()
     config.TEACHER_MODE = "planned"
-    config.FOCUS_ASYNC = False
-    config.FOCUS_BLOCKING = False
-    config.FOCUS_MODEL = "off"
     try:
         import tutor.teach_assets as teach_assets
 
@@ -143,7 +137,6 @@ def main() -> None:
                 pack_dir=pack_dir,
                 sheet_path=sheet_path,
                 reset_sheet=True,
-                focus_model="off",
                 live_print=not args.quiet,
                 use_tools=False,     # rules-based sheet update (smoke clamp)
                 session_log=False,   # no logs/sessions writes from eval traffic

@@ -8,16 +8,15 @@ docs/reviews-architecture-refactor.md:
 
   - gate-fault → NO repair (2026-08-01): critical fault ships raw + gate_fail;
     second model call deleted (hiding path removed).
-  - comprehension repair: meta "what does X mean" turn → phase clock FROZEN,
-    repair-target image relevance (no irrelevant image — the incident
-    class), await/TTL hold armed then cleared by the learner's own Spanish.
+  - comprehension repair: meta "what does X mean" turn → repair-target
+    image relevance (no irrelevant image — the incident class), await/TTL
+    hold armed then cleared by the learner's own Spanish.
   - budget arcs (multi-turn): introduce budget 2→1→0 with the third plan
     refused (R-G) and the §2.1a self-flag uptake budget (fires once, the
     consecutive flag blocked, recovers after the ≥3-turn window).
-  - close phase: summary block content sources + the SESSION PHASE: CLOSE
-    prefix; phase clock walks off the plan end afterwards.
-  - CHAR-BUG-005: RESOLVED-BY-DELETION (Proposal A micro-batch, 2026-07-29)
-    — the pin now asserts the scene_modeled machine is GONE.
+  - scenes / phases / task runtime: DELETED 2026-08-03 (full-code-audit
+    S9) — the close-phase golden died with the close phase; the
+    CHAR-BUG-005 pin is now the wider scenes-stay-deleted lint.
 
 Taxonomy: CHAR_PIN / CHAR_BUG / CHAR_DIVERGE (Grok round-1 (c) replacement
 text, BINDING). Goldens regenerate ONLY via CHAR_GOLDEN_UPDATE=1 (never CI);
@@ -192,14 +191,10 @@ def test_golden_comprehension_repair(tutor_session_factory):
     assert turn.error is None
 
     # CHAR_PIN: meta turn → comprehension_repair hard break, same-topic
-    # targets carry the remembered try/model, phase clock FROZEN.
+    # targets carry the remembered try/model.
     assert turn.parts["mode"] == "comprehension_repair"
     assert "mode_reason=meta_comprehension_stay_on_topic" in turn.notes
     assert "hard_break=True" in turn.notes
-    assert "phase_consumed=False" in turn.notes
-    assert s.phase_state.index == 0
-    assert s.phase_state.turns_in_phase == 1  # only the open consumed
-    assert s.phase_state.frozen_turns == 1
     targets = turn.parts["mode_decision"]["targets"]
     assert targets["last_try"] == "¿Estás contento hoy también?"
     assert targets["require_same_topic"] is True
@@ -235,29 +230,14 @@ def test_golden_comprehension_repair(tutor_session_factory):
     assert s.pedagogy_memory.await_comprehension is False
     assert s.pedagogy_memory.await_comprehension_ttl == 0
     assert turn2.parts["mode"] == "conversation"
-    # CHAR_PIN — re-routed by PHASE HOST rule 6 (Proposal A micro-batch,
-    # 2026-07-29; golden regenerated with justification): this turn rides
-    # the NEW_INPUT activity, where the topic scene pick is now SUPPRESSED
-    # (introduce owns new_input per PEDAGOGY §6.4) — «Estoy contento» used
-    # to topic-match scene_goal:boat_meet_captain; it now falls through to
-    # default_conversation and the INTRODUCE block fires (lawfulness check:
-    # the batch-4 unlawful class was introduce STARVATION on new_input —
-    # this is its exact inverse; budget still consumable).
+    # CHAR_PIN — scenes DELETED 2026-08-03 (S9): «Estoy contento» cannot
+    # topic-match a scene any more; the turn is default_conversation and
+    # the INTRODUCE plan fires on the flavorable turn.
     assert "mode_reason=default_conversation" in turn2.notes
     assert "introduce_planned:me llamo:R-D" in turn2.notes
-    assert "phase_consumed=True" in turn2.notes
-    assert s.phase_state.turns_in_phase == 2
-    assert s.phase_state.frozen_turns == 1
 
-    # CHAR_PIN CHAR-BUG-006 RESOLVED (known_bugs.json): the dual miss-note
-    # pin (mode attach «bote» + fallback «hola» from the scene's SUGGESTED
-    # lines) was HOSTED by the old scene_goal routing of this turn; the
-    # Proposal A rule-6 re-route displaced it from this trajectory, and
-    # the Proposal B pin-first batch (2026-07-29) then RESOLVED the bug
-    # itself — stage_fallback_image no longer reads scene scripts at all.
-    # The direct pins live in test_characterization_ai_path.py
-    # (test_char_bug_006_resolved_*); these asserts stay as the
-    # trajectory-level guard.
+    # CHAR_PIN CHAR-BUG-006 RESOLVED, then scenes deleted entirely
+    # (2026-08-03): no scene-script-derived image traffic can exist.
     assert "image_gen_disabled:bote" not in turn2.notes
     assert "image_gen_disabled:hola" not in turn2.notes
     assert "hola" not in turn2.reply.lower()
@@ -305,11 +285,6 @@ def _arc_view(ctx, s, result, req_index) -> dict:
         ),
         "uptake_last_turn": s.mode_state.content_uptake_last_turn,
         "learner_turn_index": s.mode_state.learner_turn_index,
-        "phase": {
-            "index": s.phase_state.index,
-            "turns_in_phase": s.phase_state.turns_in_phase,
-            "frozen_turns": s.phase_state.frozen_turns,
-        },
         # §1.1 rewrite (2026-08-03): router scripts no longer ship — the
         # pin is their ABSENCE from the payload (shadow notes carry them).
         "instructions": {
@@ -361,7 +336,7 @@ def test_golden_budget_arc(tutor_session_factory):
     views.append(_arc_view(ctx, s, t2, 2))
 
     # t3 — R-G: budget exhausted → the router refuses to plan (no
-    # introduce_planned note) and the phase prefix says EXHAUSTED.
+    # introduce_planned note).
     t3 = s.user_turn("Sí, hablo con mi familia cada día.")
     assert t3.error is None
     assert not any(n.startswith("introduce_planned:") for n in t3.notes)
@@ -371,18 +346,14 @@ def test_golden_budget_arc(tutor_session_factory):
     assert "mode" not in ctx.fake.task_payload(3)
     views.append(_arc_view(ctx, s, t3, 3))
 
-    # t4 — new_input exhausted → task phase binds the first task-capable
-    # scene; the ≥3-turn uptake window has passed (5-2=3) → uptake fires
-    # again on the fresh self-flag.
+    # t4 — the ≥3-turn uptake window has passed (5-2=3) → uptake fires
+    # again on the fresh self-flag. (The task phase + scene bind died with
+    # the S9 deletions — no task notes exist any more.)
     t4 = s.user_turn("Quiero leche (milk?) en el desayuno.")
     assert t4.error is None
     assert "uptake_flagged:leche" in t4.notes
     assert s.mode_state.content_uptake_last_turn == 5
-    assert "task_goal_offered:boat_likes" in t4.notes
-    assert s.task_state is not None
-    assert s.task_state.scene_id == "boat_likes"
-    assert s.task_state.status == "open"
-    assert s.task_state.slots_filled == {}
+    assert not any("task" in str(n) for n in t4.notes)
     views.append(_arc_view(ctx, s, t4, 4))
 
     # CHAR_PIN: both introductions honesty-lawful (schedule fields only).
@@ -408,58 +379,11 @@ def test_golden_budget_arc(tutor_session_factory):
 
 
 # ---------------------------------------------------------------------------
-# Golden (vii): close phase — summary sources + prefix
+# Golden (vii) DELETED 2026-08-03: the close phase died with the
+# session-phase machinery (full-code-audit S9) — golden_close_phase.json
+# removed; the first_seen/scaffold-exposure class it also pinned stays
+# covered by golden_blank_zero_register_turn.
 # ---------------------------------------------------------------------------
-
-
-def test_golden_close_phase(tutor_session_factory):
-    ctx = tutor_session_factory(
-        seed_sheet=_known_seed(),
-        replies=[OPEN_KNOWN_REPLY, CLOSE_REPLY],
-    )
-    s = ctx.session
-    assert s.open_session().error is None
-    n_open = len(ctx.save_calls)
-
-    # Seed the session state the close summary is built FROM (code-owned
-    # sources: introduce ledger, resolved forms; task_state stays unbound) —
-    # then tick the phase state to the close phase per the batch-2 runbook.
-    assert s.pedagogy_memory.note_introduced("hola")
-    s.mode_state.note_resolved(["weather_hace"])
-    while s.phase_state.current_activity() != "close":
-        assert s.phase_state.force_advance()
-
-    turn = s.user_turn("Muy bien, gracias.")
-    assert turn.error is None
-
-    # CHAR_PIN: flavorable close turn carries the CLOSE prefix + the compact
-    # summary data block, built ONLY from tracked session state (§3 honesty:
-    # introduced keys, resolved error patterns, skills shown — invents
-    # nothing; no task line when no task was bound).
-    assert "close_phase_offered" in turn.notes
-    # §1.1 rewrite: the close offer is shadow telemetry (note above); the
-    # model decides how to close from session_facts. No script, no
-    # code-authored SESSION SUMMARY line, ships.
-    assert "mode" not in ctx.fake.task_payload(-1)
-
-    # CHAR_PIN: the close turn consumes the 1-turn close budget; the clock
-    # walks off the plan end and the session continues in "free".
-    assert s.phase_state.index == len(s.phase_state.plan.phases)
-    assert s.phase_state.current_activity() == "free"
-
-    # CHAR_PIN: the glossed farewell in the reply is a scaffolded first
-    # exposure (first_seen bit), NOT an introduction — ledger untouched.
-    assert "first_seen:adiós" in turn.notes
-    assert not any(n == "introduced:adiós" for n in turn.notes)
-    adios = s.sheet["lexicon"]["adiós"]
-    assert adios.get("first_seen") and not adios.get("introduced_at")
-
-    obs = _observe(
-        ctx, turn, save_slice=slice(n_open, None),
-        sheet_keys=(("lexicon", "adiós"),),
-    )
-    obs["learner"] = "Muy bien, gracias."
-    check_golden("golden_close_phase", obs)
 
 
 # ---------------------------------------------------------------------------
@@ -467,16 +391,16 @@ def test_golden_close_phase(tutor_session_factory):
 # ---------------------------------------------------------------------------
 
 
-def test_char_bug_open_marks_all_scenes_modeled(tutor_session_factory):
+def test_char_bug_005_and_scenes_stay_deleted(tutor_session_factory):
     # CHAR_PIN — CHAR-BUG-005 RESOLVED-BY-DELETION (Proposal A micro-batch,
-    # 2026-07-29, known_bugs.json + docs/reviews-architecture-refactor.md
-    # policy round): the prefer-unmodeled machine was deleted, not revived —
-    # ModeSessionState.scene_modeled (field + snapshot keys), the
-    # prefer-unmodeled +1 inside _scene_for_topic, _scene_needs_model and
-    # its guard-7 fallback call, and the stage_mode_record mark loop are
-    # all GONE.  Scene realization belongs to the task phase; topic-matched
-    # scene_goal pursuit (KEEP-5) survives under the phase host rules.
-    # This pin flipped WITH the deletion per the Phase 0 law.
+    # 2026-07-29), then scenes DELETED ENTIRELY (full-code-audit S9,
+    # 2026-08-03; USER: even goal/exit data is code-selected steering).
+    # The pin now asserts the whole scene machine stays gone: no
+    # tutor.scenes module, no scene fields on the mode store, and no CODE
+    # reference to the deleted names in the owning modules (comments/
+    # docstrings recording the deletion are fine).
+    import ast
+    import importlib.util
     import inspect
 
     ctx = tutor_session_factory(
@@ -485,23 +409,25 @@ def test_char_bug_open_marks_all_scenes_modeled(tutor_session_factory):
     s = ctx.session
     assert s.open_session().error is None
 
-    all_scenes = {"boat_likes", "boat_meet_captain", "boat_where_boat"}
-    assert set(s.mode_state.open_scene_ids) == all_scenes
+    assert importlib.util.find_spec("tutor.scenes") is None
 
     import tutor.modes as modes_mod
     import tutor.turn_pipeline as tp_mod
 
-    # The field is gone from the dataclass and from the snapshot surfaces.
+    # The fields are gone from the dataclass and from the snapshot surfaces.
     assert not hasattr(s.mode_state, "scene_modeled")
+    assert not hasattr(s.mode_state, "open_scene_ids")
     assert "scene_modeled" not in s.mode_state.snapshot()
-    assert "scene_modeled" not in (s.state.snapshot().get("mode_state") or {})
-    # The needs-model fallback is gone entirely.
+    assert "open_scene_ids" not in s.mode_state.snapshot()
+    # The scene routing/needs-model machinery is gone entirely.
+    assert not hasattr(modes_mod, "_scene_for_topic")
     assert not hasattr(modes_mod, "_scene_needs_model")
+    assert not hasattr(tp_mod, "stage_open_scenes")
     # Deletion lint: no CODE reference to the deleted names remains in the
-    # owning modules (comments/docstrings recording the deletion are fine).
-    import ast
-
-    dead = {"scene_modeled", "_scene_needs_model"}
+    # owning modules.
+    dead = {"scene_modeled", "_scene_needs_model", "_scene_for_topic",
+            "open_scene_ids", "open_scenes_for_sheet",
+            "scene_hints_for_prompt"}
     for mod in (modes_mod, tp_mod):
         tree = ast.parse(inspect.getsource(mod))
         for node in ast.walk(tree):

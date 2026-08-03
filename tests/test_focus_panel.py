@@ -73,7 +73,7 @@ class TestFocusPanel(unittest.TestCase):
 
     def test_sheet_public_has_focus_and_morphology(self):
         """Regression: sheet_public must not crash (broke web rail)."""
-        sess = ConversationalSession(log=False, focus_model="off")
+        sess = ConversationalSession(log=False)
         pub = sess.sheet_public()
         self.assertIn("focus", pub)
         self.assertTrue(pub["focus"].get("title") or pub["focus"].get("can_do")

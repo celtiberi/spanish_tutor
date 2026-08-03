@@ -14,7 +14,6 @@ from types import SimpleNamespace
 
 from tutor import turn_pipeline as tp
 from tutor.character_sheet import default_sheet
-from tutor.conv_session import due_elicit_block
 from tutor.introduce_router import _true_zero_sheet, candidate_keys
 from tutor.retrieval_scheduler import (
     FRAMES_SAFETY_CAP,
@@ -210,33 +209,12 @@ class TestStageFrameRecord(unittest.TestCase):
         )
 
 
-class TestDirectionLine(unittest.TestCase):
-    def _due_sheet(self, frames):
-        s = default_sheet()
-        today = datetime.date(2026, 7, 30)
-        s["lexicon"]["estar"] = {
-            "status": "unknown", "confidence": 0.0,
-            "introduced_at": "2026-07-29", "next_due": today.isoformat(),
-            "interval_days": 1, "successive_successes": 0,
-        }
-        if frames:
-            s["lexicon"]["estar"]["frames_seen"] = list(frames)
-        return s, today
-
-    def test_framed_due_item_gets_the_line(self):
-        s, today = self._due_sheet(["wellbeing"])
-        block, due = due_elicit_block(s, mode="conversation", today=today)
-        self.assertTrue(due)
-        self.assertIn("frames so far: wellbeing", block)
-        self.assertIn("context not on that list", block)
-        # never names a required target frame
-        self.assertNotIn("location", block)
-
-    def test_unframed_due_item_gets_no_line(self):
-        s, today = self._due_sheet([])
-        block, due = due_elicit_block(s, mode="conversation", today=today)
-        self.assertTrue(due)
-        self.assertNotIn("frames so far", block)
+# (TestDirectionLine DELETED 2026-08-03: the DUE RE-ENCOUNTERS text builder
+# (due_elicit_block) died with the session-phase machinery — full-code-audit
+# S9. frames_seen still ships to the model as data: teaching_data
+# due_for_review carries frames_already_used per key, and the
+# DUE_ELICIT_OFFERED event now fires from turn_pipeline.stage_prompt_build;
+# TestStageFrameRecord above proves the event → frames_seen write wire.)
 
 
 if __name__ == "__main__":

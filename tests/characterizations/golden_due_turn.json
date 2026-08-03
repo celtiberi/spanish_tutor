@@ -36,30 +36,24 @@
     "due_outcome_success:pan",
     "progress_milestone:first_solo:pan",
     "mode=conversation",
-    "mode_reason=scene_goal:boat_likes",
+    "mode_reason=default_conversation",
+    "introduce_planned:me llamo:R-D",
     "due_elicit_offered:agua",
-    "image_gen_disabled:cafe",
     "output_gate_ok",
     "rules_backup",
     "scaffold=ES-forward+EN-rescue",
-    "focus_async",
     "structured_reply",
     "pedagogy:ok",
     "pedagogy:known_learner_open",
     "phase=ai_tutor",
-    "activity=retrieval",
-    "phase_consumed=True",
     "hard_break=False",
     "plan_source=mode_runtime",
     "teacher_mode=planned",
-    "open_scenes=boat_likes,boat_meet_captain,boat_where_boat",
     "mem_shown=greet,gusta,spanish_ok",
-    "mem_asked=ask_gusta,conversation",
-    "image_decision:no_pedagogy_trigger"
+    "mem_asked=ask_gusta,conversation"
   ],
   "parts_keys": [
     "acknowledge",
-    "image_decision",
     "mode",
     "mode_decision",
     "model",
@@ -71,12 +65,6 @@
     "teach_images",
     "try"
   ],
-  "phase": {
-    "activity": "retrieval",
-    "frozen_turns": 0,
-    "index": 0,
-    "turns_in_phase": 2
-  },
   "progress_events": [
     {
       "key": "pan",

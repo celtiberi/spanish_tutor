@@ -23,7 +23,6 @@ from .character_sheet import (
     process_turn,
     save_sheet,
 )
-from .focus_enrich import enrich_focus_panel, focus_cache_key, focus_model_enabled
 from .session_log import SessionLogger
 from .pedagogy_contract import evaluate_turn
 from .session_state import DEBUG_RING_SIZE, SessionState
@@ -51,74 +50,25 @@ SHEET_TOOLS = [UPDATE_CHARACTER_SHEET_TOOL]
 MAX_IMAGE_GENERATIONS_PER_SESSION = 8
 MAX_DECLARED_NOVEL_PER_SESSION = 5
 
-# --- Retrieval scheduler soft wiring (Phase 1 pedagogy engine) --------------
-# Due re-encounters ride the mode instructions as SOFT additions inside
-# conversation-flavored turns only. No new hard mode; repair/guard turns and
-# hard breaks keep their single focus (r2/r6 preemption rules).
-DUE_ELICIT_MODES = frozenset({"conversation", "transfer"})
+# --- Guard reasons that keep their single focus -----------------------------
+# Help/topic/grammar guard turns never take soft riders (uptake etc.).
 DUE_GUARD_REASONS = frozenset({
     "learner_topic_request",
     "learner_help_request",
     "grammar_question_inline",
 })
 
-
-def due_elicit_block(
-    sheet: dict,
-    *,
-    mode: str,
-    reason: str = "",
-    today=None,
-    max_due: int = 3,
-    activity_hint: str | None = None,
-):
-    """Compact DUE RE-ENCOUNTERS instruction block for the tutor task.
-
-    Returns (block_text, due_items). Empty when the mode is not a
-    conversation flavor, when the turn is a help/topic guard turn, when the
-    session phase is new_input (introduce owns that phase — Grok AMEND 4a,
-    2026-07-28: never stack DUE + INTRODUCE on one turn), or when nothing is
-    due. Code decides WHAT is due; the model only realizes ONE re-encounter
-    naturally in Spanish.
-    """
-    from .retrieval_scheduler import due_items, frames_seen_of
-
-    # Phase sole-orchestrator: new_input owns introduce; do not compete
-    # with due.
-    if activity_hint == "new_input":
-        return "", []
-    if mode not in DUE_ELICIT_MODES or reason in DUE_GUARD_REASONS:
-        return "", []
-    due = due_items(sheet, today=today, max_due=max_due)
-    if not due:
-        return "", []
-    listing = "; ".join(
-        f"«{d.key}» ({d.kind}, {d.prompt_hint})" for d in due
-    )
-    block = (
-        "DUE RE-ENCOUNTERS (weave ONE naturally into this turn's Spanish; "
-        "no flashcard framing, no re-gloss unless they fail): " + listing
-    )
-    # Varied-retrieval direction (PEDAGOGY §2.4 rider, encounter-variety
-    # round 2026-07-29): state + constraint only — the FULL frames_seen set
-    # backs the "not on that list" claim (no semantic drop); the prompt
-    # line shows at most 6. Empty history appends nothing (first recorded
-    # elicit free); never name a required target frame.
-    for d in due:
-        frames = frames_seen_of(sheet, d.key, d.kind)
-        if frames:
-            block += (
-                f"\n«{d.key}» due — frames so far: {', '.join(frames[:6])}. "
-                "Elicit it in a context not on that list."
-            )
-    return block, due
+# (due_elicit_block DELETED 2026-08-03 with the session-phase machinery —
+# full-code-audit S9. Due items ship as FACTS in teaching_data
+# (turn_pipeline.stage_prompt_build), which also emits the
+# DUE_ELICIT_OFFERED event that drives stage_frame_record's frames_seen
+# writes.)
 
 
 # --- Introduce router soft wiring (Phase 3 pedagogy engine, r7 S2) ----------
-# The INTRODUCE plan rides the same soft path as DUE RE-ENCOUNTERS, but only
-# inside the NEW INPUT phase and only on the phase-prefix-flavorable turns
-# (known open / default fallthrough). Guard, repair, and recast turns keep
-# their single focus. The router itself never calls the model.
+# The INTRODUCE plan rides flavorable conversation turns (known open /
+# default fallthrough). Guard, repair, and recast turns keep their single
+# focus. The router itself never calls the model.
 INTRODUCE_FLAVORABLE_REASONS = frozenset({
     "known_open_from_sheet",
     "default_conversation",
@@ -132,19 +82,17 @@ def introduce_block(
     *,
     mode: str,
     reason: str = "",
-    activity_hint: str | None = None,
 ):
-    """INTRODUCE instruction block for the tutor task.
+    """INTRODUCE plan for the turn.
 
-    Returns (block_text, IntroducePlan | None). Empty unless the session
-    phase is new_input AND the mode decision is a flavorable conversation
-    turn (the same condition set as modes._phase_prefix: known-open /
-    default fallthrough — never guard/repair/recast turns). Code decides
-    WHAT to introduce and with WHICH scaffold; the model only realizes it.
+    Returns (block_text, IntroducePlan | None). Empty unless the mode
+    decision is a flavorable conversation turn (known-open / default
+    fallthrough — never guard/repair/recast turns). Code decides WHAT to
+    introduce and with WHICH scaffold; the model only realizes it.
     """
     from .introduce_router import plan_introduction, plan_instructions
 
-    if activity_hint != "new_input" or not table:
+    if not table:
         return "", None
     if mode != "conversation" or reason not in INTRODUCE_FLAVORABLE_REASONS:
         return "", None
@@ -233,50 +181,6 @@ def mark_introduced_if_visible(sheet: dict, plan, reply: str, *, teach_images=No
             EV.INTRODUCE_LAPSED, key=key, payload={"reason": "no_scaffold"}
         )
     return sheet, None
-
-
-# --- Close phase soft wiring (PEDAGOGY §1.2, USER-ratified 2026-07-28) ------
-# The 1-turn CLOSE phase ends every session plan (tutor/session_phases.py).
-# The summary data block rides the same flavorable-turn condition set as
-# INTRODUCE (known open / default fallthrough conversation turns); guard and
-# repair turns keep their single focus and the freeze rules are unchanged.
-def close_summary_block(
-    memory_snapshot: dict,
-    *,
-    resolved_forms=None,
-    task_state=None,
-) -> str:
-    """Compact (≤2 lines) session-summary data for the CLOSE phase.
-
-    Built ONLY from session state the code already tracks — introduced keys
-    (pedagogy_memory), error patterns resolved this session (mode_state),
-    task status (task_state), skills shown — the summary invents nothing
-    (§3 honesty). The model turns this into ONE short English line.
-    """
-    mem = memory_snapshot or {}
-    bits: list[str] = []
-    introduced = [
-        str(k) for k in (mem.get("introduced_this_session") or []) if k
-    ]
-    if introduced:
-        bits.append("new items introduced: " + ", ".join(introduced))
-    resolved = [str(p) for p in (resolved_forms or []) if p]
-    if resolved:
-        bits.append("errors resolved: " + ", ".join(resolved))
-    if task_state is not None and getattr(task_state, "scene_id", ""):
-        bits.append(
-            f"task {task_state.scene_id}: "
-            f"{getattr(task_state, 'status', 'open')}"
-        )
-    shown = sorted(str(s) for s in (mem.get("shown") or []) if s)
-    if shown:
-        bits.append("skills shown: " + ", ".join(shown[:6]))
-    if not bits:
-        bits.append("a first short Spanish exchange")
-    return (
-        "SESSION SUMMARY (data for your ONE short English close line): "
-        + "; ".join(bits) + "."
-    )
 
 
 # --- §2.1a self-flag uptake, instruction path (BINDING, 2026-07-28) ---------
@@ -421,7 +325,6 @@ def build_debug_entry(
     messages,
     task: str,
     decision_dict: dict | None,
-    activity: str | None,
     usage: dict | None,
     gate_result=None,
     notes=None,
@@ -455,7 +358,6 @@ def build_debug_entry(
         "model": model,
         "mode": str(dec.get("mode") or ""),
         "reason": str(dec.get("reason") or ""),
-        "activity": str(activity or ""),
         "hard_break": bool(dec.get("hard_break")),
         "instructions": str(dec.get("instructions") or ""),
         "system_blocks": [
@@ -486,40 +388,6 @@ def build_debug_entry(
             "notes": list(notes or []),
         },
     }
-
-
-# --- Session phase layer (Phase 2 pedagogy engine) --------------------------
-# The phase clock only advances on turns that CONSUME phase budget.
-# comprehension_repair and guard turns freeze it (r6 §4.2 rule 1); cf_recast /
-# form_focus / association / transfer are interventions WITHIN a phase and DO
-# consume (r6 §4.2 rule 5).
-def phase_turn_consumed(mode: str, reason: str) -> bool:
-    """Did this mode decision consume phase budget? (code decides, logged)"""
-    from .modes import PHASE_FREEZE_REASONS
-
-    if mode == "comprehension_repair":
-        return False
-    return reason not in PHASE_FREEZE_REASONS
-
-
-def build_session_phase_state(sheet: dict, pack_dir) -> "PhaseState":
-    """Construct the session PhaseState from the loaded sheet + pack topics.
-
-    Code owns the plan (due count, blank flag, affect adaptations); pack topic
-    titles are passed in so session_phases stays dependency-free. The
-    controller only emits hints — it never calls the model.
-    """
-    from .corpus import pack_topic_titles
-    from .pedagogy_contract import is_blank_learner
-    from .retrieval_scheduler import due_items
-    from .session_phases import PhaseState, build_phase_plan
-
-    return PhaseState(build_phase_plan(
-        sheet,
-        due_count=len(due_items(sheet)),
-        blank=is_blank_learner(sheet),
-        pack_topics=pack_topic_titles(Path(pack_dir)),
-    ))
 
 
 @dataclass
@@ -754,7 +622,6 @@ class ConversationalSession:
     history = _state_delegate("history")
     messages_for_ui = _state_delegate("messages_for_ui")
     _focus_panel = _state_delegate("focus_panel", "_focus_panel")
-    _focus_key = _state_delegate("focus_key", "_focus_key")
     _focus_meta = _state_delegate("focus_meta", "_focus_meta")
     _focus_version = _state_delegate("focus_version", "_focus_version")
     _focus_lock = _state_delegate("focus_lock", "_focus_lock")
@@ -766,8 +633,6 @@ class ConversationalSession:
     last_plan = _state_delegate("last_plan")
     pedagogy_memory = _state_delegate("pedagogy_memory")
     mode_state = _state_delegate("mode_state")
-    phase_state = _state_delegate("phase_state")
-    task_state = _state_delegate("task_state")
     last_mode_decision = _state_delegate("last_mode_decision")
     debug_requests = _state_delegate("debug_requests")
     costs = _state_delegate("costs")
@@ -782,13 +647,9 @@ class ConversationalSession:
         use_tools: bool = True,
         label: str = "chat",
         log: bool = True,
-        focus_model: str | None = None,
     ):
         config.load_env()
         self.model = model or config.MODEL
-        self.focus_model = (
-            focus_model if focus_model is not None else config.FOCUS_MODEL
-        )
         self.pack_dir = Path(pack_dir or config.DEFAULT_PACK_DIR)
         self.sheet_path = Path(sheet_path or DEFAULT_SHEET_PATH)
         self.use_tools = use_tools
@@ -835,25 +696,13 @@ class ConversationalSession:
                 f"Use one of {config.PLANNED_TEACHER_MODES} (default: planned)."
             )
         # Aggregate session state (Phase 1 batch 1,
-        # docs/reviews-architecture-refactor.md): the five stores
-        # (SessionMemory / ModeSessionState / PhaseState / TaskState /
-        # SessionCostTracker) + the loose session attributes, constructed
-        # exactly as the old inline block did — same helpers, same args,
-        # same defaults (the phase-plan inputs below are what
-        # build_session_phase_state computed internally). All historical
-        # attribute names keep working via the delegate properties defined
-        # after __init__.
-        from .corpus import pack_topic_titles
-        from .pedagogy_contract import is_blank_learner
-        from .retrieval_scheduler import due_items
-
-        self.state = SessionState.fresh(
-            self.sheet,
-            source_label=label,
-            pack_topics=pack_topic_titles(Path(self.pack_dir)),
-            due_count=len(due_items(self.sheet)),
-            blank=is_blank_learner(self.sheet),
-        )
+        # docs/reviews-architecture-refactor.md): the surviving stores
+        # (SessionMemory / ModeSessionState / SessionCostTracker) + the
+        # loose session attributes. All historical attribute names keep
+        # working via the delegate properties defined after __init__.
+        # (PhaseState/TaskState died with the session-phase machinery —
+        # full-code-audit S9 deletion, 2026-08-03.)
+        self.state = SessionState.fresh(source_label=label)
         # Association table (Phase 3, r7 S4): loaded once per session. A
         # missing/invalid table disables the introduce router (turns note
         # introduce_table_missing) — never a crash.
@@ -872,7 +721,6 @@ class ConversationalSession:
                     "mode": "conversational",
                     "teacher_mode": self.teacher_mode,
                     "model": self.model,
-                    "focus_model": self.focus_model,
                     "pack": str(self.pack_dir),
                     "sheet": str(self.sheet_path),
                     "sheet_update": "tool" if use_tools else "rules",
@@ -1009,7 +857,6 @@ class ConversationalSession:
         messages,
         task: str,
         decision_dict: dict | None,
-        activity: str | None,
         usage: dict | None,
         gate_result=None,
         notes=None,
@@ -1029,7 +876,6 @@ class ConversationalSession:
                 messages=messages,
                 task=task,
                 decision_dict=decision_dict,
-                activity=activity,
                 usage=usage,
                 gate_result=gate_result,
                 notes=notes,
@@ -1054,15 +900,15 @@ class ConversationalSession:
         personal-data capture is disabled)."""
         return dict(self.sheet) if isinstance(self.sheet, dict) else {}
 
-    def _refresh_focus(
-        self,
-        *,
-        learner: str = "",
-        tutor_reply: str = "",
-        use_ai: bool = True,
-    ) -> None:
-        """Update cached focus/morphology rail (static and/or AI)."""
-        key = focus_cache_key(self.sheet)
+    def _refresh_focus(self) -> None:
+        """Rebuild the static focus/morphology rail (no model call).
+
+        The grok-3-mini rail enricher (tutor/focus_enrich.py) was DELETED
+        2026-08-03 (full-code-audit S9, USER-adjudicated: a per-turn model
+        call for right-rail chrome). The rail is the static
+        can_dos.build_focus_panel projection of the sheet + last mode
+        decision + last turn render — cheap, synchronous, no thread.
+        """
         sheet_for_focus = self._sheet_for_focus()
         if self.last_mode_decision:
             sheet_for_focus = {**sheet_for_focus, "_last_mode_decision": self.last_mode_decision}
@@ -1071,20 +917,12 @@ class ConversationalSession:
                 **sheet_for_focus,
                 "_last_turn_render": self.last_turn_render.as_dict(),
             }
-        panel, meta = enrich_focus_panel(
-            sheet_for_focus,
-            learner=learner,
-            tutor_reply=tutor_reply,
-            model=self.focus_model,
-            force_static=(
-                not use_ai or not focus_model_enabled(self.focus_model)
-            ),
+        panel = build_focus_panel(
+            sheet_for_focus, mode_decision=self.last_mode_decision
         )
-        self._note_focus_cost(meta)
         with self._focus_lock:
             self._focus_panel = panel
-            self._focus_key = key
-            self._focus_meta = meta
+            self._focus_meta = {"source": "static"}
             self._focus_version = int(self._focus_version or 0) + 1
 
     def _note_image_costs(self, teach_images: list | None) -> None:
@@ -1138,8 +976,8 @@ class ConversationalSession:
         """Warm a missed teach-image concept OFF the reply path.
 
         Latency law (audit (e) 2026-07-28; commits 2d160e0/7275bdc): the
-        reply thread never pays image-API RTT. Mirrors _schedule_focus_enrich
-        — daemon thread, in-flight dedupe, session caps checked at spawn AND
+        reply thread never pays image-API RTT.
+        Daemon thread, in-flight dedupe, session caps checked at spawn AND
         inside the worker (_may_generate_image), costs recorded through the
         existing _note_image_costs path when generation completes. The
         in-flight reply is never touched — the image appears on a LATER turn
@@ -1373,90 +1211,6 @@ class ConversationalSession:
             target=_work, name="signal-shadow", daemon=True
         ).start()
 
-    def _note_focus_cost(self, meta: dict | None) -> None:
-        u = (meta or {}).get("usage") or {}
-        if u.get("input_tokens") or u.get("output_tokens"):
-            self.costs.add_llm(
-                "focus",
-                str((meta or {}).get("model") or u.get("model") or self.focus_model),
-                input_tokens=u.get("input_tokens", 0),
-                output_tokens=u.get("output_tokens", 0),
-            )
-
-    def _schedule_focus_enrich(
-        self,
-        *,
-        learner: str = "",
-        tutor_reply: str = "",
-        force_ai: bool = False,
-    ) -> None:
-        """Static rail now; optional FOCUS_MODEL in a background thread.
-
-        Conversation latency must not wait on the side rail. Client can
-        poll GET /api/sheet and re-render when focus_version bumps.
-        """
-        # Always paint static immediately
-        self._refresh_focus(
-            learner=learner,
-            tutor_reply=tutor_reply,
-            use_ai=False,
-        )
-        if not focus_model_enabled(self.focus_model):
-            return
-        if getattr(config, "FOCUS_BLOCKING", False):
-            # Rare: wait for AI rail (slow path for debugging)
-            self._refresh_focus(
-                learner=learner,
-                tutor_reply=tutor_reply,
-                use_ai=True,
-            )
-            return
-        if not getattr(config, "FOCUS_ASYNC", True) and not force_ai:
-            return
-        with self._focus_lock:
-            if self._focus_inflight:
-                return
-            self._focus_inflight = True
-        # Snapshot for the worker (avoid racing sheet mutations)
-        sheet_snap = self._sheet_for_focus()
-        model = self.focus_model
-        key = focus_cache_key(self.sheet)
-
-        def _work() -> None:
-            try:
-                snap = dict(sheet_snap) if isinstance(sheet_snap, dict) else {}
-                if self.last_mode_decision:
-                    snap = {**snap, "_last_mode_decision": self.last_mode_decision}
-                if self.last_turn_render is not None:
-                    snap = {
-                        **snap,
-                        "_last_turn_render": self.last_turn_render.as_dict(),
-                    }
-                panel, meta = enrich_focus_panel(
-                    snap,
-                    learner=learner,
-                    tutor_reply=tutor_reply,
-                    model=model,
-                    force_static=False,
-                )
-                self._note_focus_cost(meta)
-                with self._focus_lock:
-                    # Only apply if still relevant to this stretch
-                    if self._focus_key == key or not self._focus_key:
-                        self._focus_panel = panel
-                        self._focus_key = key
-                        self._focus_meta = meta
-                        self._focus_version = int(self._focus_version or 0) + 1
-            except Exception as e:
-                self._oops("focus_enrich", e)
-            finally:
-                with self._focus_lock:
-                    self._focus_inflight = False
-
-        threading.Thread(
-            target=_work, name="focus-enrich", daemon=True
-        ).start()
-
     def _finish(
         self,
         learner: str,
@@ -1526,12 +1280,9 @@ class ConversationalSession:
             notes = [ev.absorb(n, stage="sheet") for n in notes]
         notes = list(notes) + self._progress_sheet_crossings(_prog_prev)
         if refresh_focus:
-            # Static rail immediately; FOCUS_MODEL enriches async (non-blocking)
-            self._schedule_focus_enrich(
-                learner=learner,
-                tutor_reply=visible,
-            )
-            notes = list(notes) + [ev.emit(EV.FOCUS_ASYNC, stage="sheet")]
+            # Static rail repaint (synchronous, cheap — the model enricher
+            # was deleted 2026-08-03 with tutor/focus_enrich.py).
+            self._refresh_focus()
         if tutor_parts.has_recast() and "recast" not in notes:
             notes = list(notes) + [ev.emit(EV.RECAST, stage="sheet")]
         if parts_dict.get("structured"):
@@ -1667,8 +1418,7 @@ class ConversationalSession:
         Phase 4 CLOSED (docs/reviews-architecture-refactor.md): every
         region runs as named stages over a TurnContext — the stage tuples
         in tutor/turn_pipeline.py ARE the documentation.  Executor order:
-        PRE_MODEL_STAGES → stage_contributors → stage_phase_tick (its
-        verified real site: AFTER the contributors) → REALIZE_STAGES (a
+        PRE_MODEL_STAGES → stage_contributors → REALIZE_STAGES (a
         provider exception becomes ctx.error_result, returned immediately)
         → the GATE_REPAIR_STAGES trio (context build outside the historical
         try/except; any gate exception emits OUTPUT_GATE_ERROR and the turn
@@ -1686,7 +1436,6 @@ class ConversationalSession:
             stage_gate_check,
             stage_gate_context,
             stage_gate_repair,
-            stage_phase_tick,
             stage_settle_pixels,
         )
 
@@ -1700,7 +1449,6 @@ class ConversationalSession:
         for _stage in PRE_MODEL_STAGES:
             _stage(self, ctx)
         stage_contributors(self, ctx)
-        stage_phase_tick(self, ctx)
         for _stage in REALIZE_STAGES:
             _stage(self, ctx)
         if ctx.error_result is not None:
@@ -1735,13 +1483,12 @@ class ConversationalSession:
 
         # Unified new-chat reset (Phase 1 batch 2, docs/reviews-architecture-
         # refactor.md): EVERY session-scoped store resets — memory, mode
-        # cooldowns/asked topics, phase clock (rebuilt from the CURRENT
-        # sheet), task state, debug ring, focus fields, last_* — closing the
-        # cross-chat leak. Costs continuity ruling: the per-chat tracker
-        # resets too (the header shows THIS chat's spend); the on-disk cost
-        # ledger keeps the money history. The sheet itself and
-        # progress_session_id are untouched.
-        self.state.reset("new_chat", sheet=self.sheet)
+        # cooldowns/asked topics, debug ring, focus fields, last_* —
+        # closing the cross-chat leak. Costs continuity ruling: the
+        # per-chat tracker resets too (the header shows THIS chat's spend);
+        # the on-disk cost ledger keeps the money history. The sheet itself
+        # and progress_session_id are untouched.
+        self.state.reset("new_chat")
         self.last_turn_render = None  # §1.1b: render record is per-chat
         self.session_plan = None      # new chat → new plan turn
         self.replan_requested = False
@@ -1853,10 +1600,10 @@ class ConversationalSession:
             # A missed epoch mixes the fresh learner with prior history —
             # a real reset defect, not ledger noise. Visible.
             self._oops("reset_sheet.epoch", e)
-        # Unified reset (batch 2): the batch-1 twelve stores + the four
-        # misses (costs, focus_version, focus_inflight, image_warm_inflight).
+        # Unified reset (batch 2): the batch-1 stores + the four misses
+        # (costs, focus_version, focus_inflight, image_warm_inflight).
         # The on-disk COST ledger is append-only forever (continuity ruling).
-        self.state.reset("sheet_reset", sheet=self.sheet)
+        self.state.reset("sheet_reset")
         self.last_turn_render = None  # §1.1b: render record dies with reset
         self.session_plan = None
         self.replan_requested = False
@@ -1867,8 +1614,7 @@ class ConversationalSession:
 
     def sheet_public(self) -> dict:
         """JSON-safe sheet view for the web UI (includes focus rail cards)."""
-        # Rebuild live mode titles every paint (cheap). Morph enrich may linger
-        # from async FOCUS_MODEL but must not hide the real this-turn mode.
+        # Rebuild live mode titles every paint (cheap).
         try:
             live_panel = build_focus_panel(
                 self._sheet_for_focus(),
@@ -1880,7 +1626,7 @@ class ConversationalSession:
 
         if self._focus_panel is None:
             try:
-                self._refresh_focus(use_ai=False)
+                self._refresh_focus()
             except Exception as e:
                 self._oops("sheet_public.refresh_focus", e)
                 self._focus_panel = live_panel or build_focus_panel(self._sheet_for_focus())
@@ -1953,7 +1699,6 @@ class ConversationalSession:
             "focus_source": (panel.get("source") if isinstance(panel, dict) else None)
             or (self._focus_meta or {}).get("source")
             or "static",
-            "focus_model": self.focus_model,
             "focus_version": int(getattr(self, "_focus_version", 0) or 0),
             "focus_pending": bool(getattr(self, "_focus_inflight", False)),
             "score": compute_progress_score(self.sheet),

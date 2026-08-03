@@ -851,30 +851,20 @@ class TestHumanization(LedgerBase):
         self.assertEqual(emerging, "Greet a peer")
         self.assertFalse(emerging.lower().startswith("can "))
 
-    def test_task_display_is_scene_goal(self):
-        goals = {"boat_meet_captain": "meet the captain"}
-        out = pl.humanize_event(
-            {"kind": "task_complete", "key": "boat_meet_captain",
-             "item_kind": "task"},
-            None, goals,
-        )
-        self.assertEqual(out["display"], "Meet the captain")
-        # No goal known → raw key fallback
-        out2 = pl.humanize_event(
-            {"kind": "task_complete", "key": "mystery_scene",
-             "item_kind": "task"},
-            None, {},
-        )
-        self.assertEqual(out2["display"], "mystery_scene")
-
-    def test_goal_short_derivation(self):
-        self.assertEqual(
-            pl._goal_short(
-                "Info-gap task: the learner meets the captain and must find "
-                "out the captain's name and how he is today."
-            ),
-            "meets the captain",
-        )
+    def test_historical_task_display_is_bare_scene_id(self):
+        # Scenes + task_runtime DELETED 2026-08-03 (full-code-audit S9):
+        # historical ledger entries keep their scene ids as OPAQUE strings —
+        # the journey renders the bare id, no scenes-dir lookup.
+        for key in ("boat_meet_captain", "mystery_scene"):
+            out = pl.humanize_event(
+                {"kind": "task_complete", "key": key, "item_kind": "task"},
+                None,
+            )
+            self.assertEqual(out["display"], key)
+            self.assertEqual(out["gloss"], "")
+        # The scenes-dir lookups are gone entirely.
+        self.assertFalse(hasattr(pl, "default_scene_goals"))
+        self.assertFalse(hasattr(pl, "_goal_short"))
 
     def test_payload_events_carry_display_fields(self):
         pl.record_milestone(

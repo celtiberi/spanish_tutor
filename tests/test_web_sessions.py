@@ -36,7 +36,6 @@ class FakeSession:
         self.debug_requests = []
         self.costs = None
         self._focus_panel = None
-        self._focus_key = None
 
     def open_session(self):
         return FakeTurn()

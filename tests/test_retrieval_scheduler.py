@@ -13,7 +13,6 @@ from tutor.character_sheet import (
     default_sheet,
     normalize_sheet,
 )
-from tutor.conv_session import due_elicit_block
 from tutor.retrieval_scheduler import (
     INTERVAL_CAP_DAYS,
     LEGAL_TRANSITIONS,
@@ -465,79 +464,11 @@ class TestScheduleStateMachine(unittest.TestCase):
         self.assertEqual(derived, LEGAL_TRANSITIONS)
 
 
-class TestDueElicitWiring(unittest.TestCase):
-    def _due_sheet(self) -> dict:
-        s = default_sheet()
-        s = enqueue(s, "hasta luego", "lexicon", today=D0 - datetime.timedelta(days=5))
-        return s
-
-    def test_block_built_for_conversation(self):
-        block, due = due_elicit_block(
-            self._due_sheet(), mode="conversation", reason="default_conversation",
-        )
-        self.assertIn("DUE RE-ENCOUNTERS", block)
-        self.assertIn("hasta luego", block)
-        self.assertIn("no flashcard framing", block)
-        self.assertEqual([d.key for d in due], ["hasta luego"])
-
-    def test_block_built_for_transfer(self):
-        block, _ = due_elicit_block(
-            self._due_sheet(), mode="transfer", reason="success_transfer",
-        )
-        self.assertIn("DUE RE-ENCOUNTERS", block)
-
-    def test_no_block_on_repair_or_guard_turns(self):
-        s = self._due_sheet()
-        for mode, reason in (
-            ("comprehension_repair", "meta_comprehension_stay_on_topic"),
-            ("form_focus", "error_streak:x"),
-            ("placement", "blank_open_placement"),
-            ("conversation", "learner_topic_request"),
-            ("conversation", "learner_help_request"),
-            ("conversation", "grammar_question_inline"),
-        ):
-            block, due = due_elicit_block(s, mode=mode, reason=reason)
-            self.assertEqual(block, "", f"{mode}/{reason} should not carry due block")
-            self.assertEqual(due, [])
-
-    def test_no_block_during_new_input_phase(self):
-        # Grok AMEND 4a (2026-07-28): new_input owns introduce — DUE and
-        # INTRODUCE must never stack on one turn.
-        s = self._due_sheet()
-        block, due = due_elicit_block(
-            s, mode="conversation", reason="default_conversation",
-            activity_hint="new_input",
-        )
-        self.assertEqual(block, "")
-        self.assertEqual(due, [])
-        # Other phases keep the block.
-        for hint in ("retrieval", "task", "free", None):
-            block, _ = due_elicit_block(
-                s, mode="conversation", reason="default_conversation",
-                activity_hint=hint,
-            )
-            self.assertIn("DUE RE-ENCOUNTERS", block, str(hint))
-
-    def test_no_block_when_nothing_due(self):
-        s = default_sheet()
-        block, due = due_elicit_block(
-            s, mode="conversation", reason="default_conversation",
-        )
-        self.assertEqual(block, "")
-        self.assertEqual(due, [])
-
-    def test_fake_clock_injectable(self):
-        s = default_sheet()
-        s = enqueue(s, "gracias", "lexicon", today=D0)
-        block, _ = due_elicit_block(
-            s, mode="conversation", reason="default_conversation", today=D0,
-        )
-        self.assertEqual(block, "")
-        block, _ = due_elicit_block(
-            s, mode="conversation", reason="default_conversation",
-            today=D0 + datetime.timedelta(days=2),
-        )
-        self.assertIn("gracias", block)
+# (TestDueElicitWiring DELETED 2026-08-03: due_elicit_block died with the
+# session-phase machinery — full-code-audit S9. Due items now ship as FACTS
+# in teaching_data; the DUE_ELICIT_OFFERED event fires from
+# turn_pipeline.stage_prompt_build and is covered by the characterization
+# goldens + tests/test_encounter_variety.py frames tests.)
 
 
 if __name__ == "__main__":

@@ -5,7 +5,9 @@ rule routing is tested on shipped data, not fixtures. Laws under test
 (docs/pedagogy-research-r7-association-intro.md §5 + build plan Phase 3):
 R-G budget → None; R-F cluster ban lists only UNintroduced same-theme keys;
 R-A never fires for a listed false friend; introduction never bumps
-confidence; the INTRODUCE block only rides new_input + flavorable turns.
+confidence; the INTRODUCE block only rides flavorable conversation turns
+(the new_input phase gate died with the session-phase machinery,
+full-code-audit S9, 2026-08-03).
 """
 
 import unittest
@@ -401,7 +403,6 @@ class TestIntroduceBlockWiring(TableCase):
             _fresh_snap(),
             mode="conversation",
             reason="default_conversation",
-            activity_hint="new_input",
         )
         self.assertIn("INTRODUCE", block)
         self.assertIsNotNone(plan)
@@ -414,7 +415,6 @@ class TestIntroduceBlockWiring(TableCase):
             _fresh_snap(),
             mode="conversation",
             reason="known_open_from_sheet",
-            activity_hint="new_input",
         )
         self.assertIn("INTRODUCE", block)
         self.assertIsNotNone(plan)
@@ -436,23 +436,17 @@ class TestIntroduceBlockWiring(TableCase):
                 _fresh_snap(),
                 mode=mode,
                 reason=reason,
-                activity_hint="new_input",
             )
             self.assertEqual(block, "", f"{mode}/{reason}")
             self.assertIsNone(plan, f"{mode}/{reason}")
 
-    def test_non_new_input_phases_produce_nothing(self):
-        for activity in ("retrieval", "task", "free", None):
-            block, plan = introduce_block(
-                default_sheet(),
-                self.table,
-                _fresh_snap(),
-                mode="conversation",
-                reason="default_conversation",
-                activity_hint=activity,
-            )
-            self.assertEqual(block, "", str(activity))
-            self.assertIsNone(plan)
+    def test_activity_hint_parameter_is_gone(self):
+        # S9 deletion (2026-08-03): the session-phase activity gate died —
+        # introduce rides flavorable conversation turns, no phase keying.
+        import inspect
+
+        params = inspect.signature(introduce_block).parameters
+        self.assertNotIn("activity_hint", params)
 
     def test_missing_table_disables_router(self):
         block, plan = introduce_block(
@@ -461,7 +455,6 @@ class TestIntroduceBlockWiring(TableCase):
             _fresh_snap(),
             mode="conversation",
             reason="default_conversation",
-            activity_hint="new_input",
         )
         self.assertEqual(block, "")
         self.assertIsNone(plan)
@@ -473,7 +466,6 @@ class TestIntroduceBlockWiring(TableCase):
             {"introduced_this_session": ["a", "b"], "intro_budget_remaining": 0},
             mode="conversation",
             reason="default_conversation",
-            activity_hint="new_input",
         )
         self.assertEqual(block, "")
         self.assertIsNone(plan)

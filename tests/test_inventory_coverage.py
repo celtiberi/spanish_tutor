@@ -216,17 +216,11 @@ class CoverageGate(unittest.TestCase):
 
     # -- scenes -------------------------------------------------------------
 
-    def test_scene_image_concepts_covered(self) -> None:
-        concepts = []
-        for path in sorted((PACK_DIR / "scenes").glob("*.json")):
-            data = json.loads(path.read_text(encoding="utf-8"))
-            concept = (
-                (data.get("input") or {}).get("image_concept") or ""
-            ).strip()
-            if concept:
-                concepts.append(concept)
-        self.assertTrue(concepts)  # pack ships scenes with image concepts
-        self._assert_covered(concepts, "pack scenes image_concept")
+    def test_scenes_dir_stays_deleted(self) -> None:
+        # Scenes DELETED 2026-08-03 (full-code-audit S9; ENGINEERING §4.6 —
+        # git history is the archive): the pack ships no scenes dir and no
+        # scene image concepts exist to cover.
+        self.assertFalse((PACK_DIR / "scenes").exists())
 
 
 class SidecarLoader(unittest.TestCase):

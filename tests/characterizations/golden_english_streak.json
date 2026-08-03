@@ -41,18 +41,14 @@
     "output_gate_ok",
     "rules_backup",
     "scaffold=ES-forward+EN-rescue",
-    "focus_async",
     "structured_reply",
     "pedagogy:ok",
     "first_seen:café",
     "pedagogy:known_learner_open",
     "phase=ai_tutor",
-    "activity=new_input",
-    "phase_consumed=True",
     "hard_break=True",
     "plan_source=mode_runtime",
     "teacher_mode=planned",
-    "open_scenes=boat_likes,boat_meet_captain,boat_where_boat",
     "mem_shown=english_only,greet",
     "mem_asked=ask_gusta,association,conversation",
     "image_decision:no_image_worthy_concept"
@@ -71,12 +67,6 @@
     "teach_images",
     "try"
   ],
-  "phase": {
-    "activity": "new_input",
-    "frozen_turns": 0,
-    "index": 0,
-    "turns_in_phase": 3
-  },
   "progress_events": [],
   "reply": "¡Ah, entiendo!\n\n**Me gusta el café** (I like coffee).\n\n¿Te gusta el café?",
   "save_sheet_calls": [

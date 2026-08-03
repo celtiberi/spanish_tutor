@@ -100,10 +100,11 @@ class SessionLogger:
         code-router telemetry that never reaches the prompt (§1.1).
         Full text, no truncation."""
         e = dict(entry)
+        # ("activity" left this pop list 2026-08-03: the session-phase clock
+        # died with the S9 deletions; debug entries no longer carry it.)
         shadow = {
             k: e.pop(k)
-            for k in ("mode", "reason", "instructions", "activity",
-                      "hard_break")
+            for k in ("mode", "reason", "instructions", "hard_break")
             if k in e
         }
         record = {

@@ -427,10 +427,11 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
     {
         "id": "c09_phase_mix",
         "description": (
-            "Session phase layer (Phase 2): due item on the sheet → plan "
-            "opens in retrieval (activity= logged per turn, due_elicit rides "
-            "early), then the phase clock advances to new_input once the "
-            "retrieval turn budget (3) is consumed."
+            "Multi-turn due re-encounter: a past-due item keeps riding "
+            "teaching_data as due-for-review FACTS across several "
+            "conversation turns (due_elicit_offered fires from the "
+            "due-data path; the session-phase layer was DELETED "
+            "2026-08-03, full-code-audit S9)."
         ),
         "seed_sheet": _due_reencounter_seed(),
         "seed_mode_state": {
@@ -463,23 +464,12 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
             ],
             "sheet_final": {},
             "due_elicit": True,
-            # Aligned like mode_sets: [open] + turns. Default 14-turn plan
-            # with due_count=1 → retrieval budget 3, so the 4th aligned turn
-            # sits in new_input unless a guard/repair turn froze the clock.
-            "phase_sequence": [
-                ["retrieval"],
-                ["retrieval"],
-                ["retrieval"],
-                ["new_input"],
-            ],
-            "phase_adherence_min": 0.75,
         },
         "mechanical": [
             "mode_sequence",
             "teach_moves",
             "gate_contract",
             "due_elicit_fired",
-            "phase_adherence",
             "no_empty_reply",
             "no_turn_error",
         ],
@@ -488,9 +478,8 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
         "id": "c10_introduce_scaffolded",
         "description": (
             "Phase 3 introduce router: known sheet with nothing due → the "
-            "session plan starts at new_input (session_phases drops the "
-            "retrieval phase), so the flavorable open/turns must carry an "
-            "INTRODUCE plan (notes: introduce_planned:<key>:<rule>). "
+            "flavorable open/turns must mint an INTRODUCE plan (notes: "
+            "introduce_planned:<key>:<rule>). "
             "Mechanical note-presence only — whether the plan marks "
             "(introduced:<key>) or lapses is the model's realization."
         ),
@@ -527,57 +516,6 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
             "teach_moves",
             "gate_contract",
             "introduce_scaffolded",
-            "no_empty_reply",
-            "no_turn_error",
-        ],
-    },
-    {
-        "id": "c11_task_infogap",
-        "description": (
-            "Phase 5 task wiring (ConvergentTaskRuntime): known sheet with "
-            "nothing due → plan new_input(4)/task(5)/free(5); "
-            "seed_phase_state index 1 starts the session in the task phase, "
-            "so flavorable turns must attach the info-gap task block "
-            "(notes: task_goal_offered:<scene_id>; learner slot fills log "
-            "task_slot_filled:<id>). Mechanical note-presence only — "
-            "completing the task is the learner's realization."
-        ),
-        "seed_sheet": _known_sheet(),
-        "seed_mode_state": {
-            "turns_since_hard_break": 999,
-            "hard_breaks_this_session": 0,
-        },
-        # PhaseState plan for a known due-empty sheet is
-        # [new_input 4, task 5, free 5]; index 1 = task phase from the open.
-        "seed_phase_state": {"index": 1},
-        "turns": [
-            "Hola. Estoy bien hoy.",
-            "Muy bien, gracias.",
-        ],
-        "expect": {
-            "mode_sets": [
-                ["conversation"],  # known open (task phase, block rides)
-                ["conversation", "transfer", "cf_recast", "association"],
-                ["conversation", "transfer", "cf_recast", "association"],
-            ],
-            "teach": [
-                {"any_of": ["model", "try", "recast"]},
-                {"any_of": ["model", "try", "recast"]},
-                {"any_of": ["model", "try", "recast"]},
-            ],
-            "gate": [
-                {"forbid_faults": ["gate:sheet_leak"]},
-                {"forbid_faults": ["gate:sheet_leak"]},
-                {"forbid_faults": ["gate:sheet_leak"]},
-            ],
-            "sheet_final": {},
-            "task_instructions_offered": True,
-        },
-        "mechanical": [
-            "mode_sequence",
-            "teach_moves",
-            "gate_contract",
-            "task_goal_offered",
             "no_empty_reply",
             "no_turn_error",
         ],

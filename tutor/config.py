@@ -157,20 +157,9 @@ SIGNAL_CLASSIFIER_BLOCKING = (
     in ("1", "true", "yes", "on")
 )
 
-# Side-rail focus/morphology enricher (cheap). "off" / "static" / "none" = templates only.
-FOCUS_MODEL = os.environ.get("FOCUS_MODEL", "grok-3-mini")
-FOCUS_MAX_TOKENS = int(os.environ.get("FOCUS_MAX_TOKENS", "512"))
-# If true, wait for focus LLM before returning the tutor turn (slow — avoid).
-# Default false: static rail immediately, FOCUS_MODEL enrich runs in background.
-FOCUS_BLOCKING = (
-    os.environ.get("FOCUS_BLOCKING", "false").strip().lower()
-    in ("1", "true", "yes", "on")
-)
-# Async focus enrich after reply (default on when model is enabled).
-FOCUS_ASYNC = (
-    os.environ.get("FOCUS_ASYNC", "true").strip().lower()
-    in ("1", "true", "yes", "on")
-)
+# Focus rail: static templates only (can_dos.build_focus_panel). The
+# FOCUS_MODEL/FOCUS_ASYNC/FOCUS_BLOCKING enricher knobs died with
+# tutor/focus_enrich.py (full-code-audit S9, 2026-08-03).
 # Sheet ability grades come from the teaching model via update_character_sheet
 # (tool-only path; regex hard-observer ability writes removed 2026-07-31).
 # Default ON so live sessions can grade. Set SHEET_TOOLS=0 to disable tools

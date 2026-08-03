@@ -5,7 +5,6 @@ See docs/teaching-system.md. Conversation is the outer loop; modes are pedagogy.
 
 from __future__ import annotations
 
-import json
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any
@@ -131,7 +130,6 @@ class ModeDecision:
     reason: str
     hard_break: bool = False
     targets: dict[str, Any] = field(default_factory=dict)
-    scene_ids: list[str] = field(default_factory=list)
     image_concept: str | None = None
     instructions: str = ""
 
@@ -156,7 +154,7 @@ class ModeSessionState:
     last_hard_mode: str | None = None
     form_focus_cooldown: dict[str, int] = field(default_factory=dict)  # pattern_id → turns left
     english_only_streak: int = 0
-    open_scene_ids: list[str] = field(default_factory=list)
+    # open_scene_ids DELETED 2026-08-03 with scenes (full-code-audit S9).
     # scene_modeled DELETED (Proposal A, 2026-07-29): the prefer-unmodeled
     # ledger predated phases/§1.1a and was unlawful when alive (CHAR-BUG-005
     # RESOLVED-BY-DELETION — docs/reviews-architecture-refactor.md).
@@ -219,7 +217,6 @@ class ModeSessionState:
             "last_hard_mode": self.last_hard_mode,
             "form_focus_cooldown": dict(self.form_focus_cooldown),
             "english_only_streak": self.english_only_streak,
-            "open_scene_ids": list(self.open_scene_ids),
             "last_mode": self.last_mode,
             "last_resolved_form": self.last_resolved_form,
             "resolved_this_session": list(self.resolved_this_session),
@@ -256,9 +253,8 @@ class ModeSessionState:
             for k, v in (d.get("form_focus_cooldown") or {}).items()
         }
         s.english_only_streak = _num("english_only_streak", 0)
-        s.open_scene_ids = [str(x) for x in d.get("open_scene_ids") or []]
-        # Legacy snapshots may carry a "scene_modeled" key — ignored
-        # (field deleted; Proposal A, 2026-07-29).
+        # Legacy snapshots may carry "open_scene_ids" / "scene_modeled"
+        # keys — ignored (fields deleted; 2026-08-03 / 2026-07-29).
         s.last_mode = str(d["last_mode"]) if d.get("last_mode") else None
         s.last_resolved_form = (
             str(d["last_resolved_form"])
@@ -276,73 +272,8 @@ class ModeSessionState:
         return s
 
 
-# Session-phase layer (Phase 2, tutor/session_phases.py): reasons that FREEZE
-# the phase clock — guard turns and comprehension repair never consume phase
-# budget (r6 §4.2 rule 1). conv_session uses this to compute tick(consumed).
-PHASE_FREEZE_REASONS = frozenset({
-    "time_pressure_inline_recast",
-    "time_pressure_chat",
-    "learner_topic_request",
-    "learner_help_request",
-    "grammar_question_inline",
-    "meta_comprehension_stay_on_topic",
-    "blank_open_placement",  # placement open happens before the plan engages
-})
-
-
-def _phase_prefix(activity_hint: str | None, mem: dict) -> str:
-    """Instruction prefix for the session-phase activity hint.
-
-    Applied ONLY on the default CONVERSATION fallthrough and the known-open
-    block — guards ignore the hint entirely, and intervention decisions
-    (cf_recast/form_focus/association/transfer) ride WITHIN phases unmodified.
-    "free" (and unknown hints) keep current behavior: no prefix.
-    """
-    if activity_hint == "retrieval":
-        return (
-            "SESSION PHASE: RETRIEVAL — this turn's priority is the DUE "
-            "RE-ENCOUNTERS block below; weave one due item into a natural "
-            "exchange before anything new."
-        )
-    if activity_hint == "new_input":
-        try:
-            remaining = int(mem.get("intro_budget_remaining"))
-        except (TypeError, ValueError):
-            remaining = None
-        if remaining is None:
-            budget_note = "introduce budget unknown — assume at most 1"
-        elif remaining <= 0:
-            budget_note = (
-                "introduce budget EXHAUSTED (0 left) — introduce NOTHING "
-                "new; recycle already-introduced items model-heavy"
-            )
-        else:
-            budget_note = f"introduce budget: {remaining} left this session"
-        return (
-            "SESSION PHASE: NEW INPUT — introduce at most ONE new pack-legal "
-            f"item this turn IF the session introduce budget allows "
-            f"({budget_note}); model-heavy, keep the try simple (a yes/no or "
-            "A/B comprehension check is acceptable instead of free "
-            "production). If an INTRODUCE block follows, it is THE new item "
-            "— follow it exactly."
-        )
-    if activity_hint == "task":
-        return (
-            "SESSION PHASE: TASK — drive toward ONE concrete conversational "
-            "goal from the open scenes/pack topics and finish it; no topic "
-            "drift until done."
-        )
-    if activity_hint == "close":
-        # PEDAGOGY §1.2 Close phase (USER-ratified 2026-07-28).
-        return (
-            "SESSION PHASE: CLOSE — end the session now: (1) ONE short "
-            "English line naming what they practiced this session (use the "
-            "session summary data provided); (2) a real Spanish farewell "
-            "exchange using a farewell they have met (hasta luego / adiós "
-            "per the sheet ledger); no new items, no corrections unless the "
-            "farewell itself fails."
-        )
-    return ""
+# (PHASE_FREEZE_REASONS + _phase_prefix DELETED 2026-08-03 with the
+# session-phase machinery — full-code-audit S9.)
 
 
 def _topic_suggestion_line(pack_topics: list[str] | None) -> str:
@@ -454,43 +385,6 @@ def _noun_from_text(
     return None
 
 
-def _scene_for_topic(
-    open_scenes: list[dict],
-    *,
-    learner: str = "",
-    signals: set[str] | None = None,
-) -> dict | None:
-    """Pick open scene matching live topic (boat/location/likes) before generic next_best.
-
-    Keyword scoring ONLY (Proposal A KEEP-5, 2026-07-29): passive /
-    live-topic scene pursuit is not covered by task bind order. The
-    prefer-unmodeled `+1` and the `_scene_needs_model` fallback were
-    DELETED with the scene_modeled ledger (CHAR-BUG-005
-    RESOLVED-BY-DELETION) — no topic match, no scene.
-    """
-    low = (learner or "").lower()
-    sigs = set(signals or [])
-    scored: list[tuple[int, dict]] = []
-    for sc in open_scenes or []:
-        score = 0
-        blob = json.dumps(sc, ensure_ascii=False).lower()
-        if any(w in low for w in ("bote", "barco", "río", "rio", "guatemala", "dulce")):
-            if "bote" in blob or "rio" in blob or "captain" in blob or "boat" in blob:
-                score += 3
-        if any(w in low for w in ("gusta", "café", "cafe", "música", "musica")):
-            if "gusta" in blob or "like" in blob or "cafe" in blob:
-                score += 3
-        if "estoy" in low or "dónde" in low or "donde" in low or "origin" in sigs:
-            if "estar" in blob or "estoy" in blob or "ip-04" in blob or "ip-07" in blob:
-                score += 2
-        if score:
-            scored.append((score, sc))
-    if not scored:
-        return None
-    scored.sort(key=lambda x: -x[0])
-    return scored[0][1]
-
-
 # Appended to every non-open decision while the learner is still a TRUE ZERO
 # (blank sheet AND no successful Spanish this turn). Incident 2026-07-28:
 # a reset beginner got 100% Spanish — PEDAGOGY P1 (comprehensible meaning is
@@ -514,12 +408,10 @@ def select_mode(
     is_open: bool = False,
     learner: str = "",
     mode_state: ModeSessionState | None = None,
-    open_scenes: list[dict] | None = None,
     images_shown: set[str] | list[str] | None = None,
     session_memory: dict | None = None,
     pack_topics: list[str] | None = None,
     profile: dict | None = None,  # accepted for compat; personal data unused
-    activity_hint: str | None = None,  # session-phase layer; guards ignore it
 ) -> ModeDecision:
     """Mode selection + true-zero register overlay.
 
@@ -538,12 +430,10 @@ def select_mode(
         is_open=is_open,
         learner=learner,
         mode_state=mode_state,
-        open_scenes=open_scenes,
         images_shown=images_shown,
         session_memory=session_memory,
         pack_topics=pack_topics,
         profile=profile,
-        activity_hint=activity_hint,
     )
     obs = observations or {}
     blank = bool(
@@ -568,28 +458,21 @@ def _select_mode_impl(
     is_open: bool = False,
     learner: str = "",
     mode_state: ModeSessionState | None = None,
-    open_scenes: list[dict] | None = None,
     images_shown: set[str] | list[str] | None = None,
     session_memory: dict | None = None,
     pack_topics: list[str] | None = None,
     profile: dict | None = None,  # accepted for compat; personal data unused
-    activity_hint: str | None = None,  # session-phase layer; guards ignore it
 ) -> ModeDecision:
     """Deterministic mode selection — first matching guard wins.
 
     See docs/teaching-system.md § Break-from-conversation policy.
-    activity_hint (tutor/session_phases.py) flavors ONLY the known-open block
-    and the default CONVERSATION fallthrough; every guard and intervention
-    branch ignores it (frozen guard chain has absolute priority) — with ONE
-    adjudicated exception: guard 7's topic scene pick is SUPPRESSED on
-    new_input/close activities (PHASE HOST rule 6, Proposal A 2026-07-29 —
-    introduce owns new_input, close owns close per PEDAGOGY §6.4).
+    (Scenes + the session-phase activity hint DELETED 2026-08-03 —
+    full-code-audit S9; the frozen guard chain is unchanged.)
     """
     obs = observations or {}
     mem = session_memory or {}
     state = mode_state or ModeSessionState()
     signals = set(obs.get("signals") or [])
-    open_scenes = open_scenes or []
     shown_imgs = set(images_shown or [])
     blank = bool(obs.get("blank_sheet") if "blank_sheet" in obs else is_blank_learner(sheet))
     hits = detect_error_pattern_hits(learner) if learner and not is_open else []
@@ -818,7 +701,6 @@ def _select_mode_impl(
                 "for the zero state ONLY — the moment they produce ANY Spanish, "
                 "drop it and return to the standard mostly-Spanish register."
             ),
-            scene_ids=[s.get("id") for s in open_scenes if s.get("id")],
         )
     if is_open and not blank:
         # Open from sheet abilities ONLY. Personal-data capture is disabled
@@ -873,15 +755,11 @@ def _select_mode_impl(
             "One clear try that advances the sheet agenda — "
             "not a zero-placement greeting ladder."
         )
-        phase_prefix = _phase_prefix(activity_hint, mem)
-        if phase_prefix:
-            lines.insert(0, phase_prefix)
         return ModeDecision(
             Mode.CONVERSATION,
             reason="known_open_from_sheet",
             hard_break=False,
             image_concept=None,
-            scene_ids=[s.get("id") for s in open_scenes if s.get("id")],
             targets={
                 "next_best": {
                     "can_do": nb.get("can_do"),
@@ -1010,7 +888,6 @@ def _select_mode_impl(
                 "They just used the form well. Same form, NEW micro-context "
                 "(different place/person/topic). Do not re-drill."
             ),
-            scene_ids=[s.get("id") for s in open_scenes if s.get("id")],
         )
 
     # 6) Concrete noun first-time this session → association (+ image)
@@ -1032,42 +909,9 @@ def _select_mode_impl(
             ),
         )
 
-    # 7) Topic-matched open scene (before weak next_best).
-    #    PHASE HOST rule 6 (Proposal A, 2026-07-29): the pick does NOT run
-    #    when the session phase is new_input or close — introduce owns
-    #    new_input and close owns close (PEDAGOGY §6.4); those turns fall
-    #    through to default_conversation so the flavorable content blocks
-    #    fire. The prefer-unmodeled fallback is DELETED (CHAR-BUG-005
-    #    RESOLVED-BY-DELETION): only a live topic match reaches a scene here.
-    sc = None
-    if activity_hint not in ("new_input", "close"):
-        sc = _scene_for_topic(open_scenes, learner=learner, signals=signals)
-    if sc:
-        goal = sc.get("goal") or {}
-        inp = sc.get("input") or {}
-        img = inp.get("image_concept")
-        if img and img in shown_imgs:
-            img = None  # already shown this session — don't re-wallpaper
-        return ModeDecision(
-            Mode.CONVERSATION,
-            reason=f"scene_goal:{sc.get('id')}",
-            hard_break=False,
-            image_concept=img,
-            targets={
-                "can_do": goal.get("can_do"),
-                "target_forms": goal.get("target_forms") or [],
-                "model_lines": inp.get("model_lines") or [],
-                "elicit": (sc.get("production") or {}).get("elicit"),
-                "transfer": (sc.get("transfer") or {}).get("elicit"),
-                "prefer_over_next_best": True,
-            },
-            scene_ids=[sc.get("id")] if sc.get("id") else [],
-            instructions=(
-                f"Pursue open scene goal '{sc.get('id')}' (can-do {goal.get('can_do')}) "
-                "in natural chat — not a flashcard list. Prefer this over unrelated "
-                "next_best stretches. Model target forms; one elicit; advance if they already can."
-            ),
-        )
+    # 7) (Topic-matched open scene DELETED 2026-08-03 with scenes —
+    #    full-code-audit S9; USER: even goal/exit data is code-selected
+    #    steering.)
 
     # 8) Default conversation (next_best is a weak guide only)
     nb = (sheet.get("next_best") or {})
@@ -1075,9 +919,6 @@ def _select_mode_impl(
         "Real Spanish conversation. React to them first. One elicit. Teach with model+try. "
         "No re-asking covered probes. next_best is optional if the live topic is richer."
     )
-    phase_prefix = _phase_prefix(activity_hint, mem)
-    if phase_prefix:
-        default_instr = phase_prefix + "\n" + default_instr
     return ModeDecision(
         Mode.CONVERSATION,
         reason="default_conversation",
@@ -1087,7 +928,6 @@ def _select_mode_impl(
             "next_best": nb.get("statement") or nb.get("activity"),
             "next_best_is_optional": True,
         },
-        scene_ids=[s.get("id") for s in open_scenes if s.get("id")],
         instructions=default_instr,
     )
 
@@ -1195,6 +1035,4 @@ def mode_executor_brief(decision: ModeDecision) -> str:
         lines.append(f"TARGETS: {decision.targets}")
     if decision.image_concept:
         lines.append(f"IMAGE_CONCEPT: {decision.image_concept}")
-    if decision.scene_ids:
-        lines.append(f"OPEN_SCENES: {decision.scene_ids}")
     return "\n".join(lines)

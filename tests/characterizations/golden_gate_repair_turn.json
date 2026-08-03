@@ -48,17 +48,13 @@
     "output_gate_still_fail:gate:unscaffolded_new_item",
     "rules_backup",
     "scaffold=ES-forward+EN-rescue",
-    "focus_async",
     "structured_reply",
     "pedagogy:ok",
     "pedagogy:known_learner_open",
     "phase=ai_tutor",
-    "activity=new_input",
-    "phase_consumed=True",
     "hard_break=False",
     "plan_source=mode_runtime",
     "teacher_mode=planned",
-    "open_scenes=boat_likes,boat_meet_captain,boat_where_boat",
     "mem_shown=greet,spanish_ok",
     "mem_asked=conversation"
   ],
@@ -77,12 +73,6 @@
     "teach_images",
     "try"
   ],
-  "phase": {
-    "activity": "new_input",
-    "frozen_turns": 0,
-    "index": 0,
-    "turns_in_phase": 2
-  },
   "progress_events": [],
   "reply": "¡Hola!\n\n**Mucho gusto**.\n\nDi: **mucho gusto**.",
   "save_sheet_calls": [

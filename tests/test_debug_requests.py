@@ -49,7 +49,6 @@ def _make_entry(turn=0):
             "hard_break": False,
             "instructions": "SESSION PHASE: NEW INPUT — introduce at most ONE…",
         },
-        activity="new_input",
         usage={
             "input_tokens": 1000 + turn,
             "output_tokens": 200,
@@ -78,7 +77,6 @@ class TestDebugEntryShape(unittest.TestCase):
         self.assertIn("SESSION PHASE", e["instructions"])
         self.assertEqual(e["mode"], "conversation")
         self.assertEqual(e["reason"], "default_conversation")
-        self.assertEqual(e["activity"], "new_input")
         self.assertEqual(e["model"], "claude-test")
 
     def test_entry_history_excludes_task_message(self):
@@ -119,7 +117,6 @@ class TestDebugRingBuffer(unittest.TestCase):
                 messages=[{"role": "user", "content": f"task {i}"}],
                 task=f"task {i}",
                 decision_dict={"mode": "conversation", "reason": "r"},
-                activity="free",
                 usage={"input_tokens": i},
                 gate_result=None,
                 notes=[],
@@ -142,7 +139,6 @@ class TestDebugRingBuffer(unittest.TestCase):
             messages=None,
             task=None,
             decision_dict=None,
-            activity=None,
             usage=None,
             gate_result=None,
             notes=None,

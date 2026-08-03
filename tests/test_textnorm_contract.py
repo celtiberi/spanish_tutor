@@ -823,9 +823,10 @@ class TestCallerBindings(unittest.TestCase):
     copy (drift vector) breaks identity, not just equality."""
 
     def test_facade_reexports_are_the_shared_functions(self):
-        from tutor import observe, task_runtime
+        # task_runtime (the other historical façade) was DELETED 2026-08-03
+        # with the session-phase machinery (full-code-audit S9).
+        from tutor import observe
         self.assertIs(observe.word_present, textnorm.word_present)
-        self.assertIs(task_runtime.phrase_present, textnorm.phrase_present)
 
     def test_fold_aliases_are_the_named_policies(self):
         from tutor import character_sheet, teach_assets

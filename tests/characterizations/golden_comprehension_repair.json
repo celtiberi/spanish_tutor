@@ -48,18 +48,14 @@
       "output_gate_ok",
       "rules_backup",
       "scaffold=ES-forward+EN-rescue",
-      "focus_async",
       "structured_reply",
       "pedagogy:ok",
       "asked_topic:location",
       "pedagogy:known_learner_open",
       "phase=ai_tutor",
-      "activity=new_input",
-      "phase_consumed=True",
       "hard_break=False",
       "plan_source=mode_runtime",
       "teacher_mode=planned",
-      "open_scenes=boat_likes,boat_meet_captain,boat_where_boat",
       "mem_shown=english_only,estoy,greet,meta_comprehension,spanish_ok",
       "mem_asked=comprehension_repair,conversation"
     ],
@@ -76,12 +72,6 @@
       "teach_images",
       "try"
     ],
-    "phase": {
-      "activity": "new_input",
-      "frozen_turns": 1,
-      "index": 0,
-      "turns_in_phase": 2
-    },
     "progress_events": [],
     "reply": "¡Perfecto!\n\n**Estoy en el bote.**\n\n¿Dónde estás tú?",
     "save_sheet_calls": [
@@ -140,17 +130,13 @@
       "output_gate_ok",
       "rules_backup",
       "scaffold=ES-forward+EN-rescue",
-      "focus_async",
       "structured_reply",
       "pedagogy:ok",
       "pedagogy:known_learner_open",
       "phase=ai_tutor",
-      "activity=new_input",
-      "phase_consumed=False",
       "hard_break=True",
       "plan_source=mode_runtime",
       "teacher_mode=planned",
-      "open_scenes=boat_likes,boat_meet_captain,boat_where_boat",
       "mem_shown=english_only,greet,meta_comprehension",
       "mem_asked=comprehension_repair,conversation",
       "image_decision:no_image_worthy_concept"
@@ -170,12 +156,6 @@
       "teach_images",
       "try"
     ],
-    "phase": {
-      "activity": "new_input",
-      "frozen_turns": 1,
-      "index": 0,
-      "turns_in_phase": 1
-    },
     "progress_events": [],
     "reply": "**Estoy contento** (I'm happy).\n\nContento means happy.\n\nDi: **Estoy contento**.",
     "save_sheet_calls": [

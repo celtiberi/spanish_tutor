@@ -29,21 +29,19 @@ from evals.conv_checks import (
     _mode,
     due_elicit_fired,
     introduce_scaffolded,
-    phase_adherence,
     progress_milestones_fired,
     recast_or_gate_attempt,
-    task_goal_offered,
     uptake_flag_honored,
 )
 
+# (phase_adherence + task_goal_offered DELETED 2026-08-03 with the
+# session-phase machinery + task runtime — full-code-audit S9.)
 MIGRATED_CHECKERS = (
     recast_or_gate_attempt,
     uptake_flag_honored,
     due_elicit_fired,
     progress_milestones_fired,
     introduce_scaffolded,
-    task_goal_offered,
-    phase_adherence,
 )
 
 
@@ -93,10 +91,6 @@ def test_live_parity_events_vs_replay(tutor_session_factory):
     turns.append(_turn_record(s.user_turn("Me gusta el pan")))
     result = {"turns": turns}
     _parity({"expect": {"due_elicit": True}}, result)
-    _parity(
-        {"expect": {"phase_sequence": [["retrieval"], ["retrieval"]]}},
-        result,
-    )
 
     ctx2 = tutor_session_factory(
         seed_sheet=_known_seed(),
@@ -139,14 +133,8 @@ def test_old_artifacts_without_events_still_replay():
     assert introduce_scaffolded(
         {"expect": {"introduce_planned": True}}, result
     ) == []
-    assert task_goal_offered(
-        {"expect": {"task_instructions_offered": True}}, result
-    ) == []
     assert progress_milestones_fired(
         {"expect": {"progress_milestones": ["planted:hola"]}}, result
-    ) == []
-    assert phase_adherence(
-        {"expect": {"phase_sequence": [["new_input"]]}}, result
     ) == []
     assert _mode(result["turns"][0]) == "conversation"
 

@@ -25,7 +25,8 @@ gates, never softer):
 - can_do_known      skill status becomes "known" under the code gate
                     (conf >= 0.80 and solid_uses >= 2) — the ONLY kind
                     allowed mastery language
-- task_complete     task_runtime machine verdict
+- task_complete     HISTORICAL ONLY — task_runtime deleted 2026-08-03; the
+                    kind stays so old ledger lines load/display (bare ids)
 
 There is NO session-end / engagement milestone (streak chrome banned).
 
@@ -549,7 +550,6 @@ def concept_groups(
     sheet: dict,
     *,
     table: dict | None = None,
-    scene_goals: dict | None = None,
     ledger_path: Path | str | None = None,
     limit_groups: int | None = None,
 ) -> list[dict]:
@@ -575,12 +575,6 @@ def concept_groups(
 
     sheet = sheet if isinstance(sheet, dict) else {}
     nodes = concept_nodes(ledger_path=ledger_path)
-    goals = scene_goals
-    if goals is None and any(
-        str(n.get("item_kind") or "") == "task" or n.get("kind") == "task_complete"
-        for n in nodes
-    ):
-        goals = default_scene_goals()
     skills = sheet.get("skills") or {}
 
     sections: dict[str, dict] = {}
@@ -618,7 +612,7 @@ def concept_groups(
     for n in nodes:
         n["needs_recheck"] = live_state_supports(n, sheet) is False
         n["display_state"] = display_state(n)
-        n.update(humanize_event(n, table, goals))
+        n.update(humanize_event(n, table))
         ts = str(n.get("ts") or "")
         ik = str(n.get("item_kind") or "")
         key = str(n.get("key") or "")
@@ -710,50 +704,18 @@ def can_do_display(key: str, kind: str) -> str:
     return short[0].upper() + short[1:]
 
 
-def _goal_short(desc: str) -> str:
-    """Scene primary_exit description → short goal phrase for a chip."""
-    s = " ".join((desc or "").split())
-    head = s[:80]
-    if ":" in head:
-        s = s.split(":", 1)[1].strip()
-    low = s.lower()
-    for pre in ("the learner must ", "the learner "):
-        if low.startswith(pre):
-            s = s[len(pre):]
-            break
-    s = s.split(". ", 1)[0]
-    return _short_phrase(s)
-
-
-def default_scene_goals() -> dict[str, str]:
-    """scene_id → short goal text from the configured course pack."""
-    try:
-        from .scenes import load_scenes
-
-        out: dict[str, str] = {}
-        for sc in load_scenes():
-            sid = str(sc.get("id") or "")
-            if not sid:
-                continue
-            desc = str(((sc.get("primary_exit") or {}).get("description")) or "")
-            short = _goal_short(desc) if desc else ""
-            out[sid] = short or sid.replace("_", " ")
-        return out
-    except Exception:
-        return {}
-
-
 def humanize_event(
     event: dict,
     table: dict | None,
-    scene_goals: dict | None = None,
 ) -> dict:
     """{'display': str, 'gloss': str} for one event — humanized server-side.
 
     Lexicon/grammar keys display as the Spanish itself (gloss from the
     association table for hover); can-do ids as their shortened statement;
-    task keys as the scene goal; anything unknown as the raw key. Display
-    names are DERIVED from existing course assets, never free prose (§3).
+    historical task keys as their bare scene id (scenes + task_runtime
+    DELETED 2026-08-03 — the ledger entries stay, the ids are opaque
+    strings now); anything unknown as the raw key. Display names are
+    DERIVED from existing course assets, never free prose (§3).
     """
     kind = str(event.get("kind") or "")
     key = str(event.get("key") or "")
@@ -765,10 +727,8 @@ def humanize_event(
     if item_kind == "skill" or kind in ("can_do_emerging", "can_do_known"):
         return {"display": can_do_display(key, kind), "gloss": ""}
     if item_kind == "task" or kind == "task_complete":
-        goals = scene_goals if scene_goals is not None else default_scene_goals()
-        goal = str(goals.get(key) or "").strip()
-        disp = (goal[0].upper() + goal[1:]) if goal else key
-        return {"display": disp, "gloss": ""}
+        # Historical entries only — no live emitter since task_runtime died.
+        return {"display": key, "gloss": ""}
     entry = (table or {}).get(key)
     gloss = str(((entry or {}).get("gloss_en")) or "")
     return {"display": key, "gloss": gloss}
@@ -1004,7 +964,6 @@ def build_progress_payload(
     *,
     session_id: str = "",
     table: dict | None = None,
-    scene_goals: dict | None = None,
     ledger_path: Path | str | None = None,
     limit_groups: int = 20,
     today: datetime.date | None = None,
@@ -1026,7 +985,6 @@ def build_progress_payload(
     groups = concept_groups(
         sheet,
         table=table,
-        scene_goals=scene_goals,
         ledger_path=ledger_path,
         limit_groups=limit_groups,
     )

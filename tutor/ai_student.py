@@ -1065,7 +1065,6 @@ def run_simulation(
     pack_dir: Path | None = None,
     sheet_path: Path | None = None,
     reset_sheet: bool = True,
-    focus_model: str | None = "off",
     live_print: bool = True,
     use_tools: bool = False,
     session_log: bool = False,
@@ -1112,7 +1111,6 @@ def run_simulation(
         use_tools=use_tools,
         label=f"ai-student-{persona.get('id')}",
         log=session_log,
-        focus_model=focus_model if focus_model is not None else "off",
     )
     # Planned aliases are the only teacher runtime (E4/E4b) — the session
     # constructor already hard-errors on unknown modes; pin the canonical
@@ -1501,11 +1499,6 @@ def main(argv: list[str] | None = None) -> None:
         help="Do not wipe sheet (continue learning across runs)",
     )
     ap.add_argument(
-        "--focus-model",
-        default="off",
-        help="FOCUS_MODEL for rail (default off for faster sim)",
-    )
-    ap.add_argument(
         "--json-out",
         type=Path,
         default=None,
@@ -1530,7 +1523,6 @@ def main(argv: list[str] | None = None) -> None:
         tutor_model=args.tutor_model,
         sheet_path=args.sheet,
         reset_sheet=reset,
-        focus_model=args.focus_model,
         live_print=not args.quiet,
     )
     # live_print already streamed turns; print summary checks always

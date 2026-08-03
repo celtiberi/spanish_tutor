@@ -36,9 +36,9 @@ import unicodedata
 # ASCII range + accented vowels + ü + ñ. Used for word boundaries
 # ("letter-adjacent = same word") and token scans. Callers lowercase their
 # text before matching — this class is deliberately lowercase-only.
-# Replaces: observe._ES_LETTERS, task_runtime._ES_LETTERS,
-# output_gate._ES_BOUND, turn_morph._ES, tutor_response._CONCEPT_TOKEN's
-# inline class.
+# Replaces: observe._ES_LETTERS, output_gate._ES_BOUND, turn_morph._ES,
+# tutor_response._CONCEPT_TOKEN's inline class (and the deleted
+# task_runtime._ES_LETTERS).
 SPANISH_LETTERS = "a-záéíóúüñ"
 
 
@@ -111,16 +111,14 @@ def phrase_match(needle: str, text: str) -> "re.Match[str] | None":
 
 
 def phrase_present(needle: str, text: str) -> bool:
-    """Word/phrase-boundary containment as bool (task_runtime's historical
-    phrase_present semantics: single words behave exactly like
-    word_present on a stripped single word; multiword phrases match each
-    word at the same boundaries joined by \\s+, plural tolerance on the
-    final word — «leche» never matches inside «lechero», «cómo estás»
-    matches inside «Hola, ¿cómo estás hoy?»).
+    """Word/phrase-boundary containment as bool (the deleted task_runtime
+    façade's historical phrase_present semantics: single words behave
+    exactly like word_present on a stripped single word; multiword phrases
+    match each word at the same boundaries joined by \\s+, plural tolerance
+    on the final word — «leche» never matches inside «lechero», «cómo
+    estás» matches inside «Hola, ¿cómo estás hoy?»).
 
     Equivalent to bool(phrase_match(...)) — pinned by the contract test.
-
-    Users: task_runtime (re-export façade; evidence-list slot filling).
     """
     return phrase_match(needle, text) is not None
 

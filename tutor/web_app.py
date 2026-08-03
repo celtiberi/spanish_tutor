@@ -469,7 +469,7 @@ def create_app() -> FastAPI:
         # Always open a new tutor turn on page load. Both branches route
         # through the unified new-chat reset inside open_session() (Phase 1
         # batch 2, SessionState.reset("new_chat")): transcript, focus
-        # fields, session memory, mode/phase/task state, debug ring and the
+        # fields, session memory, mode state, debug ring and the
         # per-chat cost tracker all reset there — no inline partial clears
         # (the batch-1 census leak).
         turn = session.open_session()
@@ -635,8 +635,7 @@ def main() -> None:
     port = int(__import__("os").environ.get("PORT", "8765"))
     print(f"ml_teacher web → http://{host}:{port}")
     print(
-        f"  tutor={config.MODEL}  focus={config.FOCUS_MODEL}  "
-        f"pack={config.DEFAULT_PACK_DIR.name}"
+        f"  tutor={config.MODEL}  pack={config.DEFAULT_PACK_DIR.name}"
     )
     if tts_mod.tts_enabled():
         print(

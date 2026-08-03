@@ -24,7 +24,6 @@ def test_debug_entry_carries_raw_and_reply():
         messages=[{"role": "user", "content": "task"}],
         task="task",
         decision_dict=None,
-        activity=None,
         usage={"input_tokens": 10, "output_tokens": 5},
         raw="<plan>secret</plan><tutor>hola</tutor>",
         reply="hola",
@@ -43,7 +42,6 @@ def test_log_model_exchange_writes_full_entry(monkeypatch, tmp_path):
         messages=[],
         task="T",
         decision_dict=None,
-        activity=None,
         usage=None,
         raw="RAW",
         reply="VISIBLE",
@@ -70,8 +68,7 @@ def test_router_shadow_never_reads_as_sent(monkeypatch, tmp_path):
     entry = build_debug_entry(
         model="fake", system=[], messages=[], task="T",
         decision_dict={"mode": "new_input", "reason": "r",
-                       "instructions": "SESSION PHASE: NEW INPUT — script"},
-        activity="new_input", usage=None, raw="", reply="",
+                       "instructions": "SESSION PHASE: NEW INPUT — script"}, usage=None, raw="", reply="",
     )
     logger.log_model_exchange(entry)
     got = json.loads(

@@ -6,10 +6,11 @@ Grok E6 (BINDING): "Phase 3 needs a checked-in catalog of the ~40 prefixes
 events+strings dual-write forever."  This module IS that catalog, plus the
 typed event vocabulary and the dual-emit machinery.
 
-THE MEASURED INVENTORY (2026-07-28, this batch): the ``result.notes`` bus
-carries **62 catalogued prefix families** (68 distinct note constants once
-the seven fixed ``pedagogy:*`` values and fixed-payload variants are counted
-individually) — the review's "~40" undercounted by ~22.  Every family is a
+THE MEASURED INVENTORY (2026-07-28, this batch; re-measured 2026-08-03
+after the S9 deletions removed activity/phase_consumed/open_scenes/
+task_*/close_phase_offered/focus_async): the ``result.notes`` bus carries
+**63 catalogued prefix families** — the review's "~40" undercounted.
+Every family is a
 ``TurnEventKind`` member with a ``NoteSpec`` row in ``NOTE_CATALOG`` below:
 emitter site(s), consumers, payload shape (the part after the separator),
 stability class, and whether the exact strings are pinned inside the Phase 0
@@ -50,12 +51,11 @@ STABILITY CLASSES (measured, not assumed):
     Phase 3 batch 2 every checker reads the TYPED events first (recorded per
     turn by run_conv_smoke) and falls back to the note strings only for
     historical result artifacts recorded before events existed:
-    ``mode`` (``_mode``), ``activity`` (``phase_adherence``),
+    ``mode`` (``_mode``),
     ``uptake_flagged`` (``uptake_flag_honored``), ``due_elicit_offered``
     (``due_elicit_fired``), ``progress_milestone``
     (``progress_milestones_fired``), ``introduce_planned``
-    (``introduce_scaffolded``), ``task_goal_offered``/``task_slot_filled``
-    (``task_goal_offered``), and the six ``output_gate*`` kinds
+    (``introduce_scaffolded``), and the six ``output_gate*`` kinds
     (``recast_or_gate_attempt``: precise event-kind + fault-payload checks
     on the event path; the legacy fallback keeps the historical
     "output_gate"/"missing_recast" joined-notes substring scan).
@@ -105,10 +105,6 @@ class TurnEventKind(str, Enum):
     UPTAKE_FLAGGED = "uptake_flagged"
     INTRODUCE_TABLE_MISSING = "introduce_table_missing"
     INTRODUCE_PLANNED = "introduce_planned"
-    TASK_SLOT_FILLED = "task_slot_filled"
-    TASK_COMPLETE = "task_complete"
-    TASK_GOAL_OFFERED = "task_goal_offered"
-    CLOSE_PHASE_OFFERED = "close_phase_offered"
     INTRODUCE_DOWNGRADED = "introduce_downgraded"
     # -- mode selection (stage "select"; strings render in the tail) --------
     MODE = "mode"
@@ -141,7 +137,6 @@ class TurnEventKind(str, Enum):
     IMAGE_DECISION = "image_decision"
     TEACH_IMAGE = "teach_image"
     # -- sheet maintenance / _finish (stage "sheet") ------------------------
-    FOCUS_ASYNC = "focus_async"
     RECAST = "recast"
     STRUCTURED_REPLY = "structured_reply"
     SHEET_TOOL_UPDATE = "sheet_tool_update"
@@ -159,12 +154,9 @@ class TurnEventKind(str, Enum):
     # -- turn tail summary (stage "tail") -----------------------------------
     OPEN_PHASE = "open_phase"
     PHASE = "phase"
-    ACTIVITY = "activity"
-    PHASE_CONSUMED = "phase_consumed"
     HARD_BREAK = "hard_break"
     PLAN_SOURCE = "plan_source"
     TEACHER_MODE = "teacher_mode"
-    OPEN_SCENES = "open_scenes"
     MEM_SHOWN = "mem_shown"
     MEM_ASKED = "mem_asked"
     # -- rules path — HISTORICAL-REPLAY-ONLY. The TEACHER_MODE=rules runtime
@@ -232,8 +224,12 @@ NOTE_CATALOG: dict[TurnEventKind, NoteSpec] = {s.kind: s for s in [
           "<concept>", ["conv_session._note_image_miss"], [],
           "log-only", False),
     _spec(TurnEventKind.DUE_ELICIT_OFFERED, "due_elicit_offered:", False,
-          "<key>,<key>,…", ["conv_session._execute_ai_tutor (due_block)"],
-          ["evals/conv_checks.due_elicit_fired (substring)"],
+          "<key>,<key>,…",
+          ["turn_pipeline.stage_prompt_build (fires when due facts ride "
+           "teaching_data — the due-DATA path; the phase-gated contributor "
+           "died 2026-08-03)"],
+          ["evals/conv_checks.due_elicit_fired (substring)",
+           "turn_pipeline.stage_frame_record (frames_seen writes)"],
           "eval-pinned", True),
     _spec(TurnEventKind.UPTAKE_FLAGGED, "uptake_flagged:", False,
           "<flagged token>",
@@ -248,20 +244,6 @@ NOTE_CATALOG: dict[TurnEventKind, NoteSpec] = {s.kind: s for s in [
           "<key>:<rule id R-A…R-G>", ["conv_session._execute_ai_tutor"],
           ["evals/conv_checks.introduce_scaffolded (substring)"],
           "eval-pinned", True),
-    _spec(TurnEventKind.TASK_SLOT_FILLED, "task_slot_filled:", False,
-          "<slot id>", ["conv_session._execute_ai_tutor (task phase)"],
-          ["evals/conv_checks.task_goal_offered (substring)"],
-          "eval-pinned", False),
-    _spec(TurnEventKind.TASK_COMPLETE, "task_complete:", False,
-          "<scene id>", ["conv_session._execute_ai_tutor (task phase)"],
-          [], "log-only", False),
-    _spec(TurnEventKind.TASK_GOAL_OFFERED, "task_goal_offered:", False,
-          "<scene id>", ["conv_session._execute_ai_tutor (task phase)"],
-          ["evals/conv_checks.task_goal_offered (substring)"],
-          "eval-pinned", True),
-    _spec(TurnEventKind.CLOSE_PHASE_OFFERED, "close_phase_offered", True,
-          "", ["conv_session._execute_ai_tutor (close phase)"], [],
-          "log-only", True),
     _spec(TurnEventKind.INTRODUCE_DOWNGRADED, "introduce_downgraded:", False,
           "<key>:R-B_to_R-D", ["conv_session._execute_ai_tutor (AMEND 4b)"],
           [], "log-only", False),
@@ -386,8 +368,6 @@ NOTE_CATALOG: dict[TurnEventKind, NoteSpec] = {s.kind: s for s in [
     _spec(TurnEventKind.TEACH_IMAGE, "teach_image:", False, "<concept>",
           ["conv_session._execute_ai_tutor"],
           [], "log-only", False),
-    _spec(TurnEventKind.FOCUS_ASYNC, "focus_async", True, "",
-          ["conv_session._finish"], [], "log-only", True),
     _spec(TurnEventKind.RECAST, "recast", True, "",
           ["conv_session._finish (has_recast, deduped by membership check "
            "against the sheet notes)"], [], "log-only", False),
@@ -449,14 +429,6 @@ NOTE_CATALOG: dict[TurnEventKind, NoteSpec] = {s.kind: s for s in [
           "ai_tutor (historical replay may carry rules <card.phase> values)",
           ["conv_session._execute_ai_tutor tail"],
           [], "log-only", True),
-    _spec(TurnEventKind.ACTIVITY, "activity=", False,
-          "retrieval | new_input | task | free | close",
-          ["conv_session._execute_ai_tutor tail"],
-          ["evals/conv_checks.phase_adherence (prefix + value)"],
-          "eval-pinned", True),
-    _spec(TurnEventKind.PHASE_CONSUMED, "phase_consumed=", False,
-          "True | False", ["conv_session._execute_ai_tutor tail"], [],
-          "log-only", True),
     _spec(TurnEventKind.HARD_BREAK, "hard_break=", False, "True | False",
           ["conv_session._execute_ai_tutor tail"], [], "log-only", True),
     _spec(TurnEventKind.PLAN_SOURCE, "plan_source=", False,
@@ -468,9 +440,6 @@ NOTE_CATALOG: dict[TurnEventKind, NoteSpec] = {s.kind: s for s in [
           "E4/E4b deletion 2026-07-28)",
           ["conv_session._execute_ai_tutor tail"],
           [], "log-only", True),
-    _spec(TurnEventKind.OPEN_SCENES, "open_scenes=", False,
-          "<scene id>,… or —", ["conv_session._execute_ai_tutor tail"], [],
-          "log-only", True),
     _spec(TurnEventKind.MEM_SHOWN, "mem_shown=", False,
           "<sorted memory.shown>,… or —",
           ["conv_session._execute_ai_tutor tail"],
@@ -543,10 +512,6 @@ _RENDER = {
     _K.INTRODUCE_TABLE_MISSING: lambda e: "introduce_table_missing",
     _K.INTRODUCE_PLANNED:
         lambda e: f"introduce_planned:{e.key}:{e.payload.get('rule_id')}",
-    _K.TASK_SLOT_FILLED: lambda e: f"task_slot_filled:{e.key}",
-    _K.TASK_COMPLETE: lambda e: f"task_complete:{e.key}",
-    _K.TASK_GOAL_OFFERED: lambda e: f"task_goal_offered:{e.key}",
-    _K.CLOSE_PHASE_OFFERED: lambda e: "close_phase_offered",
     _K.INTRODUCE_DOWNGRADED:
         lambda e: f"introduce_downgraded:{e.key}:"
                   f"{e.payload.get('path', 'R-B_to_R-D')}",
@@ -591,7 +556,6 @@ _RENDER = {
         lambda e: f"image_declared_cooldown:{e.key}",
     _K.IMAGE_DECISION: lambda e: f"image_decision:{e.key}",
     _K.TEACH_IMAGE: lambda e: f"teach_image:{e.key}",
-    _K.FOCUS_ASYNC: lambda e: "focus_async",
     _K.RECAST: lambda e: "recast",
     _K.STRUCTURED_REPLY: lambda e: "structured_reply",
     _K.SHEET_TOOL_UPDATE: lambda e: "tool_update",
@@ -608,13 +572,9 @@ _RENDER = {
     _K.PEDAGOGY: lambda e: f"pedagogy:{e.key}",
     _K.OPEN_PHASE: lambda e: f"open_phase={e.key}",
     _K.PHASE: lambda e: f"phase={e.key}",
-    _K.ACTIVITY: lambda e: f"activity={e.key}",
-    _K.PHASE_CONSUMED: lambda e: f"phase_consumed={e.key}",
     _K.HARD_BREAK: lambda e: f"hard_break={e.key}",
     _K.PLAN_SOURCE: lambda e: f"plan_source={e.key}",
     _K.TEACHER_MODE: lambda e: f"teacher_mode={e.key}",
-    _K.OPEN_SCENES:
-        lambda e: "open_scenes=" + _join(e.payload.get("ids"), "—"),
     _K.MEM_SHOWN: lambda e: "mem_shown=" + _join(e.payload.get("items"), "—"),
     _K.MEM_ASKED: lambda e: "mem_asked=" + _join(e.payload.get("items"), "—"),
     _K.PLAN_GATE_OK: lambda e: "plan_gate_ok",
@@ -678,8 +638,6 @@ def _parse_tail(kind: TurnEventKind, tail: str) -> tuple[str, dict]:
         return "", {"faults": tail.split(",") if tail else []}
     if kind is _K.PLAN_GATE_FAIL:
         return "", {"errors": tail.split(",") if tail else []}
-    if kind is _K.OPEN_SCENES:
-        return "", {"ids": [] if tail == "—" else tail.split(",")}
     if kind in (_K.MEM_SHOWN, _K.MEM_ASKED):
         return "", {"items": [] if tail == "—" else tail.split(",")}
     if kind is _K.PLAN_CARD:

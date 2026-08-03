@@ -39,18 +39,14 @@
     "output_gate_ok",
     "rules_backup",
     "scaffold=ES-forward+EN-rescue",
-    "focus_async",
     "structured_reply",
     "pedagogy:ok",
     "first_seen:estoy bien",
     "pedagogy:known_learner_open",
     "phase=ai_tutor",
-    "activity=new_input",
-    "phase_consumed=True",
     "hard_break=False",
     "plan_source=mode_runtime",
     "teacher_mode=planned",
-    "open_scenes=boat_likes,boat_meet_captain,boat_where_boat",
     "mem_shown=english_only",
     "mem_asked=conversation,placement",
     "morph_card:estar"
@@ -68,12 +64,6 @@
     "teach_images",
     "try"
   ],
-  "phase": {
-    "activity": "new_input",
-    "frozen_turns": 1,
-    "index": 0,
-    "turns_in_phase": 1
-  },
   "progress_events": [],
   "reply": "¡Perfecto! Empezamos poco a poco.\n\n**Estoy bien** (I'm fine).\n\nDi: **Estoy bien** (I'm fine).",
   "save_sheet_calls": [

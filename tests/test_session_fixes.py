@@ -681,7 +681,7 @@ class TestModeImageAttachVisibility(unittest.TestCase):
     def _session(self):
         from tutor.conv_session import ConversationalSession
 
-        return ConversationalSession(log=False, focus_model="off")
+        return ConversationalSession(log=False)
 
     def _decision(self, concept):
         from tutor.modes import Mode, ModeDecision

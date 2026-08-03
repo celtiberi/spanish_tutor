@@ -32,21 +32,18 @@
   "notes": [
     "mode=conversation",
     "mode_reason=known_open_from_sheet",
+    "introduce_planned:me llamo:R-D",
     "due_elicit_offered:agua,pan",
     "output_gate_ok",
     "rules_backup",
     "scaffold=ES-forward+EN-rescue",
-    "focus_async",
     "structured_reply",
     "pedagogy:ok",
     "pedagogy:known_learner_open",
     "open_phase=known",
-    "activity=retrieval",
-    "phase_consumed=True",
     "hard_break=False",
     "plan_source=mode_runtime",
     "teacher_mode=planned",
-    "open_scenes=boat_likes,boat_meet_captain,boat_where_boat",
     "mem_shown=greet",
     "mem_asked=ask_gusta,conversation"
   ],
@@ -63,12 +60,6 @@
     "teach_images",
     "try"
   ],
-  "phase": {
-    "activity": "retrieval",
-    "frozen_turns": 0,
-    "index": 0,
-    "turns_in_phase": 1
-  },
   "progress_events": [],
   "reply": "¡Qué bueno verte otra vez!\n\n**Me gusta el pan.** — I like bread.\n\n¿Te gusta el pan?",
   "save_sheet_calls": [

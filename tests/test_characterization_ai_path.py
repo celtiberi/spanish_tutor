@@ -182,12 +182,8 @@ def _observe(ctx, result, *, save_slice, sheet_keys=()) -> dict:
             "faults": list(gate.get("faults") or []),
             "scaffold_saved": dict(gate.get("scaffold_saved") or {}),
         },
-        "phase": {
-            "index": s.phase_state.index,
-            "turns_in_phase": s.phase_state.turns_in_phase,
-            "frozen_turns": s.phase_state.frozen_turns,
-            "activity": s.phase_state.current_activity(),
-        },
+        # (phase observation DELETED 2026-08-03 — the session-phase clock
+        # died with the S9 deletions; goldens regenerated.)
         "memory": {
             "turns": s.pedagogy_memory.turns,
             "shown": sorted(s.pedagogy_memory.shown),
@@ -293,7 +289,8 @@ def test_golden_blank_open_and_zero_register_turn(tutor_session_factory):
 
     # CHAR_PIN: post-open English turn stays conversation (no hard break —
     # the open's placement break blocks another for 3 turns) and carries the
-    # TRUE-ZERO register overlay + NEW INPUT phase flavor + INTRODUCE plan.
+    # TRUE-ZERO register overlay + INTRODUCE plan (the session-phase layer
+    # died 2026-08-03 — introduce rides flavorable turns directly).
     assert turn.parts["mode"] == "conversation"
     assert "mode_reason=default_conversation" in turn.notes
     # §1.1 rewrite (2026-08-03): the routers still COMPUTE (shadow notes
@@ -361,10 +358,10 @@ def test_golden_due_elicit_turn(tutor_session_factory):
     assert open_res.error is None
     n_open = len(ctx.save_calls)
 
-    # CHAR_PIN: known open + due queue → retrieval phase + DUE block with
-    # both due items (oldest-due order: agua, pan).
+    # CHAR_PIN: known open + due queue → the due-offer event fires from the
+    # due-DATA path (stage_prompt_build) with both due items (oldest-due
+    # order: agua, pan).
     assert "mode_reason=known_open_from_sheet" in open_res.notes
-    assert "activity=retrieval" in open_res.notes
     assert "due_elicit_offered:agua,pan" in open_res.notes
     # §1.1 rewrite: due items ship as FACTS, not a scripted DUE block.
     open_payload = ctx.fake.task_payload(0)
@@ -400,7 +397,7 @@ def test_golden_due_elicit_turn(tutor_session_factory):
     # status untouched by the outcome write (any confidence motion belongs
     # to process_turn's hard observer, pinned in the golden).
     assert pan["status"] == "fragile"
-    # CHAR_PIN: the still-due item rides the new turn's DUE block alone.
+    # CHAR_PIN: the still-due item rides the new turn's due facts alone.
     assert "due_elicit_offered:agua" in turn.notes
     turn_payload = ctx.fake.task_payload()
     turn_due = {d["key"] for d in turn_payload["teaching_data"]["due_for_review"]}
@@ -432,13 +429,11 @@ def test_golden_introduce_new_input_turn(tutor_session_factory):
     assert open_res.error is None
     n_open = len(ctx.save_calls)
 
-    # CHAR_PIN: no dues → plan opens on new_input; the known open is
-    # introduce-flavorable, so a plan is emitted on the OPEN too — but the
-    # canned open reply omits the key, so nothing is marked. Key changed
-    # hola:R-E → me llamo:R-D 2026-07-29 (encounter-variety round:
-    # _known_seed is mid-stream — IP-01 known — so openers sort last;
-    # docs/design-encounter-variety.md; goldens regenerated WITH the round).
-    assert "activity=new_input" in open_res.notes
+    # CHAR_PIN: the known open is introduce-flavorable, so a plan is
+    # emitted on the OPEN too — but the canned open reply omits the key,
+    # so nothing is marked. Key changed hola:R-E → me llamo:R-D 2026-07-29
+    # (encounter-variety round: _known_seed is mid-stream — IP-01 known —
+    # so openers sort last; docs/design-encounter-variety.md).
     assert "introduce_planned:me llamo:R-D" in open_res.notes
     assert not any(n.startswith("introduced:") for n in open_res.notes)
     obs_open = _observe(
@@ -633,108 +628,11 @@ def test_char_bug_004_end_to_end_single_miss_note(tutor_session_factory):
 
 # ---------------------------------------------------------------------------
 # CHAR-BUG-006 RESOLVED: scene scripts banned from the image path
-# (Proposal B pin-first batch, 2026-07-29 — the pin Phase 5 batch 2 must
-# inherit green)
+# (Proposal B pin-first batch, 2026-07-29). Scenes themselves were then
+# DELETED ENTIRELY (full-code-audit S9, 2026-08-03) — the incident class
+# (authored scene lines reaching the image path) is structurally
+# unreachable; the ban lint below keeps the image chain script-free.
 # ---------------------------------------------------------------------------
-
-# boat_meet_captain's authored suggested lines (scene input) — the strings
-# the OLD fallback treated as "what the tutor said".
-_BOAT_SCENE_SCRIPT_LINES = (
-    "¡Hola! ¿Cómo estás?",
-    "Estoy bien.",
-    "Estoy en el bote.",
-)
-
-
-def test_char_bug_006_resolved_no_scene_scripts_as_tutor_models(
-    tutor_session_factory, monkeypatch
-):
-    # CHAR_PIN — CHAR-BUG-006 RESOLVED (Proposal B pin-first batch,
-    # known_bugs.json): on a scene_goal turn the fallback image call is
-    # NEVER made with the scene's suggested lines as tutor_models (or as
-    # any other string argument).  The image relevance base is the
-    # code-owned decision.image_concept (primary; mode attach owns its
-    # cache miss note) + the learner's own words (secondary) — accepted
-    # narrowing, adjudicated in docs/reviews-architecture-refactor.md.
-    import tutor.teach_assets as teach_assets_mod
-
-    calls: list[dict] = []
-    real = teach_assets_mod.assets_for_ai_turn
-
-    def spy(**kwargs):
-        calls.append(dict(kwargs))
-        return real(**kwargs)
-
-    monkeypatch.setattr(teach_assets_mod, "assets_for_ai_turn", spy)
-
-    ctx = tutor_session_factory(
-        seed_sheet=_due_seed(), replies=[OPEN_DUE_REPLY, TURN_DUE_REPLY]
-    )
-    s = ctx.session
-    assert s.open_session().error is None
-    # «Estoy contento hoy.» = the original incident's learner text class:
-    # topic-matches boat_meet_captain via «estoy» WITHOUT tripping the
-    # guard-6 new-noun break (a learner-typed «bote» would route to
-    # association, not scene_goal).  Retrieval activity hosts the pick.
-    turn = s.user_turn("Estoy contento hoy.")
-    assert turn.error is None
-
-    # The host really is the 006 class host: a scene_goal decision whose
-    # image_concept («bote») missed the cache — mode attach noted it.
-    assert "mode_reason=scene_goal:boat_meet_captain" in turn.notes
-    assert "image_gen_disabled:bote" in turn.notes
-
-    assert calls, "scene_goal turn with an image_concept miss reaches the fallback"
-    for kw in calls:
-        # The call site passes NO tutor_models at all (parameter omitted).
-        assert not (kw.get("tutor_models") or []), (
-            f"scene scripts (or anything) passed as tutor_models: {kw!r}"
-        )
-        # No authored script line rides ANY string argument (relevance
-        # text included) — only the learner's own words may appear.
-        blob = " ".join(
-            [str(v) for v in kw.values() if isinstance(v, str)]
-            + [str(x) for v in kw.values() if isinstance(v, (list, set, tuple))
-               for x in v]
-        )
-        for line in _BOAT_SCENE_SCRIPT_LINES:
-            assert line not in blob, (
-                f"authored scene line {line!r} reached the image path: {kw!r}"
-            )
-
-
-def test_char_bug_006_resolved_dual_miss_note_class_gone(
-    tutor_session_factory,
-):
-    # CHAR_PIN — the incident class itself (bote+hola): scene wants «bote»
-    # (cache miss → ONE visible note); the OLD fallback then extracted
-    # «hola» from boat_meet_captain's SUGGESTED lines (probed at fix time:
-    # want=True hola/new_concrete_model) and noted a second, script-derived
-    # miss the reply never taught.  With scripts banned the fallback
-    # decides only from the learner's own words — «Estoy contento hoy.»
-    # carries no imageable concept, so the fallback wants NOTHING and the
-    # turn keeps exactly the one honest «bote» note from mode attach.
-    ctx = tutor_session_factory(
-        seed_sheet=_due_seed(), replies=[OPEN_DUE_REPLY, TURN_DUE_REPLY]
-    )
-    s = ctx.session
-    assert s.open_session().error is None
-    turn = s.user_turn("Estoy contento hoy.")
-    assert turn.error is None
-
-    assert "mode_reason=scene_goal:boat_meet_captain" in turn.notes
-    assert turn.notes.count("image_gen_disabled:bote") == 1
-    # «hola» exists ONLY in the scene's authored lines this turn — a miss
-    # note (any kind) or an attach for it would be the dual-miss class.
-    assert not any(
-        n.endswith(":hola") and (
-            n.startswith("image_gen_disabled")
-            or n.startswith("image_gen_capped")
-            or n.startswith("image_gen_async")
-            or n.startswith("teach_image")
-        )
-        for n in turn.notes
-    )
 
 
 def test_char_bug_006_ban_lint_image_chain_free_of_model_lines():

@@ -5,11 +5,10 @@ a real isolated session (conftest ``tutor_session_factory``) and its state
 effects are asserted against facts the Phase 0 goldens pin (blank open =
 placement; due «pan» success = ladder 0→1 / due tomorrow with status and
 confidence untouched; english-only streak semantics incl. the CHAR-BUG-002
-site; repair turns freeze the phase clock).  Plus the pipeline-order
-contract: the head sequence must match the documented stage list, and
-``stage_phase_tick`` must NOT ride the head (its real site is after the
-contributor region — docs/reviews-architecture-refactor.md, Phase 4
-batch 1).
+site).  Plus the pipeline-order contract: the head sequence must match the
+documented stage list.  (Scenes, the session-phase clock and the task
+runtime were DELETED 2026-08-03 — full-code-audit S9; their stages,
+contributors and TurnContext fields are asserted GONE below.)
 
 The full-turn integration net stays with the Phase 0 characterization
 goldens (byte-unchanged this batch).
@@ -79,8 +78,6 @@ DOCUMENTED_HEAD = [
     "stage_observe",
     "stage_english_streak",
     "stage_due_outcomes",
-    "stage_open_scenes",
-    "stage_bind_activity",
     "stage_select_mode",
     "stage_guard6_covered",
 ]
@@ -133,11 +130,15 @@ class TestPipelineOrder:
         assert [f.__name__ for f in tp.PRE_MODEL_STAGES] == DOCUMENTED_HEAD
         assert all(callable(f) for f in tp.PRE_MODEL_STAGES)
 
-    def test_phase_tick_is_not_in_the_head(self):
-        # Verified placement (Phase 4 batch 1): the phase clock ticks AFTER
-        # the contributor region — the executor calls stage_phase_tick at
-        # that true site, never as part of the pre-model head.
-        assert tp.stage_phase_tick not in tp.PRE_MODEL_STAGES
+    def test_phase_and_scene_stages_are_gone(self):
+        # Full-code-audit S9 deletion (2026-08-03): the session-phase clock,
+        # scenes and the task runtime are DELETED — their stages must stay
+        # gone from the module surface.
+        for name in ("stage_phase_tick", "stage_bind_activity",
+                     "stage_open_scenes", "_task_build", "_task_eligible",
+                     "_close_summary_build", "_close_summary_eligible",
+                     "_due_elicit_build", "_due_elicit_eligible"):
+            assert not hasattr(tp, name), name
 
     def test_realize_sequence_matches_documented_list(self):
         # Batch 3 census (docs/reviews-architecture-refactor.md, batch-1
@@ -194,7 +195,7 @@ class TestPipelineOrder:
         # historical gate try/except.
         full = (
             list(tp.PRE_MODEL_STAGES)
-            + [tp.stage_contributors, tp.stage_phase_tick]
+            + [tp.stage_contributors]
             + list(tp.REALIZE_STAGES)
             + list(tp.GATE_REPAIR_STAGES)
             + list(tp.RECORDER_STAGES)
@@ -202,7 +203,7 @@ class TestPipelineOrder:
         )
         assert [f.__name__ for f in full] == (
             DOCUMENTED_HEAD
-            + ["stage_contributors", "stage_phase_tick"]
+            + ["stage_contributors"]
             + DOCUMENTED_REALIZE
             + [
                 "stage_settle_pixels", "stage_gate_context",
@@ -213,17 +214,12 @@ class TestPipelineOrder:
         )
         # No stage rides two families.
         assert len(set(full)) == len(full)
-        # Census arithmetic: 9 + 2 + 7 + 4 + 12 + 2 = 36 stage functions
-        # (§1.1b settlement round: realize −stage_image_costs, gate
-        # +stage_settle_pixels, recorders −intro_morph +settle_chrome)
-        # (recorders 11 + the atomic commit; post-campaign additions:
-        # stage_intro_morph — 2026-07-29 morph-card review;
-        # stage_frame_record — 2026-07-29 encounter-variety round); the 5
-        # contributors are InstructionContributor instances under the
-        # stage_contributors loop (pinned by
-        # test_contributor_census_and_order).
-        assert len(full) == 36
-        assert len(tp.CONTRIBUTORS) == 5
+        # Census arithmetic: 7 + 1 + 7 + 4 + 12 + 2 = 33 stage functions
+        # (S9 deletions 2026-08-03: head −stage_open_scenes
+        # −stage_bind_activity, the phase tick gone, contributors down to
+        # self_flag_uptake + introduce).
+        assert len(full) == 33
+        assert len(tp.CONTRIBUTORS) == 2
 
     def test_turn_context_lean_field_census(self):
         # Keep-it-lean law: fields exist only for what the extracted stages
@@ -242,8 +238,7 @@ class TestPipelineOrder:
         assert sorted(tp.TurnContext.__dataclass_fields__) == sorted([
             "learner", "is_open", "ev", "input_mode", "log_learner",
             "llm_signals", "sig_pre", "obs", "blank", "sigs",
-            "open_scenes", "activity", "decision", "intro_plan",
-            "phase_consumed",
+            "decision", "intro_plan",
             "teach_images", "image_decision", "system", "task", "messages",
             "realization_artifact",
             "final", "raw", "model_raw", "plan_turn", "tool_delta",
@@ -495,56 +490,6 @@ class TestDueOutcomes:
 
 
 # ---------------------------------------------------------------------------
-# stage_open_scenes
-# ---------------------------------------------------------------------------
-
-
-class TestOpenScenes:
-    def test_binds_scene_ids_to_mode_state(self, tutor_session_factory):
-        session = tutor_session_factory(seed_sheet=_known_seed()).session
-        ctx = _ctx(session, learner="hola")
-        tp.stage_open_scenes(session, ctx)
-        assert isinstance(ctx.open_scenes, list)
-        assert ctx.open_scenes  # known-sheet goldens route through scenes
-        assert session.mode_state.open_scene_ids == [
-            s.get("id") for s in ctx.open_scenes if s.get("id")
-        ]
-
-
-# ---------------------------------------------------------------------------
-# stage_bind_activity
-# ---------------------------------------------------------------------------
-
-
-class TestBindActivity:
-    def test_retrieval_stays_while_something_is_due(
-        self, tutor_session_factory
-    ):
-        session = tutor_session_factory(seed_sheet=_due_seed()).session
-        assert session.phase_state.current_activity() == "retrieval"
-        index_before = session.phase_state.index
-        ctx = _ctx(session, learner="hola")
-        tp.stage_bind_activity(session, ctx)
-        assert ctx.activity == "retrieval"
-        assert session.phase_state.index == index_before
-
-    def test_empty_retrieval_force_advances(self, tutor_session_factory):
-        session = tutor_session_factory(seed_sheet=_due_seed()).session
-        # Grok AMEND 2b: never flavor a retrieval turn with nothing due.
-        tomorrow = (
-            datetime.date.today() + datetime.timedelta(days=1)
-        ).isoformat()
-        for key in ("pan", "agua"):
-            session.sheet["lexicon"][key]["next_due"] = tomorrow
-        index_before = session.phase_state.index
-        ctx = _ctx(session, learner="hola")
-        tp.stage_bind_activity(session, ctx)
-        assert session.phase_state.index == index_before + 1
-        assert ctx.activity != "retrieval"
-        assert ctx.activity == session.phase_state.current_activity()
-
-
-# ---------------------------------------------------------------------------
 # stage_select_mode + stage_guard6_covered
 # ---------------------------------------------------------------------------
 
@@ -589,50 +534,12 @@ class TestGuard6Covered:
 
 
 # ---------------------------------------------------------------------------
-# stage_phase_tick (called at its REAL post-contributor site)
+# Contributor helpers
 # ---------------------------------------------------------------------------
 
 
 def _decision(mode: str, reason: str) -> SimpleNamespace:
     return SimpleNamespace(mode=SimpleNamespace(value=mode), reason=reason)
-
-
-class TestPhaseTick:
-    def test_conversation_turn_consumes_budget(self, tutor_session_factory):
-        session = tutor_session_factory().session
-        ctx = _ctx(session, learner="hola")
-        ctx.decision = _decision("conversation", "default_conversation")
-        before = (
-            session.phase_state.index,
-            session.phase_state.turns_in_phase,
-            session.phase_state.frozen_turns,
-        )
-        tp.stage_phase_tick(session, ctx)
-        assert ctx.phase_consumed is True
-        assert session.phase_state.frozen_turns == before[2]
-        assert (
-            session.phase_state.index,
-            session.phase_state.turns_in_phase,
-        ) != (before[0], before[1])
-
-    def test_repair_turn_freezes_clock(self, tutor_session_factory):
-        session = tutor_session_factory().session
-        ctx = _ctx(session, learner="what does that mean?")
-        ctx.decision = _decision(
-            "comprehension_repair", "meta_comprehension_stay_on_topic"
-        )
-        before = (
-            session.phase_state.index,
-            session.phase_state.turns_in_phase,
-            session.phase_state.frozen_turns,
-        )
-        tp.stage_phase_tick(session, ctx)
-        # golden_comprehension_repair: index/turns_in_phase unchanged,
-        # frozen_turns +1, phase_consumed False.
-        assert ctx.phase_consumed is False
-        assert session.phase_state.index == before[0]
-        assert session.phase_state.turns_in_phase == before[1]
-        assert session.phase_state.frozen_turns == before[2] + 1
 
 
 # ---------------------------------------------------------------------------
@@ -642,24 +549,19 @@ class TestPhaseTick:
 
 class TestContributorOrder:
     def test_contributor_census_and_order(self):
-        # The contributor census at the EXACT historical inline call order
-        # (docs/reviews-architecture-refactor.md, Phase 4 batch 1 census:
-        # CONTRIBUTORS 5, between the head and the phase tick).
+        # The surviving contributor census (S9 deletions 2026-08-03:
+        # due_elicit/task/close_summary died with the phase machinery).
         assert [c.name for c in tp.CONTRIBUTORS] == [
-            "due_elicit",
             "self_flag_uptake",
             "introduce",
-            "task",
-            "close_summary",
         ]
         for c in tp.CONTRIBUTORS:
             assert callable(c.eligible) and callable(c.build)
 
-    def test_contributors_run_between_head_and_tick(self):
+    def test_contributors_run_after_head(self):
         # stage_contributors is its own family site: not in the pre-model
-        # head, and the phase tick stays a separate post-contributor stage.
+        # head.
         assert tp.stage_contributors not in tp.PRE_MODEL_STAGES
-        assert tp.stage_phase_tick not in tp.PRE_MODEL_STAGES
 
     def test_zero_register_overlay_is_not_a_contributor(self):
         # Verified against the family markers (Phase 4 batch 2): the
@@ -675,51 +577,16 @@ class TestContributorOrder:
 # ---------------------------------------------------------------------------
 
 
-def _flav_ctx(mode: str, reason: str, activity: str = "") -> tp.TurnContext:
+def _flav_ctx(mode: str, reason: str) -> tp.TurnContext:
     ctx = tp.TurnContext(learner="hola", is_open=False, ev=None)
     ctx.decision = _decision(mode, reason)
-    ctx.activity = activity
     return ctx
 
 
 class TestFlavorable:
-    def test_spelling_a_due_elicit(self):
-        # due_elicit_block's internal gate: modes {conversation, transfer},
-        # guard reasons EXCLUDED, new_input activity EXCLUDED (Grok AMEND
-        # 4a sole-orchestrator: introduce owns new_input).
-        from tutor.conv_session import DUE_ELICIT_MODES, DUE_GUARD_REASONS
-
-        kw = dict(
-            modes=DUE_ELICIT_MODES,
-            exclude_reasons=DUE_GUARD_REASONS,
-            exclude_activities=frozenset({"new_input"}),
-        )
-        assert tp.flavorable(
-            _flav_ctx("conversation", "default_conversation", "retrieval"),
-            **kw,
-        )
-        assert tp.flavorable(
-            _flav_ctx("transfer", "transfer_turn", "task"), **kw
-        )
-        for guard in DUE_GUARD_REASONS:
-            assert not tp.flavorable(
-                _flav_ctx("conversation", guard, "retrieval"), **kw
-            )
-        # cf_recast is NOT a due-elicit mode (narrower than spelling B).
-        assert not tp.flavorable(
-            _flav_ctx("cf_recast", "default_conversation", "retrieval"),
-            **kw,
-        )
-        assert not tp.flavorable(
-            _flav_ctx("conversation", "default_conversation", "new_input"),
-            **kw,
-        )
-
     def test_spelling_b_self_flag_uptake(self):
         # self_flag_uptake_block's internal gate: modes {conversation,
-        # transfer, cf_recast}, guard reasons EXCLUDED, NO activity term —
-        # uptake may fire in ANY phase, including new_input (historical
-        # behavior, deliberately different from spelling A).
+        # transfer, cf_recast}, guard reasons EXCLUDED.
         from tutor.conv_session import DUE_GUARD_REASONS, SELF_FLAG_MODES
 
         kw = dict(modes=SELF_FLAG_MODES, exclude_reasons=DUE_GUARD_REASONS)
@@ -727,7 +594,7 @@ class TestFlavorable:
             _flav_ctx("cf_recast", "recent_error_pattern"), **kw
         )
         assert tp.flavorable(
-            _flav_ctx("conversation", "default_conversation", "new_input"),
+            _flav_ctx("conversation", "default_conversation"),
             **kw,
         )
         for guard in DUE_GUARD_REASONS:
@@ -737,11 +604,8 @@ class TestFlavorable:
         )
 
     def test_spelling_c_flavorable_turns(self):
-        # THE predicate the map found spelled three times (introduce_block
-        # internal / task inline / close inline) — identical on (mode,
-        # reason) in all three: conversation + reason-INCLUDING set
-        # {known_open_from_sheet, default_conversation}; only the activity
-        # term differs per contributor.
+        # THE reason-INCLUDING predicate (introduce): conversation +
+        # {known_open_from_sheet, default_conversation} only.
         from tutor.conv_session import INTRODUCE_FLAVORABLE_REASONS
 
         kw = dict(
@@ -749,29 +613,27 @@ class TestFlavorable:
             include_reasons=INTRODUCE_FLAVORABLE_REASONS,
         )
         assert tp.flavorable(
-            _flav_ctx("conversation", "known_open_from_sheet", "new_input"),
-            activities=frozenset({"new_input"}),
-            **kw,
+            _flav_ctx("conversation", "known_open_from_sheet"), **kw
         )
         assert tp.flavorable(
-            _flav_ctx("conversation", "default_conversation", "close"),
-            activities=frozenset({"close"}),
-            **kw,
+            _flav_ctx("conversation", "default_conversation"), **kw
         )
         # Include-polarity: an unlisted reason fails even though it is not
-        # a guard reason (the decisive difference from spellings A/B).
+        # a guard reason (the decisive difference from spelling B).
         assert not tp.flavorable(
-            _flav_ctx("conversation", "scene_goal:boat_likes", "task"), **kw
+            _flav_ctx("conversation", "new_noun:casa"), **kw
         )
         assert not tp.flavorable(
-            _flav_ctx("transfer", "default_conversation", "close"), **kw
+            _flav_ctx("transfer", "default_conversation"), **kw
         )
-        # Wrong phase for the contributor's activity term.
-        assert not tp.flavorable(
-            _flav_ctx("conversation", "default_conversation", "task"),
-            activities=frozenset({"close"}),
-            **kw,
-        )
+
+    def test_activity_terms_are_gone(self):
+        # S9 deletion: flavorable no longer accepts activity keying.
+        import inspect
+
+        params = inspect.signature(tp.flavorable).parameters
+        assert "activities" not in params
+        assert "exclude_activities" not in params
 
 
 class TestAppendInstruction:
@@ -797,23 +659,31 @@ class TestAppendInstruction:
 
 
 class TestStageContributors:
-    def test_due_contributor_appends_block_and_emits(
+    def test_due_offer_fires_from_the_prompt_data_path(
         self, tutor_session_factory
     ):
-        # golden_due_open facts: known open + due queue → DUE block with
-        # both items (oldest-due order agua, pan) + DUE_ELICIT_OFFERED.
+        # S9 rewire (2026-08-03): DUE_ELICIT_OFFERED fires from
+        # stage_prompt_build when due items ride teaching_data as FACTS —
+        # the phase-gated due_elicit contributor (and its scripted DUE
+        # RE-ENCOUNTERS block) is gone.  stage_frame_record keeps reading
+        # this event for the frames_seen writes
+        # (tests/test_encounter_variety.py proves that leg).
         session = tutor_session_factory(seed_sheet=_due_seed()).session
         ctx = _ctx(session, learner="", is_open=True)
         for stage in tp.PRE_MODEL_STAGES:
             stage(session, ctx)
         tp.stage_contributors(session, ctx)
-        assert "DUE RE-ENCOUNTERS" in (ctx.decision.instructions or "")
-        assert "«agua»" in ctx.decision.instructions
-        assert "«pan»" in ctx.decision.instructions
+        # No contributor scripts a DUE block any more.
+        assert "DUE RE-ENCOUNTERS" not in (ctx.decision.instructions or "")
+        assert ctx.ev.find(EV.DUE_ELICIT_OFFERED) == []
+        tp.stage_prompt_build(session, ctx)
         offered = ctx.ev.find(EV.DUE_ELICIT_OFFERED)
         assert len(offered) == 1
         assert offered[0].payload["keys"] == ["agua", "pan"]
         assert offered[0].stage == "instruct"
+        # The facts themselves ride the task payload.
+        assert '"due_for_review"' in ctx.task
+        assert '"agua"' in ctx.task and '"pan"' in ctx.task
 
     def test_introduce_contributor_defers_render(self, tutor_session_factory):
         # golden_introduce_open facts: no dues → new_input open plans one
@@ -827,7 +697,6 @@ class TestStageContributors:
         for stage in tp.PRE_MODEL_STAGES:
             stage(session, ctx)
         tp.stage_contributors(session, ctx)
-        assert ctx.activity == "new_input"
         assert ctx.intro_plan is not None
         assert ctx.intro_plan.key == "me llamo"
         planned = ctx.ev.latest(EV.INTRODUCE_PLANNED)
@@ -867,59 +736,6 @@ class TestStageContributors:
         tp.stage_contributors(session, ctx)
         assert ctx.decision.instructions == "REPAIR FOCUS"
         assert ctx.ev.find(EV.DUE_ELICIT_OFFERED) == []
-
-
-# ---------------------------------------------------------------------------
-# PHASE HOST rule 7 (Proposal A micro-batch, 2026-07-29) — the scene_goal /
-# task-block seam Grok's countersign caught: a topic scene pick during TASK
-# activity binds the scene AND carries the task block (never bind-without-
-# teach); close stays exact-set only; introduce already suppresses the pick.
-# ---------------------------------------------------------------------------
-
-
-class TestSceneGoalTaskSeam:
-    def test_task_block_fires_on_scene_goal_under_task_activity(
-        self, tutor_session_factory
-    ):
-        session = tutor_session_factory(seed_sheet=_known_seed()).session
-        ctx = _ctx(session, learner="Me gusta mucho el pan.")
-        tp.stage_open_scenes(session, ctx)
-        ctx.activity = "task"
-        ctx.decision = _decision("conversation", "scene_goal:boat_likes")
-        text = tp._task_build(session, ctx)
-        assert text is not None
-        assert "TASK (single convergent exit" in text
-        offered = ctx.ev.find(EV.TASK_GOAL_OFFERED)
-        assert len(offered) == 1
-        assert offered[0].key == "boat_likes"
-        assert session.task_state is not None
-        assert session.task_state.scene_id == "boat_likes"
-
-    def test_scene_goal_clause_requires_task_activity(
-        self, tutor_session_factory
-    ):
-        # The expansion is task-activity-only (binding text rule 7): the
-        # same scene_goal decision under another activity gets NO task
-        # block from _task_build (and _task_eligible would not run it).
-        session = tutor_session_factory(seed_sheet=_known_seed()).session
-        ctx = _ctx(session, learner="Me gusta mucho el pan.")
-        tp.stage_open_scenes(session, ctx)
-        ctx.activity = "free"
-        ctx.decision = _decision("conversation", "scene_goal:boat_likes")
-        assert not tp._task_eligible(ctx)
-        assert tp._task_build(session, ctx) is None
-        assert ctx.ev.find(EV.TASK_GOAL_OFFERED) == []
-
-    def test_close_gate_stays_exact_set_only(self):
-        # Rule 7 expands the TASK text gate only — close refuses scene_goal
-        # even under close activity (and the rule-6 suppression makes a
-        # close-activity scene pick unreachable anyway).
-        assert not tp._close_summary_eligible(
-            _flav_ctx("conversation", "scene_goal:boat_likes", "close")
-        )
-        assert tp._close_summary_eligible(
-            _flav_ctx("conversation", "default_conversation", "close")
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -1085,7 +901,6 @@ class TestCaptureLogStages:
         assert entry["task_message"] == "TASK"
         assert entry["mode"] == ctx.decision.mode.value
         assert entry["reason"] == ctx.decision.reason
-        assert entry["activity"] == ctx.activity
         assert entry["response"]["notes"] == ["n1"]
         assert entry["response"]["stop_reason"] == "end_turn"
         assert entry["response"]["usage"]["output_tokens"] == 5
@@ -1138,9 +953,9 @@ class TestPhase4CleanupRegressions:
     def test_delegate_census_is_the_adjudicated_kept_list(self):
         # Phase 4 batch 5 delegate decision point (docs/reviews-
         # architecture-refactor.md): every _state_delegate has production
-        # readers through its historical name (turn_pipeline itself reads
-        # session.pedagogy_memory / session.mode_state / …) — ALL 19 KEPT,
-        # ZERO killed.  This census is the no-new-delegates lint: adding
+        # readers through its historical name.  16 kept (phase_state,
+        # task_state and _focus_key delegates died with their stores — S9
+        # deletion, 2026-08-03).  This census is the no-new-delegates lint: adding
         # or removing a delegate must update the batch record AND this pin.
         from tutor.conv_session import ConversationalSession
 
@@ -1149,11 +964,11 @@ class TestPhase4CleanupRegressions:
             if isinstance(val, property)
         )
         assert delegates == sorted([
-            "history", "messages_for_ui", "_focus_panel", "_focus_key",
+            "history", "messages_for_ui", "_focus_panel",
             "_focus_meta", "_focus_version", "_focus_lock",
             "_focus_inflight", "_image_warm_lock", "_image_warm_inflight",
-            "last_plan", "pedagogy_memory", "mode_state", "phase_state",
-            "task_state", "last_mode_decision", "debug_requests", "costs",
+            "last_plan", "pedagogy_memory", "mode_state",
+            "last_mode_decision", "debug_requests", "costs",
             "progress_session_id",
         ])
 

@@ -19,11 +19,11 @@ the string scans could produce are impossible against typed kinds):
     inside gate-fail event payloads.  A payload that merely CONTAINED either
     substring (e.g. a ``why=``/reason text mentioning "output_gate") no
     longer counts as gate evidence.
-  - ``due_elicit_fired`` / ``introduce_scaffolded`` / ``task_goal_offered``:
+  - ``due_elicit_fired`` / ``introduce_scaffolded``:
     substring scans over whole notes become event-kind checks — a payload
-    accidentally containing "due_elicit_offered" / "introduce_planned:" /
-    "task_goal_offered:" no longer satisfies the expectation.
-  - ``_mode`` / ``phase_adherence`` / ``uptake_flag_honored`` /
+    accidentally containing "due_elicit_offered" / "introduce_planned:"
+    no longer satisfies the expectation.
+  - ``_mode`` / ``uptake_flag_honored`` /
     ``progress_milestones_fired``: same answers by construction (their
     string parses were prefix-anchored); the event path simply reads
     kind/key/payload instead of splitting strings.
@@ -456,9 +456,9 @@ def comprehension_repair_targets(traj: dict, result: dict) -> list[str]:
 def due_elicit_fired(traj: dict, result: dict) -> list[str]:
     """expect.due_elicit=true → some turn's notes must carry due_elicit_offered.
 
-    Phase 1 retrieval scheduler (docs/build-plan-pedagogy-engine.md): a
-    past-due sheet item must ride at least one conversation-flavored turn
-    as a DUE RE-ENCOUNTERS instruction (soft; logged in notes).
+    Retrieval scheduler: a past-due sheet item must ride at least one turn
+    as due-for-review FACTS in teaching_data (the DUE_ELICIT_OFFERED event
+    fires from the due-data path in stage_prompt_build since 2026-08-03).
     """
     if not (traj.get("expect") or {}).get("due_elicit"):
         return []
@@ -521,10 +521,10 @@ def introduce_scaffolded(traj: dict, result: dict) -> list[str]:
     introduce_planned:<key>:<rule>.
 
     Phase 3 introduce router (docs/build-plan-pedagogy-engine.md): on a
-    new_input-phase flavorable turn the code-owned IntroducePlan must ride
-    the tutor instructions (logged in notes). Note presence only — whether
-    the same turn later marks (introduced:<key>) or the plan lapses is the
-    model's realization and is intentionally NOT asserted (non-flaky).
+    flavorable conversation turn the code-owned IntroducePlan must be
+    minted (logged in notes). Note presence only — whether the same turn
+    later marks (introduced:<key>) or the plan lapses is the model's
+    realization and is intentionally NOT asserted (non-flaky).
     """
     if not (traj.get("expect") or {}).get("introduce_planned"):
         return []
@@ -542,94 +542,9 @@ def introduce_scaffolded(traj: dict, result: dict) -> list[str]:
     ]
 
 
-def task_goal_offered(traj: dict, result: dict) -> list[str]:
-    """expect.task_instructions_offered=true → some turn's notes must carry
-    task-phase evidence: task_goal_offered:<scene_id> (the ConvergentTask
-    block was attached to the tutor instructions) or task_slot_filled:<id>
-    (the learner's own text filled an info-gap slot).
-
-    Phase 5 task wiring (docs/build-plan-pedagogy-engine.md): on task-phase
-    flavorable turns the code-owned TaskState must ride the tutor
-    instructions. Note presence only — task completion is the learner's
-    realization and is intentionally NOT asserted (non-flaky)."""
-    if not (traj.get("expect") or {}).get("task_instructions_offered"):
-        return []
-    for t in _turns(result):
-        evs = _events_of(t, "task_goal_offered", "task_slot_filled")
-        if evs is not None:  # typed events (preferred; kind-precise)
-            if evs:
-                return []
-            continue
-        for n in t.get("notes") or []:  # replay fallback (substring scan)
-            s = str(n)
-            if "task_goal_offered:" in s or "task_slot_filled:" in s:
-                return []
-    return [
-        "expect.task_instructions_offered: no turn notes contained "
-        "task_goal_offered/task_slot_filled"
-    ]
-
-
-def phase_adherence(traj: dict, result: dict) -> list[str]:
-    """expect.phase_sequence → each turn's notes must carry the expected
-    activity= value (same [open]+turns alignment as mode_sets; entries may be
-    a single activity string or a list of allowed activities; empty = skip).
-
-    Phase 2 session-phase layer (docs/build-plan-pedagogy-engine.md): the
-    activity_type is code-decided and logged per turn. Per-turn mismatches
-    are WARN; adherence = matching/total hard-fails below
-    expect.phase_adherence_min (default 0.8).
-    """
-    expect = traj.get("expect") or {}
-    seq = expect.get("phase_sequence") or []
-    if not seq:
-        return []
-    try:
-        min_adherence = float(expect.get("phase_adherence_min") or 0.8)
-    except (TypeError, ValueError):
-        min_adherence = 0.8
-    turns = _turns(result)
-    findings: list[str] = []
-    if len(turns) != len(seq):
-        findings.append(
-            f"turn count {len(turns)} != expect.phase_sequence length {len(seq)}"
-        )
-    matching = 0
-    total = 0
-    n = min(len(turns), len(seq))
-    for i in range(n):
-        allowed = seq[i]
-        if not allowed:
-            continue
-        if isinstance(allowed, str):
-            allowed = [allowed]
-        total += 1
-        got = None
-        evs = _events_of(turns[i], "activity")
-        if evs is not None:  # typed events (preferred)
-            if evs:
-                got = str(evs[0].get("key") or "").strip() or None
-        else:  # replay fallback
-            for note in turns[i].get("notes") or []:
-                s = str(note)
-                if s.startswith("activity="):
-                    got = s.split("=", 1)[1].strip()
-                    break
-        if got in set(allowed):
-            matching += 1
-        else:
-            findings.append(
-                f"WARN turn {i}: activity {got!r} not in allowed "
-                f"{sorted(allowed)}"
-            )
-    if total:
-        ratio = matching / total
-        if ratio < min_adherence:
-            findings.append(
-                f"phase adherence {matching}/{total}={ratio:.2f} "
-                f"< min {min_adherence:.2f}"
-            )
-    return findings
+# (task_goal_offered + phase_adherence checks DELETED 2026-08-03 with the
+# task runtime + session-phase machinery — full-code-audit S9. Their event
+# kinds no longer exist; trajectories no longer declare those expectations.)
 
 
 def transfer_seen_or_warn(traj: dict, result: dict) -> list[str]:
@@ -663,8 +578,6 @@ CHECKS = {
         due_elicit_fired,
         progress_milestones_fired,
         introduce_scaffolded,
-        task_goal_offered,
-        phase_adherence,
         transfer_seen_or_warn,
     )
 }

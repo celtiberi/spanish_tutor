@@ -70,8 +70,12 @@ def test_catalog_count_published_number():
     # at the campaign close; +1 = MORPH_CARD, 2026-07-29 morph-card review;
     # +1 = FRAME_RECORDED, 2026-07-29 encounter-variety round;
     # +1 = RENDER_DROPPED, 2026-07-29 §1.1b settlement round;
-    # +2 = OUTPUT_GATE_STRIPPED/HELD, 2026-07-30 still_fail floor).
-    assert len(NOTE_CATALOG) == 71
+    # +2 = OUTPUT_GATE_STRIPPED/HELD, 2026-07-30 still_fail floor;
+    # −8 = ACTIVITY/PHASE_CONSUMED/OPEN_SCENES/TASK_SLOT_FILLED/
+    #      TASK_COMPLETE/TASK_GOAL_OFFERED/CLOSE_PHASE_OFFERED/FOCUS_ASYNC,
+    #      2026-08-03 full-code-audit S9 deletions (scenes, session-phase
+    #      clock, task runtime, focus enricher)).
+    assert len(NOTE_CATALOG) == 63
 
 
 def test_stability_classes_are_the_measured_vocabulary():
@@ -80,9 +84,9 @@ def test_stability_classes_are_the_measured_vocabulary():
     eval_pinned = {s.kind for s in NOTE_CATALOG.values()
                    if s.stability == "eval-pinned"}
     assert eval_pinned == {
-        EV.MODE, EV.ACTIVITY, EV.UPTAKE_FLAGGED, EV.DUE_ELICIT_OFFERED,
-        EV.PROGRESS_MILESTONE, EV.INTRODUCE_PLANNED, EV.TASK_GOAL_OFFERED,
-        EV.TASK_SLOT_FILLED, EV.OUTPUT_GATE_OK, EV.OUTPUT_GATE_SOFT_FAIL,
+        EV.MODE, EV.UPTAKE_FLAGGED, EV.DUE_ELICIT_OFFERED,
+        EV.PROGRESS_MILESTONE, EV.INTRODUCE_PLANNED,
+        EV.OUTPUT_GATE_OK, EV.OUTPUT_GATE_SOFT_FAIL,
         EV.OUTPUT_GATE_FAIL, EV.OUTPUT_GATE_REPAIRED,
         EV.OUTPUT_GATE_STILL_FAIL, EV.OUTPUT_GATE_ERROR,
     }
@@ -120,10 +124,6 @@ ROUND_TRIP = [
     (EV.UPTAKE_FLAGGED, "uptake_flagged:leche"),
     (EV.INTRODUCE_TABLE_MISSING, "introduce_table_missing"),
     (EV.INTRODUCE_PLANNED, "introduce_planned:buenos días:R-D"),
-    (EV.TASK_SLOT_FILLED, "task_slot_filled:name"),
-    (EV.TASK_COMPLETE, "task_complete:boat_likes"),
-    (EV.TASK_GOAL_OFFERED, "task_goal_offered:boat_likes"),
-    (EV.CLOSE_PHASE_OFFERED, "close_phase_offered"),
     (EV.INTRODUCE_DOWNGRADED, "introduce_downgraded:hola:R-B_to_R-D"),
     (EV.MODE, "mode=conversation"),
     (EV.MODE_REASON, "mode_reason=default_conversation"),
@@ -154,7 +154,6 @@ ROUND_TRIP = [
     (EV.IMAGE_DECLARED_COOLDOWN, "image_declared_cooldown:pan"),
     (EV.IMAGE_DECISION, "image_decision:no_image_worthy_concept"),
     (EV.TEACH_IMAGE, "teach_image:bote"),
-    (EV.FOCUS_ASYNC, "focus_async"),
     (EV.RECAST, "recast"),
     (EV.STRUCTURED_REPLY, "structured_reply"),
     (EV.SHEET_TOOL_UPDATE, "tool_update"),
@@ -173,14 +172,9 @@ ROUND_TRIP = [
     (EV.OPEN_PHASE, "open_phase=diagnostic"),
     (EV.PHASE, "phase=ai_tutor"),
     (EV.PHASE, "phase=chat_stretch"),
-    (EV.ACTIVITY, "activity=new_input"),
-    (EV.PHASE_CONSUMED, "phase_consumed=True"),
-    (EV.PHASE_CONSUMED, "phase_consumed=False"),
     (EV.HARD_BREAK, "hard_break=False"),
     (EV.PLAN_SOURCE, "plan_source=mode_runtime"),
     (EV.TEACHER_MODE, "teacher_mode=planned"),
-    (EV.OPEN_SCENES, "open_scenes=boat_likes,boat_meet_captain"),
-    (EV.OPEN_SCENES, "open_scenes=—"),
     (EV.MEM_SHOWN, "mem_shown=english_only,greet"),
     (EV.MEM_SHOWN, "mem_shown=—"),
     (EV.MEM_ASKED, "mem_asked=ask_how,free_chat:ip-03"),
@@ -215,7 +209,7 @@ def test_emit_renders_the_legacy_string():
     assert log.emit(
         EV.PLAN_CARD, payload={"phase": "diagnostic", "move": "model_try"}
     ) == "plan:diagnostic/model_try"
-    assert render_note(EV.FOCUS_ASYNC) == "focus_async"
+    assert render_note(EV.RECAST) == "recast"
 
 
 def test_absorb_preserves_bytes_and_classifies():

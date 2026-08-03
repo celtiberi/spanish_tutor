@@ -30,17 +30,19 @@ The head sequence (``PRE_MODEL_STAGES``, in order)::
                              owner (CHAR-BUG-002 RESOLVED, batch 3: modes
                              guard 4 reads state only)
     stage_due_outcomes       pre-turn retrieval-outcome recording
-    stage_open_scenes        open-scene assembly + mode_state binding
-    stage_bind_activity      empty-retrieval force_advance + activity bind
     stage_select_mode        select_mode + MODE/MODE_REASON typed events
     stage_guard6_covered     guard-6 covered-concept session memory
 
+(Scenes, the session-phase clock and the task runtime were DELETED
+2026-08-03 — full-code-audit S9, USER-adjudicated: stage_open_scenes,
+stage_bind_activity, stage_phase_tick, the task contributor and the
+close/due-elicit/activity keying died with them.)
+
 The CONTRIBUTORS family (batch 2) runs next: ``stage_contributors``
-iterates ``CONTRIBUTORS`` — due_elicit → self_flag_uptake → introduce →
-task → close_summary, the EXACT historical inline order.  Each contributor
+iterates ``CONTRIBUTORS`` — self_flag_uptake → introduce, the surviving
+members in the historical inline order.  Each contributor
 is {name, eligible(ctx), build(session, ctx)}; ``build`` wraps the
-module-level builder functions in conv_session (due_elicit_block etc. —
-signatures unchanged, their direct tests untouched) and returns the
+module-level builder functions in conv_session and returns the
 instruction text (or None); the loop appends it via ``append_instruction``.
 The introduce contributor returns None by design — its render is DEFERRED
 to the realize region (R-B honesty: an image plan must not claim an
@@ -50,13 +52,7 @@ The zero-register overlay is NOT a contributor: it lives inside
 not the contributor idiom — verified against the family markers, left
 in place.
 
-``stage_phase_tick`` is part of the phase family but is NOT in the head
-sequence: in the real post-E4 code the phase clock ticks AFTER the
-contributor region (due/uptake/introduce/task/close instruction assembly),
-not between select and contributors as the amended plan sketch drew it.
-The goldens pin that order; the executor calls it at the true site.
-
-The REALIZE family (batch 3) runs after the phase tick, at the exact
+The REALIZE family (batch 3) runs after the contributors, at the exact
 historical inline order (``REALIZE_STAGES``)::
 
     stage_signal_shadow      parallel signal classifier spawn (default)
@@ -107,7 +103,7 @@ turn recorders at the exact historical inline order (``RECORDER_STAGES``)::
                              last_mode (scene_modeled marks DELETED —
                              CHAR-BUG-005 resolved-by-deletion)
     stage_soft_plan          soft_plan snapshot (focus rail / debug)
-    stage_tail_events        tail summary events (pedagogy/phase/activity/
+    stage_tail_events        tail summary events (pedagogy/phase/
                              hard_break/plan_source/mem_* emits)
     stage_parts_notes        result.parts enrichment + THE notes projection
                              (seq-ordered render of the typed event log)
@@ -166,17 +162,12 @@ class TurnContext:
     obs: dict = field(default_factory=dict)         # build_observations
     blank: bool = False                             # blank-sheet learner
     sigs: set[str] = field(default_factory=set)     # observation signals
-    open_scenes: list = field(default_factory=list)
-    activity: str = ""                              # phase activity hint
     decision: Any = None                            # select_mode decision
 
     # -- produced by the contributor family (batch 2) -----------------------
     # IntroducePlan parked for the DEFERRED render in the realize region
     # (R-B honesty: rendered only after image resolution is known).
     intro_plan: Any = None
-
-    # -- produced by stage_phase_tick (post-contributors — see module doc) --
-    phase_consumed: bool | None = None
 
     # -- produced by the realize family (batch 3) ---------------------------
     teach_images: list = field(default_factory=list)
@@ -308,34 +299,9 @@ def stage_due_outcomes(session, ctx: TurnContext) -> None:
         session._record_due_outcomes(ctx.learner, ctx.sigs)
 
 
-def stage_open_scenes(session, ctx: TurnContext) -> None:
-    """Open-scene assembly + the mode_state open_scene_ids binding."""
-    from .scenes import open_scenes_for_sheet
-
-    ctx.open_scenes = open_scenes_for_sheet(session.sheet, session.pack_dir)
-    session.mode_state.open_scene_ids = [
-        s.get("id") for s in ctx.open_scenes if s.get("id")
-    ]
-
-
-def stage_bind_activity(session, ctx: TurnContext) -> None:
-    """Session phase layer (Phase 2): code decides the activity class for
-    this turn.  Resolve empty retrieval BEFORE flavoring the turn (Grok
-    AMEND 2b, 2026-07-28): a turn must never be flavored for a retrieval
-    phase with nothing due."""
-    if session.phase_state.current_activity() == "retrieval":
-        from .retrieval_scheduler import due_items as _due_now
-
-        if not _due_now(session.sheet):
-            session.phase_state.force_advance()
-
-    ctx.activity = session.phase_state.current_activity()
-
-
 def stage_select_mode(session, ctx: TurnContext) -> None:
-    """select_mode call — the guard chain keeps absolute priority; only the
-    default/known-open path is flavored by the activity hint.  Emits the
-    MODE/MODE_REASON typed events at stage "select" (since the CHAR-BUG-003
+    """select_mode call — the guard chain keeps absolute priority.  Emits
+    the MODE/MODE_REASON typed events at stage "select" (since the CHAR-BUG-003
     fix result.notes renders in seq order, so mode=/mode_reason= appear at
     their true chronological position)."""
     from .corpus import pack_topic_titles
@@ -348,7 +314,6 @@ def stage_select_mode(session, ctx: TurnContext) -> None:
         is_open=ctx.is_open,
         learner=ctx.learner if not ctx.is_open else "",
         mode_state=session.mode_state,
-        open_scenes=ctx.open_scenes,
         # covered_concepts rides with images_shown: a guard-6 concept is
         # covered for the session even when no image/lexicon write landed
         # (2026-07-28 repetition forensics — the conf<0.25 escape hatch).
@@ -358,7 +323,6 @@ def stage_select_mode(session, ctx: TurnContext) -> None:
         ),
         session_memory=session.pedagogy_memory.snapshot(),
         pack_topics=pack_topic_titles(session.pack_dir),
-        activity_hint=ctx.activity,
     )
     ctx.decision = decision
     ctx.ev.emit(EV.MODE, key=decision.mode.value, stage="select")
@@ -384,8 +348,6 @@ PRE_MODEL_STAGES: tuple = (
     stage_observe,
     stage_english_streak,
     stage_due_outcomes,
-    stage_open_scenes,
-    stage_bind_activity,
     stage_select_mode,
     stage_guard6_covered,
 )
@@ -403,40 +365,25 @@ def flavorable(
     modes: frozenset | set,
     exclude_reasons: frozenset | set = frozenset(),
     include_reasons: frozenset | set | None = None,
-    activities: frozenset | set | None = None,
-    exclude_activities: frozenset | set = frozenset(),
 ) -> bool:
-    """THE shared eligibility predicate over (mode, reason, activity).
+    """THE shared eligibility predicate over (mode, reason).
 
-    Replaces the map's three inline spellings.  Characterization (Phase 4
-    batch 2 — the spellings genuinely differ, so the differences are
-    EXPLICIT parameters, never silent unification):
+    The activity terms died with the session-phase clock (full-code-audit
+    S9 deletion, 2026-08-03).  Two spellings survive:
 
-    Spelling A — due_elicit_block's internal gate:
-        mode in DUE_ELICIT_MODES ({conversation, transfer}) AND
-        reason NOT in DUE_GUARD_REASONS AND activity != new_input
-        (sole-orchestrator: introduce owns new_input — Grok AMEND 4a)
-        → modes=DUE_ELICIT_MODES, exclude_reasons=DUE_GUARD_REASONS,
-          exclude_activities={"new_input"}
     Spelling B — self_flag_uptake_block's internal gate:
         mode in SELF_FLAG_MODES ({conversation, transfer, cf_recast}) AND
-        reason NOT in DUE_GUARD_REASONS; NO activity term (uptake may fire
-        in any phase, including new_input)
+        reason NOT in DUE_GUARD_REASONS
         → modes=SELF_FLAG_MODES, exclude_reasons=DUE_GUARD_REASONS
-    Spelling C — the "flavorable turn" predicate, spelled THREE times
-        (introduce_block internal / task inline / close inline) and
-        IDENTICAL on (mode, reason) in all three:
-        mode == "conversation" AND reason in INTRODUCE_FLAVORABLE_REASONS;
-        only the activity term differs per contributor (new_input / task /
-        close — the introduce/close activity gate rides eligibility; the
-        task activity gate selects the whole contributor, see _task_*)
+    Spelling C — the "flavorable turn" predicate (introduce):
+        mode == "conversation" AND reason in INTRODUCE_FLAVORABLE_REASONS
         → modes={"conversation"}, include_reasons=INTRODUCE_FLAVORABLE_
-          REASONS, activities={...}
+          REASONS
 
-    A and B are reason-EXCLUDING (broad conversation flavors minus guard
-    turns); C is reason-INCLUDING (only the known-open/default fallthrough
+    B is reason-EXCLUDING (broad conversation flavors minus guard turns);
+    C is reason-INCLUDING (only the known-open/default fallthrough
     reasons).  Guard/repair/recast turns keep their single focus under
-    every spelling.
+    both spellings.
     """
     mode = ctx.decision.mode.value
     reason = ctx.decision.reason
@@ -445,10 +392,6 @@ def flavorable(
     if reason in exclude_reasons:
         return False
     if include_reasons is not None and reason not in include_reasons:
-        return False
-    if activities is not None and ctx.activity not in activities:
-        return False
-    if ctx.activity in exclude_activities:
         return False
     return True
 
@@ -476,7 +419,7 @@ def append_instruction(decision, text: str | None) -> None:
 @dataclass(frozen=True)
 class InstructionContributor:
     """One soft instruction contributor: ``eligible`` gates on the
-    (mode, reason, activity) working set via ``flavorable``; ``build``
+    (mode, reason) working set via ``flavorable``; ``build``
     wraps the module-level builder (side effects included: budget writes,
     typed events, ctx products) and returns the instruction text to append
     (or None)."""
@@ -484,43 +427,6 @@ class InstructionContributor:
     name: str
     eligible: Callable[[TurnContext], bool]
     build: Callable[[Any, TurnContext], str | None]
-
-
-# -- due_elicit (spelling A) -------------------------------------------------
-
-
-def _due_elicit_eligible(ctx: TurnContext) -> bool:
-    from .conv_session import DUE_ELICIT_MODES, DUE_GUARD_REASONS
-
-    return flavorable(
-        ctx,
-        modes=DUE_ELICIT_MODES,
-        exclude_reasons=DUE_GUARD_REASONS,
-        exclude_activities=frozenset({"new_input"}),
-    )
-
-
-def _due_elicit_build(session, ctx: TurnContext) -> str | None:
-    """Due re-encounters ride as a SOFT instruction addition on
-    conversation-flavored turns only (no new hard mode; repair and guard
-    turns keep their single focus)."""
-    from .conv_session import due_elicit_block
-    from .turn_events import TurnEventKind as EV
-
-    due_block, due = due_elicit_block(
-        session.sheet,
-        mode=ctx.decision.mode.value,
-        reason=ctx.decision.reason,
-        activity_hint=ctx.activity,
-    )
-    if not due_block:
-        return None
-    ctx.ev.emit(
-        EV.DUE_ELICIT_OFFERED,
-        payload={"keys": [d.key for d in due], "kinds": [d.kind for d in due]},
-        stage="instruct",
-    )
-    return due_block
 
 
 # -- self_flag_uptake (spelling B) -------------------------------------------
@@ -559,23 +465,22 @@ def _self_flag_uptake_build(session, ctx: TurnContext) -> str | None:
     return uptake_txt
 
 
-# -- introduce (spelling C, activity=new_input; DEFERRED render) -------------
+# -- introduce (spelling C; DEFERRED render) ---------------------------------
 
 
 def _introduce_eligible(ctx: TurnContext) -> bool:
     # No reason term here: the INTRODUCE_TABLE_MISSING telemetry emit has
-    # no reason test in the historical code (new_input conversation turns
-    # with a missing table always note it); introduce_block applies the
+    # no reason test in the historical code (conversation turns with a
+    # missing table always note it); introduce_block applies the
     # spelling-C reason gate internally for the plan path.
     return flavorable(
         ctx,
         modes=frozenset({"conversation"}),
-        activities=frozenset({"new_input"}),
     )
 
 
 def _introduce_build(session, ctx: TurnContext) -> None:
-    """INTRODUCE plan (Phase 3, r7 S2): new_input phase + flavorable turn
+    """INTRODUCE plan (Phase 3, r7 S2): flavorable conversation turns
     only.  Code picks the item + scaffold; the model realizes it; the
     ledger write happens POST-turn only if the reply shows the key.
     R-B honesty (Grok AMEND 4b, 2026-07-28): returns None ALWAYS — the
@@ -594,7 +499,6 @@ def _introduce_build(session, ctx: TurnContext) -> None:
         session.pedagogy_memory.snapshot(),
         mode=ctx.decision.mode.value,
         reason=ctx.decision.reason,
-        activity_hint=ctx.activity,
     )
     if intro_plan is None:
         return None
@@ -615,144 +519,8 @@ def _introduce_build(session, ctx: TurnContext) -> None:
     return None
 
 
-# -- task (activity gate selects the contributor; spelling C gates the text) -
-
-
-def _task_eligible(ctx: TurnContext) -> bool:
-    # The whole contributor (scene bind + slot eval + completion) runs on
-    # EVERY task-phase turn — repair/guard turns included, exactly as the
-    # historical inline block did; only the instruction TEXT is gated by
-    # spelling C inside build.
-    return ctx.activity == "task"
-
-
-def _task_build(session, ctx: TurnContext) -> str | None:
-    """ConvergentTaskRuntime wiring (Phase 5, r6 Rank-4): task-phase turns
-    bind the FIRST task-capable open scene (session-scoped, persists until
-    done).  Slot filling is evaluated on the learner's OWN text BEFORE the
-    tutor call; the teacher-facing task block (goal, slots,
-    tutor_private_info with the never-volunteer directive) rides flavorable
-    turns — the exact INTRODUCE set, PLUS (PHASE HOST rule 7, Proposal A
-    2026-07-29) conversation turns whose reason is a topic-matched
-    ``scene_goal:*`` — the task phase hosts scene pursuit, so a scene pick
-    during task activity must not withhold the task block (the seam Grok's
-    countersign caught).  Guards and repairs keep their single focus.
-    Close/introduce gating stays exact-set only.  After done, task turns
-    fall back to normal flavor (the completing turn still carries the
-    celebrate line)."""
-    from .conv_session import INTRODUCE_FLAVORABLE_REASONS
-    from .task_runtime import (
-        evaluate_turn as _task_eval,
-        task_from_scene,
-        task_instructions,
-    )
-    from .turn_events import TurnEventKind as EV
-
-    task_scene = None
-    if session.task_state is not None:
-        task_scene = next(
-            (
-                s for s in ctx.open_scenes
-                if s.get("id") == session.task_state.scene_id
-            ),
-            None,
-        )
-    if session.task_state is None:
-        for sc in ctx.open_scenes:
-            st = task_from_scene(sc)
-            if st is not None:
-                session.task_state = st
-                task_scene = sc
-                break
-    just_done = False
-    if session.task_state is None or task_scene is None:
-        return None
-    if (
-        ctx.learner and not ctx.is_open
-        and session.task_state.status == "open"
-    ):
-        before_slots = set(session.task_state.slots_filled)
-        session.task_state = _task_eval(
-            session.task_state, ctx.learner, task_scene
-        )
-        for sid in session.task_state.slots_filled:
-            if sid not in before_slots:
-                ctx.ev.emit(EV.TASK_SLOT_FILLED, key=sid, stage="instruct")
-        if session.task_state.status == "done":
-            just_done = True
-            ctx.ev.emit(
-                EV.TASK_COMPLETE,
-                key=session.task_state.scene_id,
-                stage="instruct",
-            )
-            _desc = str(((task_scene or {}).get("primary_exit") or {}).get("description") or "")
-            session._progress_note(
-                "task_complete", session.task_state.scene_id,
-                item_kind="task", detail_ctx={"desc": _desc},
-            )
-    if (
-        (
-            flavorable(
-                ctx,
-                modes=frozenset({"conversation"}),
-                include_reasons=INTRODUCE_FLAVORABLE_REASONS,
-            )
-            # PHASE HOST rule 7 (Proposal A, 2026-07-29): scene_goal:* is
-            # task-block flavorable under task activity only.  ctx.activity
-            # == "task" is structurally true here (_task_eligible), asserted
-            # explicitly to match the binding text.
-            or (
-                ctx.activity == "task"
-                and ctx.decision.mode.value == "conversation"
-                and ctx.decision.reason.startswith("scene_goal:")
-            )
-        )
-        and (session.task_state.status == "open" or just_done)
-    ):
-        ctx.ev.emit(
-            EV.TASK_GOAL_OFFERED,
-            key=session.task_state.scene_id,
-            stage="instruct",
-        )
-        return task_instructions(session.task_state, task_scene)
-    return None
-
-
-# -- close_summary (spelling C, activity=close) ------------------------------
-
-
-def _close_summary_eligible(ctx: TurnContext) -> bool:
-    from .conv_session import INTRODUCE_FLAVORABLE_REASONS
-
-    return flavorable(
-        ctx,
-        modes=frozenset({"conversation"}),
-        include_reasons=INTRODUCE_FLAVORABLE_REASONS,
-        activities=frozenset({"close"}),
-    )
-
-
-def _close_summary_build(session, ctx: TurnContext) -> str:
-    """CLOSE phase (PEDAGOGY §1.2, USER-ratified 2026-07-28): flavorable
-    close turns carry the compact session summary the one-line English
-    close must be built from.  Same condition set as INTRODUCE — guard and
-    repair turns keep their single focus."""
-    from .conv_session import close_summary_block
-    from .turn_events import TurnEventKind as EV
-
-    ctx.ev.emit(EV.CLOSE_PHASE_OFFERED, stage="instruct")
-    return close_summary_block(
-        session.pedagogy_memory.snapshot(),
-        resolved_forms=session.mode_state.resolved_this_session,
-        task_state=session.task_state,
-    )
-
-
 # The contributor census, at the EXACT historical inline call order.
 CONTRIBUTORS: tuple[InstructionContributor, ...] = (
-    InstructionContributor(
-        "due_elicit", _due_elicit_eligible, _due_elicit_build
-    ),
     InstructionContributor(
         "self_flag_uptake",
         _self_flag_uptake_eligible,
@@ -760,10 +528,6 @@ CONTRIBUTORS: tuple[InstructionContributor, ...] = (
     ),
     InstructionContributor(
         "introduce", _introduce_eligible, _introduce_build
-    ),
-    InstructionContributor("task", _task_eligible, _task_build),
-    InstructionContributor(
-        "close_summary", _close_summary_eligible, _close_summary_build
     ),
 )
 
@@ -777,31 +541,10 @@ def stage_contributors(session, ctx: TurnContext) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Phase family (called at its REAL site — after the contributor region)
-# ---------------------------------------------------------------------------
-
-
-def stage_phase_tick(session, ctx: TurnContext) -> None:
-    """Advance/freeze the phase clock: repair + guard turns freeze;
-    interventions (cf_recast/form_focus/association/transfer) consume.
-
-    NOT part of ``PRE_MODEL_STAGES``: the tick sits AFTER the contributor
-    region in the real code (verified 2026-07-28, Phase 4 batch 1) — the
-    goldens pin that ordering, so the executor calls this at the true
-    mid-method site."""
-    from .conv_session import phase_turn_consumed
-
-    ctx.phase_consumed = phase_turn_consumed(
-        ctx.decision.mode.value, ctx.decision.reason
-    )
-    session.phase_state.tick(ctx.phase_consumed)
-
-
-# ---------------------------------------------------------------------------
-# REALIZE family (Phase 4 batch 3) — runs after the phase tick, at the exact
-# historical inline order.  last_mode_decision (focus rail) is snapshotted
-# AFTER the INTRODUCE render so its instructions stay faithful to what the
-# model actually receives.
+# REALIZE family (Phase 4 batch 3) — runs after the contributors, at the
+# exact historical inline order.  last_mode_decision (focus rail) is
+# snapshotted AFTER the INTRODUCE render so its instructions stay faithful
+# to what the model actually receives.
 # ---------------------------------------------------------------------------
 
 
@@ -936,16 +679,7 @@ def stage_introduce_render(session, ctx: TurnContext) -> None:
 
 def stage_mode_snapshot(session, ctx: TurnContext) -> None:
     """last_mode_decision (focus rail) snapshot — after the render."""
-    session.last_mode_decision = {
-        **ctx.decision.as_dict(),
-        "phase": {
-            "activity": ctx.activity,
-            "consumed": ctx.phase_consumed,
-            "index": session.phase_state.index,
-            "turns_in_phase": session.phase_state.turns_in_phase,
-            "frozen_turns": session.phase_state.frozen_turns,
-        },
-    }
+    session.last_mode_decision = dict(ctx.decision.as_dict())
 
 
 def stage_prompt_build(session, ctx: TurnContext) -> None:
@@ -968,7 +702,6 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
     from . import config
     from .character_sheet import format_sheet_for_prompt
     from .executor import build_ai_tutor_system, build_ai_tutor_user_message
-    from .scenes import scene_hints_for_prompt
     from .turn_events import TurnEventKind as EV
 
     # B0 "brief" arm DELETED 2026-08-03 with the course pack it fed on
@@ -996,6 +729,19 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
         }
         for d in due_items(session.sheet, max_due=5)
     ]
+    if due_facts:
+        # The DUE offer event — fired from the due-DATA path (the facts the
+        # model actually receives), not a phase-gated contributor (the
+        # session-phase machinery died 2026-08-03).  stage_frame_record
+        # reads these events for the frames_seen exposure writes.
+        ctx.ev.emit(
+            EV.DUE_ELICIT_OFFERED,
+            payload={
+                "keys": [d["key"] for d in due_facts],
+                "kinds": [d["kind"] for d in due_facts],
+            },
+            stage="instruct",
+        )
     # Two-phase context (USER architecture 2026-08-03; default): PLAN
     # turns carry everything (pedagogy + pack + sheet + history) and the
     # model writes its own session plan; ROUND turns carry the model's
@@ -1012,7 +758,6 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
         session_memory=session.pedagogy_memory.snapshot(),
         teach_images=ctx.teach_images,
         blank_sheet=ctx.blank,
-        open_scene_hints=scene_hints_for_prompt(ctx.open_scenes),
         sheet_summary=format_sheet_for_prompt(
             session.sheet,
             association_table=getattr(session, "association_table", None),
@@ -1736,7 +1481,6 @@ def stage_soft_plan(session, ctx: TurnContext) -> None:
         "mode_reason": decision.reason,
         "hard_break": decision.hard_break,
         "phase": "diagnostic" if (ctx.is_open and ctx.blank) else "chat",
-        "open_scenes": session.mode_state.open_scene_ids,
         "observations": {
             "signals": ctx.obs.get("signals"),
             "error_hit_ids": ctx.obs.get("error_hit_ids"),
@@ -1766,17 +1510,11 @@ def stage_tail_events(session, ctx: TurnContext) -> None:
         ev.emit(EV.OPEN_PHASE, key=ctx.phase_label, stage="tail")
     else:
         ev.emit(EV.PHASE, key="ai_tutor", stage="tail")
-    ev.emit(EV.ACTIVITY, key=ctx.activity, stage="tail")
-    ev.emit(EV.PHASE_CONSUMED, key=str(ctx.phase_consumed),
-            payload={"value": bool(ctx.phase_consumed)}, stage="tail")
     ev.emit(EV.HARD_BREAK, key=str(decision.hard_break),
             payload={"value": bool(decision.hard_break)},
             stage="tail")
     ev.emit(EV.PLAN_SOURCE, key="mode_runtime", stage="tail")
     ev.emit(EV.TEACHER_MODE, key=session.teacher_mode, stage="tail")
-    ev.emit(EV.OPEN_SCENES,
-            payload={"ids": list(session.mode_state.open_scene_ids)},
-            stage="tail")
     ev.emit(EV.MEM_SHOWN,
             payload={"items": sorted(session.pedagogy_memory.shown)},
             stage="tail")
@@ -1884,7 +1622,6 @@ def stage_debug_capture(session, ctx: TurnContext) -> None:
         messages=ctx.messages,
         task=ctx.task,
         decision_dict=ctx.decision.as_dict(),
-        activity=ctx.activity,
         usage=ctx.usage,
         gate_result=ctx.gate_result,
         notes=ctx.result.notes,

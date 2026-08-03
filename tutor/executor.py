@@ -147,7 +147,6 @@ what they just said.
   direct question to re-ask a prior try.
 - React to what they said. Your agenda is YOURS — adapt it to them.
 - Mostly Spanish. No flashcard ladder. No re-asking covered probes.
-- Open scene goals are optional quests — close them opportunistically if natural.
 - If an image is attached in the turn task, associate it with the Spanish you
   model. Do not invent an image when the list is empty.
 """
@@ -238,7 +237,6 @@ def build_ai_tutor_user_message(
     teach_images: list | None = None,
     blank_sheet: bool = False,
     mode_decision: dict | None = None,  # accepted, no longer injected (§1.1)
-    open_scene_hints: list | None = None,
     sheet_summary: str = "",
     personal_context: str = "",
     teaching_data: dict | None = None,
@@ -265,8 +263,8 @@ def build_ai_tutor_user_message(
         # §1.1 REWRITE (USER 2026-08-03): the mode/phase/introduce routers'
         # instruction blocks NO LONGER SHIP — the model is the teacher and
         # plans from the facts below. Router output stays visible in
-        # notes/debug as shadow telemetry only.
-        "open_scene_goals": open_scene_hints or [],
+        # notes/debug as shadow telemetry only. (open_scene_goals DELETED
+        # 2026-08-03 with scenes — full-code-audit S9.)
         "teaching_data": teaching_data or None,
         # The model's OWN session plan (two-phase context, 2026-08-03) —
         # code stores and replays it verbatim, never edits it (§1.1).

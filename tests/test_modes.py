@@ -1,14 +1,9 @@
-"""select_mode + scenes (no live API)."""
+"""select_mode (no live API). Scenes were DELETED 2026-08-03 (S9)."""
 
 import unittest
 
 from tutor.character_sheet import default_sheet, note_error_pattern
 from tutor.modes import Mode, ModeSessionState, select_mode
-from tutor.scenes import (
-    evaluate_exit_predicate,
-    load_scenes,
-    open_scenes_for_sheet,
-)
 
 
 class TestSelectMode(unittest.TestCase):
@@ -326,25 +321,6 @@ class TestGuardSixEscapeHatchClosed(unittest.TestCase):
         self.assertNotEqual(d.reason, "new_noun:casa")
 
 
-class TestScenes(unittest.TestCase):
-    def test_load_boat_scenes(self):
-        scenes = load_scenes()
-        ids = {s["id"] for s in scenes}
-        self.assertIn("boat_meet_captain", ids)
-        self.assertIn("boat_where_boat", ids)
-        self.assertIn("boat_likes", ids)
-
-    def test_open_scenes_on_blank(self):
-        open_s = open_scenes_for_sheet(default_sheet())
-        self.assertTrue(len(open_s) >= 1)
-
-    def test_exit_predicate_skill(self):
-        sheet = default_sheet()
-        self.assertFalse(evaluate_exit_predicate(sheet, "skill:IP-06:min_conf=0.35"))
-        sheet["skills"]["IP-06"] = {"status": "emerging", "confidence": 0.5}
-        self.assertTrue(evaluate_exit_predicate(sheet, "skill:IP-06:min_conf=0.35"))
-
-
 class TestFormFocusResolve(unittest.TestCase):
     def test_correct_use_suppresses_form_focus(self):
         """Correct production of the hot form must not hard-break on it."""
@@ -517,66 +493,52 @@ class TestRepairImageRelevance(unittest.TestCase):
         self.assertEqual(d.image_concept, "hola")
 
 
-class TestSceneHostRules(unittest.TestCase):
-    """PHASE HOST rules (Proposal A micro-batch, 2026-07-29 —
-    docs/reviews-architecture-refactor.md policy round, CHAR-BUG-005
-    RESOLVED-BY-DELETION): guard-7's topic scene pick is suppressed on
-    new_input/close activities (introduce owns new_input, close owns close
-    per PEDAGOGY §6.4); topic-matched scene_goal stays reachable on
-    task/free/retrieval; the prefer-unmodeled/needs-model fallback is
-    deleted — no topic match, no scene capture."""
+class TestScenesDeleted(unittest.TestCase):
+    """Scenes are DELETED, not archived (full-code-audit S9, 2026-08-03;
+    ENGINEERING §4.6 — USER: even goal/exit data is code-selected
+    steering). This pin asserts the machinery stays gone: no tutor.scenes
+    module, no scene routing in modes, no scene state on the mode store,
+    no scenes data directory in the domain pack."""
 
-    def _sheet(self):
-        s = default_sheet()
-        s["skills"]["IP-01"].update(
-            {"confidence": 0.6, "status": "known", "evidence": ["said hola"]}
+    def test_scenes_module_gone(self):
+        import importlib.util
+
+        self.assertIsNone(importlib.util.find_spec("tutor.scenes"))
+
+    def test_no_scene_routing_symbols_in_modes(self):
+        import tutor.modes as modes_mod
+
+        for name in ("_scene_for_topic", "_scene_needs_model",
+                     "PHASE_FREEZE_REASONS", "_phase_prefix"):
+            self.assertFalse(hasattr(modes_mod, name), name)
+
+    def test_mode_state_has_no_scene_fields(self):
+        state = ModeSessionState()
+        self.assertFalse(hasattr(state, "open_scene_ids"))
+        self.assertFalse(hasattr(state, "scene_modeled"))
+        self.assertNotIn("open_scene_ids", state.snapshot())
+
+    def test_select_mode_rejects_scene_and_phase_kwargs(self):
+        sheet = default_sheet()
+        sheet["skills"]["IP-01"] = {"status": "emerging", "confidence": 0.4}
+        for kw in ({"open_scenes": []}, {"activity_hint": "free"}):
+            with self.assertRaises(TypeError):
+                select_mode(
+                    sheet,
+                    is_open=False,
+                    learner="Hola",
+                    observations={"blank_sheet": False, "signals": []},
+                    mode_state=ModeSessionState(),
+                    **kw,
+                )
+
+    def test_scenes_data_dir_gone(self):
+        from tutor import config
+
+        self.assertFalse(
+            (config.DEFAULT_PACK_DIR / "scenes").exists(),
+            "domain scenes/ dir must stay deleted",
         )
-        return s
-
-    def _decide(self, activity_hint, learner="Me gusta mucho el pan."):
-        sheet = self._sheet()
-        return select_mode(
-            sheet,
-            is_open=False,
-            learner=learner,
-            observations={"blank_sheet": False, "signals": ["spanish_ok"]},
-            mode_state=ModeSessionState(),
-            open_scenes=open_scenes_for_sheet(sheet),
-            activity_hint=activity_hint,
-        )
-
-    def test_scene_goal_reachable_on_task_free_retrieval(self):
-        # KEEP-5: live-topic passive scene pursuit survives the deletion on
-        # every activity that may host it (golden_due_turn's retrieval case
-        # end-to-end; task/free/None here).
-        for hint in ("task", "free", "retrieval", None):
-            d = self._decide(hint)
-            self.assertEqual(d.mode, Mode.CONVERSATION, hint)
-            self.assertTrue(
-                d.reason.startswith("scene_goal:"), (hint, d.reason)
-            )
-
-    def test_scene_pick_suppressed_on_new_input(self):
-        # Rule 6: introduce owns new_input — the same topic match falls
-        # through to default_conversation so the INTRODUCE block can fire.
-        d = self._decide("new_input")
-        self.assertEqual(d.reason, "default_conversation")
-        self.assertIn("SESSION PHASE: NEW INPUT", d.instructions)
-
-    def test_scene_pick_suppressed_on_close(self):
-        # Rule 6: close owns close — fallthrough keeps the CLOSE prefix and
-        # summary path reachable (the batch-4 stopped-note's lost
-        # close_phase_offered must not recur).
-        d = self._decide("close")
-        self.assertEqual(d.reason, "default_conversation")
-        self.assertIn("SESSION PHASE: CLOSE", d.instructions)
-
-    def test_no_topic_match_no_scene_capture(self):
-        # The deleted _scene_needs_model fallback used to force the FIRST
-        # unmodeled scene onto any zero-score turn (fresh state = nothing
-        # marked). Now a turn without a live topic match falls through.
-        d = self._decide("free", learner="Sí, hablo con mi familia cada día.")
-        self.assertEqual(d.reason, "default_conversation")
 
 
 if __name__ == "__main__":
