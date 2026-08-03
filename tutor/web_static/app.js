@@ -96,25 +96,42 @@ function renderTutorParts(parts, fallbackContent) {
   const imgBlock = renderTeachImages(parts);
   if (imgBlock) blocks.push(imgBlock);
 
-  // One flowing message, no worksheet labels (USER 2026-08-03: "am I
-  // supposed to respond to 'Your turn' or 'Next'?" — a tutor is a person
-  // talking, not a labeled form). Part order preserved: acknowledge →
-  // recast → model → explain (why never precedes the word, 2026-07-29) →
-  // try → continue. The recast keeps a subtle style so the corrected
-  // form still catches the eye.
-  const flow = [
-    ["acknowledge", ""],
-    ["recast", "part-recast"],
-    ["model", ""],
-    ["explain", ""],
-    ["try", "part-try"],
-    ["continue", "part-continue"],
+  // Labeled sections (USER 2026-08-03: "the separation helped me know
+  // where to look and what it was for") with tooltips explaining each
+  // section's job. The acknowledge line stays unlabeled — it is just
+  // the tutor reacting. Part order: why never precedes the word
+  // (2026-07-29): recast → model → explain → try.
+  if (parts.acknowledge) {
+    blocks.push(`<p class="part-flow part-ack">${esc(parts.acknowledge)}</p>`);
+  }
+  const SECTIONS = [
+    ["recast", "In natural Spanish",
+     "Your sentence, the way a native speaker would say it. Worth re-reading."],
+    ["model", "Example",
+     "Spanish for you to absorb — often contains what you'll practice next."],
+    ["explain", "Why",
+     "The meaning or grammar note behind it."],
+    ["try", "Your turn",
+     "Respond to this — say or type it in Spanish."],
   ];
-  for (const [key, cls] of flow) {
+  for (const [key, label, tip] of SECTIONS) {
     const text = parts[key];
-    if (text) {
-      blocks.push(`<p class="part-flow ${cls}">${esc(text)}</p>`);
-    }
+    if (!text) continue;
+    const lbl =
+      key === "explain" && parts.explain_depth === "deep"
+        ? "Why (more)"
+        : label;
+    blocks.push(
+      `<div class="part part-${key}">` +
+        `<span class="part-label" title="${esc(tip)}">${esc(lbl)}</span>` +
+        esc(text) +
+        `</div>`
+    );
+  }
+  // Trailing prose (the <continue> slot left the shape 2026-08-03; the
+  // parser still buckets stray closing text here) — unlabeled, muted.
+  if (parts.continue) {
+    blocks.push(`<p class="part-flow part-continue">${esc(parts.continue)}</p>`);
   }
   // Gate failure (2026-08-01): never hide — show faults + the raw attempt.
   if (parts.gate_fail || parts.gate_hold) {
