@@ -455,8 +455,11 @@ def tutor_turn(
     *,
     tools=None,
     max_tool_rounds: int = 1,
+    max_tokens: int | None = None,
 ):
-    """One learner-facing turn: text + optional sheet tool delta."""
+    """One learner-facing turn: text + optional sheet tool delta.
+    ``max_tokens``: per-call override (PLAN turns get the full budget;
+    None → the TUTOR_MAX_TOKENS default in _call)."""
     total_usage = {
         "input_tokens": 0, "output_tokens": 0,
         "thinking_tokens": 0, "cached_input_tokens": 0,
@@ -469,6 +472,7 @@ def tutor_turn(
     for round_i in range(max_tool_rounds + 1):
         final, text, tool_blocks = _call(
             client, caps, system, work_messages, tools=tools,
+            max_tokens=max_tokens,
         )
         u = _usage_dict(final)
         for k in total_usage:

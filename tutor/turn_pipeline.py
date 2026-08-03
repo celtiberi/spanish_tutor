@@ -589,6 +589,12 @@ def stage_model_call(session, ctx: TurnContext) -> None:
             ctx.messages,
             tools=tools,
             max_tool_rounds=1 if tools else 0,
+            # PLAN turns carry plan + reply in one response and the
+            # request already paid for the full context — give them the
+            # full output budget (USER 2026-08-03: "lets not be so
+            # limiting on the first request"). Rounds stay on the
+            # default TUTOR_MAX_TOKENS.
+            max_tokens=config.MAX_TOKENS if ctx.plan_turn else None,
         )
     except Exception as e:
         ctx.error_result = TurnResult(
