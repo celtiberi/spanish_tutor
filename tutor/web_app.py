@@ -520,20 +520,16 @@ def create_app() -> FastAPI:
 
     @app.get("/api/progress")
     def get_progress(request: Request):
-        """Journey rail: CONCEPT groups — one group per theme, one node per
-        item at its latest-event state, recency-ordered, time demoted to a
-        per-node whisper (2026-07-29 redesign, user direction: the journey
-        is through concepts, not days) + humanized display names +
-        live-state join + countable header
-        (docs/design-progression-view.md, as amended)."""
+        """Grade feed (Phase 3, 2026-07-31): teacher tool ability grades with
+        why + header counts from the sheet. Replaces Journey milestones as
+        the learner-visible progress surface."""
         sid = request.cookies.get(COOKIE)
         _, session, _ = _require(sid)
-        from .progress_ledger import build_progress_payload
+        from .grade_log import build_grades_payload
 
-        return build_progress_payload(
+        return build_grades_payload(
             session.sheet,
             session_id=getattr(session, "progress_session_id", ""),
-            table=getattr(session, "association_table", None),
         )
 
     @app.get("/api/debug/requests")

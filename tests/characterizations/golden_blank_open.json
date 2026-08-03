@@ -32,7 +32,6 @@
     "image_gen_disabled:hola",
     "output_gate_ok",
     "rules_backup",
-    "hard_observer",
     "scaffold=ES-forward+EN-rescue",
     "focus_async",
     "structured_reply",

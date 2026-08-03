@@ -194,13 +194,26 @@ function renderTutorParts(parts, fallbackContent) {
       )}</div>`
     );
   }
-  // still_fail floor rung b′ (system review 2026-07-30): the payload was
-  // held by the quality gate — this copy is CLIENT-owned UI, deliberately
-  // never presented as Marisol's Spanish teaching turn (§1.1a).
-  if (parts.gate_hold) {
+  // Gate failure (2026-08-01): never hide — show faults + the raw attempt.
+  // Blank "held" was a presentation bug that covered prompt/format failures.
+  if (parts.gate_fail || parts.gate_hold) {
+    const faults = (parts.gate_faults || parts.output_gate?.faults || [])
+      .map((f) => esc(String(f)))
+      .join(", ");
+    blocks.unshift(
+      `<div class="part part-gate-fail"><span class="part-label">GATE FAIL</span>` +
+        `<span class="gate-fail-body">` +
+        `Model reply failed the quality gate` +
+        (faults ? `: <code>${faults}</code>` : "") +
+        `. This is a system/prompt problem — not normal teaching. ` +
+        `The attempt is shown below so it is not hidden.</span></div>`
+    );
+  }
+  if (parts.gate_hold && !blocks.some((b) => b.includes("part-"))) {
+    // Legacy empty hold: still never silent
     blocks.push(
-      `<div class="part part-hold"><span class="part-label">Held</span>` +
-        `<span class="muted">That reply didn't pass the quality gate and wasn't shown — say anything to continue.</span></div>`
+      `<div class="part part-gate-fail"><span class="part-label">GATE FAIL</span>` +
+        `<span class="gate-fail-body">Reply was held empty — investigate gate notes.</span></div>`
     );
   }
   return blocks.length ? blocks.join("") : esc(fallbackContent || "");
@@ -402,7 +415,7 @@ function renderMorphology(sheet) {
 /** Last rendered durable count — used to show +Δ when it advances. */
 let lastDurableCount = null;
 let scoreFlashTimer = null;
-/** Latest /api/progress payload (journey rail + countable header). */
+/** Latest /api/progress payload (grade feed + countable header). */
 let lastProgress = null;
 
 function renderCost(sheet) {
@@ -430,8 +443,7 @@ function renderCost(sheet) {
   }
 }
 
-/** Countable-header fallback when /api/progress hasn't answered yet:
- * strict sheet bands only (status known / emerging; interval_days >= 14). */
+/** Countable-header fallback from the ability sheet. */
 function countsFromSheet(sheet) {
   let known = 0;
   let emerging = 0;
@@ -440,33 +452,24 @@ function countsFromSheet(sheet) {
     if (st === "known") known += 1;
     else if (st === "emerging") emerging += 1;
   }
-  let durable = 0;
-  for (const sec of ["lexicon", "grammar"]) {
-    for (const v of Object.values(sheet?.[sec] || {})) {
-      if (Number(v?.interval_days || 0) >= 14) durable += 1;
-    }
-  }
-  return { durable, known, emerging };
+  return { durable: known, known, emerging };
 }
 
-/** Countable header (design-progression-view, amended (e)4): durable-so-far
- * N · can-dos known M · emerging K. The abstract 0-100 score stays in the
- * payload for compat but is no longer the display. */
+/** Header: known can-dos (solid) + emerging count. */
 function renderScore(sheet) {
   if (!els.scoreBoard || !els.countDurable) return;
   const counts = lastProgress?.counts || countsFromSheet(sheet || {});
-  const durable = Number(counts.durable || 0);
   const known = Number(counts.known || 0);
   const emerging = Number(counts.emerging || 0);
 
   const prev = lastDurableCount;
-  els.countDurable.textContent = String(durable);
-  if (els.countKnown) els.countKnown.textContent = `can-dos solid ${known}`;
+  els.countDurable.textContent = String(known);
+  if (els.countKnown) els.countKnown.textContent = `known ${known}`;
   if (els.countEmerging) els.countEmerging.textContent = `emerging ${emerging}`;
 
   if (els.scoreDelta) {
-    if (prev !== null && durable > prev) {
-      els.scoreDelta.textContent = `+${durable - prev}`;
+    if (prev !== null && known > prev) {
+      els.scoreDelta.textContent = `+${known - prev}`;
       els.scoreDelta.classList.remove("hidden");
       els.scoreBoard.classList.add("score-up");
       if (scoreFlashTimer) clearTimeout(scoreFlashTimer);
@@ -474,145 +477,85 @@ function renderScore(sheet) {
         els.scoreDelta.classList.add("hidden");
         els.scoreBoard.classList.remove("score-up");
       }, 2800);
-    } else if (prev !== null && durable < prev) {
-      // reset learner etc. — no flash
+    } else if (prev !== null && known < prev) {
       els.scoreDelta.classList.add("hidden");
       els.scoreBoard.classList.remove("score-up");
     }
   }
-  lastDurableCount = durable;
+  lastDurableCount = known;
 }
 
-// ——— Journey rail (left): concept groups of evidence-backed item nodes ———
-// 2026-07-29 redesign (user direction): the journey is through CONCEPTS,
-// not days — one group per theme, one node per item at its latest-event
-// state, recency-ordered; time survives only as a hover whisper.
-// Honesty law (PEDAGOGY §3 + amended design): nodes render ONLY ledger events;
-// no streak chrome, no XP; mastery copy only at the known band; downgraded
-// nodes carry a quiet "needs re-check" badge instead of silent permanence.
+// ——— Grades rail (left): teacher tool ability moves with why ———
+const GRADES_EMPTY_COPY =
+  "When the teacher moves a skill up or down, it shows here with a reason. " +
+  "No silent auto-grades — only deliberate judgments from the conversation.";
 
-const JOURNEY_KINDS = {
-  planted: { icon: "🌱", label: "planted" },
-  taking_root: { icon: "🌿", label: "taking root" },
-  rooted: { icon: "🌳", label: "rooted — durable so far" },
-  regression: { icon: "↺", label: "reset — will re-check" },
-  error_recovered: { icon: "✔", label: "clean streak" },
-  can_do_emerging: { icon: "☆", label: "emerging" },
-  can_do_known: { icon: "★", label: "known" },
-  task_complete: { icon: "⚑", label: "task done" },
-  first_solo: { icon: "🗣", label: "first successful spaced recall" },
-  new_context: { icon: "🧭", label: "recalled after multi-frame practice" },
-};
-
-/** Band icon for a can-do function section (r8: mastery ★ only at the
- * known gate; 0.55 is emerging ONLY). */
-const CAN_DO_BAND_ICONS = { solid: "★", emerging: "☆", quiet: "·" };
-
-// Amended (c) first-session copy: durability milestones are multi-day BY
-// DESIGN; same-day seeds/tasks still show, and this copy sets the honest
-// expectation instead of an empty-looking rail.
-const JOURNEY_EMPTY_COPY =
-  "Seeds plant today. Sprouts (3-day recall) and trees (2-week hold) " +
-  "appear when you come back — that gap is how memory sticks.";
-
-/** Local YYYY-MM-DD for a Date (en-CA locale formats exactly that). */
-function localIsoDay(d) {
-  return d.toLocaleDateString("en-CA");
-}
-
-/** Time whisper for a node tooltip: "today" / "yesterday" / "Jul 26". */
-function journeyWhen(iso) {
+function gradeWhen(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
   const now = new Date();
-  if (iso === localIsoDay(now)) return "today";
-  if (iso === localIsoDay(new Date(now.getTime() - 86400e3))) return "yesterday";
-  const d = new Date(`${iso}T12:00:00`);
-  if (isNaN(d.getTime())) return iso || "";
-  const opts = { month: "short", day: "numeric" };
-  if (d.getFullYear() !== now.getFullYear()) opts.year = "numeric";
-  return d.toLocaleDateString(undefined, opts);
+  const sameDay =
+    d.toLocaleDateString("en-CA") === now.toLocaleDateString("en-CA");
+  if (sameDay) {
+    return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  }
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-/** One item node: icon + humanized display name, at its CURRENT state
- * (latest ledger event this epoch). ONE state per node (2026-07-28 rail
- * incident): "recheck" REPLACES the celebration icon — history stays in
- * the ledger, the display shows current truth. Hover/tap shows the full
- * evidence sentence (+ gloss, + the time whisper, + session id for debug). */
-function journeyChip(ev) {
-  const meta = JOURNEY_KINDS[ev.kind] || { icon: "•", label: ev.kind };
-  const state =
-    ev.display_state ||
-    (ev.polarity === "down" ? "down" : ev.needs_recheck ? "recheck" : "celebrated");
-  const name = ev.display || ev.key;
-  const tip = [ev.detail || ""];
-  if (ev.gloss) tip.push(`${ev.key} = ${ev.gloss}`);
-  let icon = meta.icon;
-  let badge = "";
-  if (state === "recheck") {
-    icon = "↺";
-    badge = `<span class="j-badge">re-check</span>`;
-    tip.push("The live sheet no longer holds this band — it will be re-checked in conversation");
-  } else {
-    tip.push(meta.label);
-  }
-  if (ev.date) tip.push(journeyWhen(ev.date));
-  if (ev.session_id) tip.push(`session ${ev.session_id}`);
-  return (
-    `<li class="j-chip ${state}" title="${esc(tip.filter(Boolean).join("\n"))}">` +
-    `<span class="j-chip-icon" aria-hidden="true">${icon}</span>` +
-    `<span class="j-chip-name">${esc(name)}</span>${badge}</li>`
-  );
+function gradeLabel(g) {
+  if (g.statement) return g.statement;
+  if (g.section === "skills") return g.field_id || "skill";
+  if (g.section === "grammar") return `form: ${g.field_id || "?"}`;
+  if (g.section === "lexicon") return g.field_id || "word";
+  return g.field_id || "grade";
 }
 
-/** One rail section. kind="can_do" (r8, 2026-07-29): the headline unit is
- * the FUNCTION — band icon + can-do phrasing ("Can greet a peer" ONLY at
- * the solid/known gate), full statement + evidence sentence on hover, the
- * supporting items nested beneath. Other kinds (theme/tasks/other) render
- * as plain concept groups. Reuses the day-section styling — the spine
- * walks functions first, then loose concept space. */
-function journeyGroup(g, isCurrent) {
-  const items = g.items || [];
-  const chips = items.map(journeyChip).join("");
-  const body = items.length ? `<ul class="j-chips">${chips}</ul>` : "";
-  let head;
-  if (g.kind === "can_do") {
-    const icon = CAN_DO_BAND_ICONS[g.band] || "·";
-    const tip = [g.statement || ""];
-    if (g.band) tip.push(g.band);
-    if (g.evidence?.detail) tip.push(g.evidence.detail);
-    head =
-      `<header class="j-date" title="${esc(tip.filter(Boolean).join("\n"))}">` +
-      `<span class="j-dot" aria-hidden="true"></span>` +
-      `<span class="j-daylabel">${esc(icon)} ${esc(String(g.label || g.id || ""))}</span>` +
-      `</header>`;
-  } else {
-    const label = String(g.label || g.theme || "").toLowerCase();
-    head =
-      `<header class="j-date"><span class="j-dot" aria-hidden="true"></span>` +
-      `<span class="j-daylabel">${esc(label)}</span></header>`;
-  }
+function gradeChip(g) {
+  const dir = g.direction === "down" ? "down" : g.direction === "up" ? "up" : "hold";
+  const arrow = dir === "up" ? "↑" : dir === "down" ? "↓" : "·";
+  const band =
+    g.to_status && g.from_status && g.to_status !== g.from_status
+      ? `${g.from_status} → ${g.to_status}`
+      : g.to_status || "";
+  const tip = [g.why || "", g.evidence ? `“${g.evidence}”` : "", band, gradeWhen(g.ts)]
+    .filter(Boolean)
+    .join("\n");
+  const whyLine = g.why
+    ? `<span class="j-chip-why">${esc(g.why)}</span>`
+    : "";
   return (
-    `<section class="j-day${isCurrent ? " current" : ""}">` +
-    head + body +
-    `</section>`
+    `<li class="j-chip grade-${dir}" title="${esc(tip)}">` +
+    `<span class="j-chip-icon" aria-hidden="true">${arrow}</span>` +
+    `<span class="j-chip-body">` +
+    `<span class="j-chip-name">${esc(gradeLabel(g))}</span>` +
+    whyLine +
+    `</span></li>`
   );
 }
 
 function renderJourney(progress) {
   if (!els.journeyBody) return;
-  const groups = (progress?.groups || []).slice();
-  if (progress?.empty || !groups.length) {
+  const grades = (progress?.grades || []).slice();
+  if (progress?.empty || !grades.length) {
     els.journeyBody.innerHTML =
-      `<p class="j-empty">${esc(JOURNEY_EMPTY_COPY)}</p>`;
+      `<p class="j-empty">${esc(GRADES_EMPTY_COPY)}</p>`;
   } else {
-    // Groups arrive recency-ordered — the top of the rail is where the
-    // learner is currently working; the first group reads as current.
-    const html = groups.map((g, i) => journeyGroup(g, i === 0)).join("");
-    els.journeyBody.innerHTML = `<div class="j-rail">${html}</div>`;
+    const chips = grades.map(gradeChip).join("");
+    els.journeyBody.innerHTML =
+      `<div class="j-rail"><section class="j-day current">` +
+      `<header class="j-date"><span class="j-dot" aria-hidden="true"></span>` +
+      `<span class="j-daylabel">recent grades</span></header>` +
+      `<ul class="j-chips">${chips}</ul></section></div>`;
   }
   if (els.journeyFoot) {
-    const due = Number(progress?.due_soon || 0);
-    // Informational only (amended (e)3) — never a failure badge.
-    els.journeyFoot.textContent = due > 0 ? `Due soon: ${due}` : "Nothing due right now";
+    const n = grades.length;
+    els.journeyFoot.textContent =
+      n === 0
+        ? "No grades this learner yet"
+        : n === 1
+          ? "1 grade recorded"
+          : `${n} recent grades`;
   }
 }
 
@@ -621,9 +564,9 @@ async function refreshProgress() {
     const p = await api("/api/progress");
     lastProgress = p;
     renderJourney(p);
-    renderScore(null); // header counts from the fresh payload
+    renderScore(null);
   } catch (_) {
-    /* rail is telemetry display — never break the chat over it */
+    /* rail is display only — never break the chat over it */
   }
 }
 
@@ -1420,7 +1363,7 @@ async function sendMessage(text, inputMode = "text", opts = {}) {
     renderSheet(data.sheet); // score + static rail immediately
     lastFocusVersion = data.sheet?.focus_version ?? lastFocusVersion;
     scheduleRailRefresh(); // focus LLM finishes async → pull updated rail
-    refreshProgress(); // journey rail: nodes appear as milestones fire
+    refreshProgress(); // grades rail: tool grades appear with why
     refreshDebug(); // debug box: pull the new request entry when open
     // Start voice ASAP (browser TTS); don't block UI on server TTS RTT
     speak(data.reply, data.parts);

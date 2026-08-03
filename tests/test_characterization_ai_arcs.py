@@ -1,4 +1,4 @@
-"""Phase 0 batch 2 — AI-path arc goldens (gate repair / comprehension repair /
+"""Phase 0 batch 2 — AI-path arc goldens (gate fail surface / comprehension repair /
 budget arcs / close phase) + CHAR-BUG-005.
 
 Extends the batch-1 harness (tests/conftest.py + tests/
@@ -6,8 +6,8 @@ test_characterization_ai_path.py — fixtures and golden format REUSED, not
 forked) per the adjudicated Phase 0 spec and the batch-2 runbook in
 docs/reviews-architecture-refactor.md:
 
-  - gate-fault → repair loop: scripted critical fault (bare unintroduced
-    table key), second model call, usage accumulation, repaired final parts.
+  - gate-fault → NO repair (2026-08-01): critical fault ships raw + gate_fail;
+    second model call deleted (hiding path removed).
   - comprehension repair: meta "what does X mean" turn → phase clock FROZEN,
     repair-target image relevance (no irrelevant image — the incident
     class), await/TTL hold armed then cleared by the learner's own Spanish.
@@ -48,16 +48,6 @@ GATE_BAD_REPLY = (
     "<tutor>\n"
     "  <acknowledge>¡Hola!</acknowledge>\n"
     "  <model>**Mucho gusto**.</model>\n"
-    "  <try>Di: **mucho gusto**.</try>\n"
-    "</tutor>"
-)
-
-# Reply 2 (the repair): same key WITH a ≤6-word in-reply gloss → gate passes
-# via scaffold_saved; the session then writes the durable first_seen bit.
-GATE_REPAIRED_REPLY = (
-    "<tutor>\n"
-    "  <acknowledge>¡Perfecto!</acknowledge>\n"
-    "  <model>**Mucho gusto** (nice to meet you).</model>\n"
     "  <try>Di: **mucho gusto**.</try>\n"
     "</tutor>"
 )
@@ -126,14 +116,14 @@ CLOSE_REPLY = (
 
 
 # ---------------------------------------------------------------------------
-# Golden (iv): gate-fault → repair loop
+# Golden (iv): gate-fault surfaces — NO repair rewrite (2026-08-01)
 # ---------------------------------------------------------------------------
 
 
-def test_golden_gate_fault_repair(tutor_session_factory):
+def test_golden_gate_fault_surfaces_no_repair(tutor_session_factory):
     ctx = tutor_session_factory(
         seed_sheet=_known_seed(),
-        replies=[OPEN_KNOWN_REPLY, GATE_BAD_REPLY, GATE_REPAIRED_REPLY],
+        replies=[OPEN_KNOWN_REPLY, GATE_BAD_REPLY],
     )
     s = ctx.session
     assert s.open_session().error is None
@@ -142,52 +132,28 @@ def test_golden_gate_fault_repair(tutor_session_factory):
     turn = s.user_turn("Muy bien, gracias.")
     assert turn.error is None
 
-    # CHAR_PIN: reply 1 tripped the critical fault; ONE bounded repair call
-    # produced the compliant rewrite.
+    # CHAR_PIN: critical fault logged; never rewritten or blanked.
     assert "output_gate_fail:gate:unscaffolded_new_item" in turn.notes
-    assert "output_gate_repaired" in turn.notes
+    assert "output_gate_repaired" not in turn.notes
+    assert "output_gate_recovered" not in turn.notes
     assert "output_gate_ok" not in turn.notes
-    assert len(ctx.fake.requests) == 3  # open + turn + repair
+    assert len(ctx.fake.requests) == 2  # open + turn only (no repair call)
 
-    # CHAR_PIN: repair request shape — prior raw as an assistant message,
-    # then the harness repair prompt naming the faults and carrying the FULL
-    # previous attempt (no truncation).
-    repair_req = ctx.fake.request(2)
-    assert repair_req["messages"][-2] == {
-        "role": "assistant", "content": GATE_BAD_REPLY,
-    }
-    repair_msg = repair_req["messages"][-1]["content"]
-    assert repair_msg.startswith("(harness) OUTPUT GATE FAILED")
-    assert "Faults: gate:unscaffolded_new_item" in repair_msg
-    assert GATE_BAD_REPLY in repair_msg
-    # The repair re-sends the same task tail (same turn, second attempt).
-    assert repair_req["messages"][:-2] == ctx.fake.request(1)["messages"]
-
-    # CHAR_PIN: usage accumulates across BOTH calls of the turn.
+    # CHAR_PIN: single model call usage for the user turn (no second bill).
     assert turn.usage == {
-        "input_tokens": 240, "output_tokens": 120,
+        "input_tokens": 120, "output_tokens": 60,
         "thinking_tokens": 0, "cached_input_tokens": 0,
     }
 
-    # CHAR_PIN: final parts/reply come from the repaired attempt; the gate
-    # verdict attached is the SECOND (passing) one with the scaffold save.
-    assert "nice to meet you" in turn.reply
+    # CHAR_PIN: raw failing attempt ships; gate_fail banner for the client.
+    assert "Mucho gusto" in turn.reply
+    assert turn.parts.get("gate_fail") is True
     gate = turn.parts["output_gate"]
-    assert gate["ok"] is True and gate["faults"] == []
-    assert gate["scaffold_saved"] == {"mucho gusto": "gloss"}
-    # …and the durable first_seen bit landed.  CHAR-BUG-001 RESOLVED
-    # (Phase 4 batch 4): its persist rides the SINGLE atomic-turn commit
-    # (_commit_sheet), not a mid-turn save site.
-    assert "first_seen:mucho gusto" in turn.notes
-    mg = s.sheet["lexicon"]["mucho gusto"]
-    assert mg.get("first_seen")
-    assert not mg.get("introduced_at") and not mg.get("next_due")
+    assert gate["ok"] is False
+    assert "gate:unscaffolded_new_item" in (gate.get("faults") or [])
     assert ctx.save_calls[n_open:] == ["_commit_sheet"]
 
-    # CHAR_PIN: the planned key lapsed silently in BOTH attempts (absent
-    # from the final reply) — budget unconsumed, no ledger write. Key
-    # changed hola:R-E → me llamo:R-D 2026-07-29 (encounter-variety round:
-    # _known_seed is mid-stream, openers sort last).
+    # CHAR_PIN: planned key lapsed (absent from reply) — no introduced: write.
     assert "introduce_planned:me llamo:R-D" in turn.notes
     assert not any(n.startswith("introduced:") for n in turn.notes)
     assert s.pedagogy_memory.intro_budget_remaining() == 2
@@ -197,10 +163,11 @@ def test_golden_gate_fault_repair(tutor_session_factory):
         sheet_keys=(("lexicon", "mucho gusto"), ("lexicon", "me llamo")),
     )
     obs["learner"] = "Muy bien, gracias."
-    obs["repair"] = {
-        "requests_this_turn": 2,
-        "repair_msg_head": repair_msg.splitlines()[0],
-        "repair_msg_faults_line": repair_msg.splitlines()[1],
+    obs["gate_surface"] = {
+        "requests_this_turn": 1,
+        "gate_fail": True,
+        "faults": list(gate.get("faults") or []),
+        "no_repair": True,
     }
     check_golden("golden_gate_repair_turn", obs)
 

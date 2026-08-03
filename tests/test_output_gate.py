@@ -200,7 +200,8 @@ class TestOutputGate(unittest.TestCase):
         g = check_output_gate(parts, "Estoy bien.", raw=raw)
         self.assertFalse(g.ok)
         self.assertIn("gate:sheet_leak", g.faults)
-        self.assertIn("JSON", g.repair_instruction)
+        self.assertIn("GATE FAIL", g.repair_instruction)
+        self.assertFalse(g.ok)
 
 
 class TestUnscaffoldedNewItemGate(unittest.TestCase):
@@ -239,9 +240,8 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
             "Hasta luego. ¿Puedes decirlo?",
         )
         self.assertIn("gate:unscaffolded_new_item", g.faults)
-        self.assertIn("never seen", g.repair_instruction)
-        self.assertIn("hasta luego", g.repair_instruction)
-        self.assertIn("ONE", g.repair_instruction)
+        self.assertIn("GATE FAIL", g.repair_instruction)
+        self.assertFalse(g.ok)
         self.assertTrue(
             any("gate:unscaffolded_new_item" in n for n in g.notes), g.notes
         )
@@ -265,7 +265,8 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
             "¿Puedes decirlo?",
         )
         self.assertIn("gate:unscaffolded_new_item", g.faults)
-        self.assertIn("adiós", g.repair_instruction)
+        self.assertIn("GATE FAIL", g.repair_instruction)
+        self.assertFalse(g.ok)
 
     def test_introduce_plan_key_is_exempt(self):
         g = self._gate(
@@ -285,7 +286,8 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
             introduce_key="hasta luego",
         )
         self.assertIn("gate:unscaffolded_new_item", g.faults)
-        self.assertIn("adiós", g.repair_instruction)
+        self.assertIn("GATE FAIL", g.repair_instruction)
+        self.assertFalse(g.ok)
 
     def _introduced_sheet(self, *keys):
         from tutor.character_sheet import default_sheet
@@ -304,7 +306,8 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
         )
         self.assertIn("gate:regloss", g.faults)
         self.assertNotIn("gate:unscaffolded_new_item", g.faults)
-        self.assertIn("re-gloss", g.repair_instruction)
+        self.assertIn("GATE FAIL", g.repair_instruction)
+        self.assertFalse(g.ok)
 
     def test_regloss_allowed_after_retrieval_failure(self):
         g = self._gate(
@@ -380,7 +383,8 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
         g = self._gate(parts, "Good job... Hasta luego.")
         self.assertIn("gate:english_wall", g.faults)
         self.assertIn("gate:unscaffolded_new_item", g.faults)
-        self.assertIn("ONE", g.repair_instruction)
+        self.assertIn("GATE FAIL", g.repair_instruction)
+        self.assertFalse(g.ok)
 
     # --- Round-2 amendments (docs/reviews-pedagogy-engine-build.md,
     # Adjudication Round 2 2026-07-28) -----------------------------------
@@ -476,7 +480,8 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
             "¡Hola! Gracias. Bien. ¿Puedes decirlo?",
         )
         self.assertIn("gate:unscaffolded_new_item", g.faults)
-        self.assertIn("adiós", g.repair_instruction)
+        self.assertIn("GATE FAIL", g.repair_instruction)
+        self.assertFalse(g.ok)
         self.assertIn("gate:unscaffolded_flood", g.faults)
         self.assertEqual(set(g.flood_keys), {"hola", "gracias", "bien"})
         # The kept glossed farewell was scaffold-saved; the cluster extra
@@ -548,7 +553,8 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
             learner_text="estoy bien.  Me llamo Patrick",
         )
         self.assertIn("gate:unscaffolded_new_item", g.faults)
-        self.assertIn("mucho gusto", g.repair_instruction)
+        self.assertIn("GATE FAIL", g.repair_instruction)
+        self.assertFalse(g.ok)
         self.assertNotIn("gate:unscaffolded_flood", g.faults)
 
     def test_lapsed_planned_intro_records_scaffold_saved_not_bare(self):
@@ -740,19 +746,17 @@ class TestEnglishWallZeroExemption(unittest.TestCase):
         blob = self._blob(parts)
         g1 = check_output_gate(parts, blob, is_open=True, mode="placement")
         self.assertIn("gate:english_wall", g1.faults)
-        self.assertIn("True-zero / placement register", g1.repair_instruction)
-        self.assertIn("orientation", g1.repair_instruction)
-        self.assertIn("0.25", g1.repair_instruction)
-        self.assertNotIn("Rewrite Spanish-forward", g1.repair_instruction)
+        self.assertIn("GATE FAIL", g1.repair_instruction)
+        self.assertFalse(g1.ok)
         g2 = check_output_gate(
             parts, blob, is_open=False, mode="conversation", blank_zero=True,
         )
-        self.assertIn("True-zero / placement register", g2.repair_instruction)
-        self.assertNotIn("Rewrite Spanish-forward", g2.repair_instruction)
+        self.assertIn("GATE FAIL", g2.repair_instruction)
+        self.assertFalse(g2.ok)
         g3 = check_output_gate(parts, blob, is_open=False, mode="conversation")
         self.assertIn("gate:english_wall", g3.faults)
-        self.assertIn("Rewrite Spanish-forward", g3.repair_instruction)
-        self.assertNotIn("True-zero", g3.repair_instruction)
+        self.assertIn("GATE FAIL", g3.repair_instruction)
+        self.assertFalse(g3.ok)
 
 
 class TestProbeLoopTopicRegistry(unittest.TestCase):
@@ -790,7 +794,8 @@ class TestProbeLoopTopicRegistry(unittest.TestCase):
         self.assertTrue(
             any("topic:size:ciudad" in n for n in g.notes), g.notes
         )
-        self.assertIn("DIFFERENT question", g.repair_instruction)
+        self.assertIn("GATE FAIL", g.repair_instruction)
+        self.assertFalse(g.ok)
 
     def test_new_frame_on_same_concept_does_not_fault(self):
         # A NEW frame on the same concept ("what's IN your house" after
@@ -974,12 +979,14 @@ class TestGateContextParity(unittest.TestCase):
         assert len(GateContext.__dataclass_fields__) == 18
 
 
-class TestHardObserver(unittest.TestCase):
-    def test_tool_path_still_bumps_from_learner_text(self):
+class TestToolOnlyAbility(unittest.TestCase):
+    """Tool-only ability (2026-07-31): no regex hard-observer grade path."""
+
+    def test_tool_grades_only_what_was_claimed(self):
         sheet = default_sheet()
-        # Simulate tool that barely updates
         tool_delta = {
             "reason": "saw greeting",
+            "evidence": "Hola",
             "skills": {
                 "IP-01": {"status": "emerging", "confidence": 0.2},
             },
@@ -990,15 +997,32 @@ class TestHardObserver(unittest.TestCase):
             "¡Hola Patrick!",
             tool_delta=tool_delta,
         )
-        self.assertIn("hard_observer", notes)
+        self.assertNotIn("hard_observer", notes)
         self.assertIn("tool_update", notes)
-        # Rule evidence should raise intro / estoy skills even if tool was thin
+        self.assertTrue(any(n.startswith("why=") for n in notes))
+        # Only claimed IP-01 moves; IP-03/IP-04 stay frozen without tool claims.
+        ip1 = (s.get("skills") or {}).get("IP-01") or {}
         ip3 = (s.get("skills") or {}).get("IP-03") or {}
         ip4 = (s.get("skills") or {}).get("IP-04") or {}
-        self.assertGreater(float(ip3.get("confidence") or 0), 0.05)
-        self.assertGreater(float(ip4.get("confidence") or 0), 0.05)
-        # Personal-data capture disabled (2026-07-28): no name is ever stored.
+        self.assertGreater(float(ip1.get("confidence") or 0), 0.05)
+        self.assertEqual(float(ip3.get("confidence") or 0), 0.0)
+        self.assertEqual(float(ip4.get("confidence") or 0), 0.0)
+        # Personal-data capture disabled: no name is ever stored.
         self.assertIsNone((s.get("identity") or {}).get("preferred_name"))
+
+    def test_no_tool_freezes_ability_but_scaffold_still_updates(self):
+        s, _, notes = process_turn(
+            default_sheet(),
+            "what does ves mean?",
+            "Ves means you see.",
+        )
+        self.assertIn("rules_backup", notes)
+        self.assertNotIn("hard_observer", notes)
+        self.assertEqual(
+            float((s.get("skills") or {}).get("IP-01", {}).get("confidence") or 0),
+            0.0,
+        )
+        self.assertTrue(s["receptive"]["needs_english_scaffold"])
 
 
 if __name__ == "__main__":

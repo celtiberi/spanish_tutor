@@ -113,11 +113,14 @@ abstract function words. Good (tag ok): first introduction of *el sol*,
 If unsure, **omit**. Omitting is always correct.
 
 ## Character sheet (IMPORTANT)
-The app updates the character sheet from your dialogue (hard observer).
+You own ability grades via the **`update_character_sheet`** tool when this
+turn gives clear evidence. Always include **reason** (why) and **evidence**
+(learner quote) when changing skills/grammar/lexicon. Skip the tool if
+nothing meaningful changed — ability does not auto-update from regex.
 **Do NOT** print sheet JSON, tool JSON, can-do codes, error_pattern ids, or
 `{ "active_error_focus": ... }` dumps in the reply. Learner text is Spanish
-conversation only inside the <tutor> tags. If a sheet tool is available, call
-the tool — never paste JSON into chat.
+conversation only inside the <tutor> tags. Call the tool — never paste JSON
+into chat.
 
 ## Product persona
 Adult conversational A1 — false-beginners + true zeros. Real adult life
@@ -232,12 +235,13 @@ def build_ai_tutor_system(
         blocks.append({
             "type": "text",
             "text": (
-                "# Student character sheet — Spanish ABILITIES, READ ONLY\n"
+                "# Student character sheet — Spanish ABILITIES\n"
                 "What they can do in Spanish (skills, grammar, errors). Adapt "
                 "teaching from this. Prefer next_best and active errors over "
                 "re-probing known can-dos.\n"
-                "FORBIDDEN: never copy, quote, or re-emit this JSON (or any "
-                "subset) in the learner reply. The app updates the sheet.\n\n"
+                "Update ability only via the update_character_sheet tool "
+                "(with reason + evidence). FORBIDDEN: never copy, quote, or "
+                "re-emit this JSON in the learner reply.\n\n"
                 + config.clip_prompt(sheet_summary, sheet_cap)
             ),
         })
@@ -289,11 +293,11 @@ def build_ai_tutor_user_message(
         "open_scene_goals": open_scene_hints or [],
         "student_character_sheet": {
             "note": (
-                "Spanish ABILITIES, READ ONLY. Adapt teaching from this; "
-                "prefer next_best and active errors over re-probing known "
-                "can-dos. FORBIDDEN: never copy, quote, or re-emit this "
-                "data (or any subset) in the learner reply — the app "
-                "updates the sheet."
+                "Spanish ABILITIES. Adapt teaching from this; prefer "
+                "next_best and active errors over re-probing known can-dos. "
+                "Grade ability only via update_character_sheet (reason + "
+                "evidence required). FORBIDDEN: never copy or re-emit this "
+                "data in the learner reply."
             ),
             "sheet": config.clip_prompt(
                 sheet_summary, getattr(config, "SHEET_PROMPT_CHARS", 0)

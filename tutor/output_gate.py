@@ -772,106 +772,18 @@ def _check_output_gate(gctx: GateContext) -> OutputGateResult:
         notes.append("gate:probe_loop " + ",".join(sorted(set(loop_hits))))
 
     ok = not faults
-    repair = ""
-    if not ok:
-        bits = []
-        if "gate:truncated" in faults:
-            bits.append(
-                "Your previous reply was CUT OFF mid-sentence by a length limit. "
-                "Write the complete reply again — shorter, finishing every "
-                "sentence, still ending with a real <try>."
-            )
-        if any(f.startswith("pedagogy:") for f in faults):
-            bits.append(
-                "Include a clear Spanish <model> and a real <try> (question or invite)."
-            )
-        if "gate:english_wall" in faults:
-            # Audit (b1) 2026-07-28: repair copy must be mode-aware. Under
-            # placement/blank_zero the zero register REQUIRES English
-            # orientation + glosses — ordering "Rewrite Spanish-forward"
-            # there re-fought the register the floor exemption had just
-            # permitted (100%-Spanish incident vector).
-            if mode_l == "placement" or blank_zero:
-                bits.append(
-                    "True-zero / placement register: keep ONE short English "
-                    "orientation line and a ≤6-word English gloss on each new "
-                    "Spanish item; raise Spanish share above the zero floor "
-                    f"({ZERO_MIN_SPANISH_RATIO:.2f}) without an all-English turn "
-                    "and without dumping English essays."
-                )
-            else:
-                bits.append(
-                    "Rewrite Spanish-forward: most words in Spanish. English only as a short lifeline."
-                )
-        if "gate:unscaffolded_new_item" in faults:
-            bits.append(
-                "You used new Spanish the learner has never seen without "
-                f"support: {', '.join(unscaffolded)}. Rewrite: keep ONE of "
-                "them with a single ≤6-word English gloss in parentheses on "
-                "first mention (or drop the extras); everything else must be "
-                "known Spanish."
-            )
-        if "gate:unscaffolded_flood" in faults:
-            # Soft on its own (no forced rewrite); guidance only rides a
-            # rewrite forced by a co-occurring critical fault.
-            bits.append(
-                "Heavy new-Spanish load this turn "
-                f"({', '.join(flood_keys)}). Prefer Spanish the learner "
-                "knows; introduce at most ONE new item, with a short gloss."
-            )
-        if "gate:regloss" in faults:
-            bits.append(
-                "Do not re-gloss Spanish the learner already knows "
-                f"({', '.join(reglossed)}) — use it naturally, without the "
-                "English parenthetical."
-            )
-        if "gate:probe_loop" in faults:
-            bits.append(
-                "Do NOT re-ask a question already covered this session — how "
-                "they are / their name / origin / likes, or the same "
-                "frame+topic you already asked (e.g. the same size/location "
-                "question about the same noun). Apologize briefly if needed "
-                "and advance to new ground with a DIFFERENT question."
-            )
-        if "gate:form_focus_needs_model" in faults:
-            bits.append(
-                "Form focus: show clear correct Spanish model (and brief contrast if helpful)."
-            )
-        if "gate:missing_recast" in faults:
-            bits.append(
-                "REQUIRED: add a short <recast>…</recast> with the clean Spanish form "
-                "(one line). Then continue the chat — do not only fix it silently in acknowledge."
-            )
-        if "gate:comprehension_needs_check" in faults:
-            bits.append("Ask a yes/no or A/B meaning check, not a free open question only.")
-        if "gate:sheet_leak" in faults:
-            bits.append(
-                "CRITICAL: You dumped character-sheet / tool JSON into the reply. "
-                "Delete all JSON, can-do codes, error_pattern ids, confidence numbers, "
-                "and ``` fences. Reply again with ONLY learner-facing Spanish inside "
-                "<tutor> tags (acknowledge/model/try/…). The app updates the sheet — you must not."
-            )
-        repair = " ".join(bits) or "Fix the listed gate faults and reply again."
+    # Diagnostic only — auto-rewrite path DELETED 2026-08-01 (never hide failures).
+    diagnosis = (
+        f"GATE FAIL (visible, not rewritten): {', '.join(faults)}"
+        if faults else ""
+    )
 
     return OutputGateResult(
         ok=ok,
         faults=faults,
         notes=notes,
         spanish_ratio=ratio,
-        repair_instruction=repair,
+        repair_instruction=diagnosis,
         scaffold_saved=scaffold_saved,
         flood_keys=flood_keys,
-    )
-
-
-def repair_user_message(gate: OutputGateResult, previous_raw: str) -> str:
-    """One-shot repair prompt after a failed gate."""
-    # Full previous attempt — do not truncate (teacher needs complete rewrite context)
-    return (
-        "(harness) OUTPUT GATE FAILED — rewrite your full <tutor> reply once.\n"
-        f"Faults: {', '.join(gate.faults)}\n"
-        f"Fix: {gate.repair_instruction}\n"
-        "Do not mention the gate, harness, or faults to the learner.\n"
-        "Previous attempt (do not repeat its mistakes):\n"
-        f"{previous_raw or ''}\n"
     )

@@ -501,7 +501,13 @@ def test_notes_chronological_order(tutor_session_factory):
     mode_i = notes.index("mode=conversation")
     planned_i = notes.index("introduce_planned:me llamo:R-D")
     gate_i = notes.index("output_gate_ok")
-    sheet_i = notes.index("hard_observer")
+    # Sheet maintenance note: tool-only ability (2026-07-31) emits
+    # rules_backup when tools are off (test default) or tool_update when
+    # the model grades. hard_observer is retired.
+    if "tool_update" in notes:
+        sheet_i = notes.index("tool_update")
+    else:
+        sheet_i = notes.index("rules_backup")
     marked_i = notes.index("introduced:me llamo")
     # True chronology: mode select → introduce plan (pre-call) → gate
     # (post-call) → sheet maintenance (_finish) → introduce mark (post-gate).

@@ -1,11 +1,19 @@
 {
   "error": null,
   "gate": {
-    "faults": [],
-    "ok": true,
-    "scaffold_saved": {
-      "mucho gusto": "gloss"
-    }
+    "faults": [
+      "gate:unscaffolded_new_item"
+    ],
+    "ok": false,
+    "scaffold_saved": {}
+  },
+  "gate_surface": {
+    "faults": [
+      "gate:unscaffolded_new_item"
+    ],
+    "gate_fail": true,
+    "no_repair": true,
+    "requests_this_turn": 1
   },
   "learner": "Muy bien, gracias.",
   "memory": {
@@ -31,21 +39,18 @@
     "learner_turn_index": 2,
     "turns_since_hard_break": 999
   },
-  "model_requests": 3,
+  "model_requests": 2,
   "notes": [
     "mode=conversation",
     "mode_reason=default_conversation",
     "introduce_planned:me llamo:R-D",
     "output_gate_fail:gate:unscaffolded_new_item",
-    "output_gate_repaired",
+    "output_gate_still_fail:gate:unscaffolded_new_item",
     "rules_backup",
-    "hard_observer",
-    "can-dos=*",
     "scaffold=ES-forward+EN-rescue",
     "focus_async",
     "structured_reply",
     "pedagogy:ok",
-    "first_seen:mucho gusto",
     "pedagogy:known_learner_open",
     "phase=ai_tutor",
     "activity=new_input",
@@ -59,6 +64,8 @@
   ],
   "parts_keys": [
     "acknowledge",
+    "gate_fail",
+    "gate_faults",
     "mode",
     "mode_decision",
     "model",
@@ -77,29 +84,19 @@
     "turns_in_phase": 2
   },
   "progress_events": [],
-  "repair": {
-    "repair_msg_faults_line": "Faults: gate:unscaffolded_new_item",
-    "repair_msg_head": "(harness) OUTPUT GATE FAILED — rewrite your full <tutor> reply once.",
-    "requests_this_turn": 2
-  },
-  "reply": "¡Perfecto!\n\n**Mucho gusto** (nice to meet you).\n\nDi: **mucho gusto**.",
+  "reply": "¡Hola!\n\n**Mucho gusto**.\n\nDi: **mucho gusto**.",
   "save_sheet_calls": [
     "_commit_sheet"
   ],
   "sheet": {
     "lexicon:me llamo": null,
-    "lexicon:mucho gusto": {
-      "confidence": 0.0,
-      "first_seen": "<TODAY>",
-      "scaffold": "gloss",
-      "status": "unknown"
-    }
+    "lexicon:mucho gusto": null
   },
   "stop_reason": "end_turn",
   "usage": {
     "cached_input_tokens": 0,
-    "input_tokens": 240,
-    "output_tokens": 120,
+    "input_tokens": 120,
+    "output_tokens": 60,
     "thinking_tokens": 0
   }
 }

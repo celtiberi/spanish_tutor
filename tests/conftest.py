@@ -324,7 +324,8 @@ def tutor_session_factory(monkeypatch, tmp_path, request):
     monkeypatch.setattr(config, "FOCUS_BLOCKING", False)
     monkeypatch.setattr(config, "FOCUS_ASYNC", False)
     monkeypatch.setattr(config, "SHEET_TOOLS", False)
-    monkeypatch.setattr(config, "GATE_REPAIR", True)
+    # Gate rewrite path deleted 2026-08-01; constant is always False.
+    monkeypatch.setattr(config, "GATE_REPAIR", False)
     monkeypatch.setattr(config, "TEACHER_CONTEXT_TRUNCATE", False)
     monkeypatch.setattr(config, "HISTORY_TURNS", 0)
     monkeypatch.setattr(config, "PACK_PROMPT_CHARS", 0)

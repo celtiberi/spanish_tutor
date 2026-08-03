@@ -36,24 +36,47 @@ class TestSheetCore(unittest.TestCase):
             self.assertIn("IP-01", s2["skills"])
             self.assertIn("statement", s2["skills"]["IP-01"])
 
-    def test_estoy_bumps_grammar(self):
+    def test_regex_observer_no_longer_bumps_ability(self):
+        """apply_rule_updates is a no-op for ability (tool-only, 2026-07-31)."""
         s = apply_rule_updates(default_sheet(), "Hola, estoy bien")
+        self.assertEqual(
+            float(s["grammar"]["present_estar_person"]["confidence"] or 0), 0.0)
+        self.assertEqual(float(s["skills"]["IP-04"]["confidence"] or 0), 0.0)
+        self.assertFalse(s.get("lexicon"))
+
+    def test_tool_grades_estar_up(self):
+        s, _, notes = process_turn(
+            default_sheet(),
+            "Hola, estoy bien",
+            "¡Qué bien!",
+            tool_delta={
+                "reason": "Learner produced Estoy bien unprompted",
+                "evidence": "estoy bien",
+                "skills": {"IP-04": {"status": "emerging", "confidence": 0.4}},
+                "grammar": {
+                    "present_estar_person": {
+                        "status": "emerging", "confidence": 0.4,
+                    }
+                },
+                "lexicon": {"hola": {"status": "emerging", "confidence": 0.3}},
+            },
+        )
         self.assertGreater(s["grammar"]["present_estar_person"]["confidence"], 0.1)
         self.assertIn("hola", s["lexicon"])
         self.assertGreater(s["skills"]["IP-04"]["confidence"], 0.05)
+        self.assertIn("tool_update", notes)
 
-    def test_esta_bien_lowers_estar(self):
-        s = apply_rule_updates(default_sheet(), "Esta bien y tu?")
-        self.assertLess(
-            s["grammar"]["present_estar_person"]["confidence"], 0.5)
-        self.assertTrue(s["grammar"]["present_estar_person"]["evidence"])
-
-    def test_formal_mismatch(self):
-        s = apply_rule_updates(
-            default_sheet(), "Buenos dias senora. Como estas?")
-        g = s["grammar"]["register_tu_usted"]
-        self.assertLess(g["confidence"], 0.5)
-        self.assertLess(s["skills"]["IP-02"]["confidence"], 0.5)
+    def test_tool_grade_without_reason_rejected(self):
+        s, _, notes = process_turn(
+            default_sheet(),
+            "estoy bien",
+            "¡Bien!",
+            tool_delta={
+                "skills": {"IP-04": {"status": "emerging", "confidence": 0.5}},
+            },
+        )
+        self.assertEqual(float(s["skills"]["IP-04"]["confidence"] or 0), 0.0)
+        self.assertTrue(any("rejected:need_reason" in n for n in notes))
 
 
     def test_sheet_delta_strip(self):
@@ -124,11 +147,11 @@ class TestSheetCore(unittest.TestCase):
         self.assertIsNone((s.get("identity") or {}).get("preferred_name"))
         self.assertIn("rules_backup", notes)
 
-    def test_cap_tool_plus_observer_single_use(self):
-        """One utterance may not double-count: conf capped, one solid use."""
+    def test_cap_tool_single_use(self):
+        """One tool grade: conf capped +0.25, one solid use from conf rise."""
         base = default_sheet()
         delta = {
-            "reason": "said name",
+            "reason": "said name in Spanish",
             "skills": {"IP-03": {"status": "emerging", "confidence": 0.4}},
         }
         s, _vis, _notes = process_turn(
@@ -137,26 +160,51 @@ class TestSheetCore(unittest.TestCase):
         self.assertAlmostEqual(s["skills"]["IP-03"]["confidence"], 0.25)
         self.assertEqual(s["skills"]["IP-03"]["solid_uses"], 1)
 
-    def test_erroneous_me_llama_es_earns_no_ser_credit(self):
-        """The 'es' in 'me llama es' is the error, not ser evidence."""
-        s, _vis, _notes = process_turn(
+    def test_no_tool_freezes_ability(self):
+        """Without a tool call, learner Spanish does not change the sheet."""
+        s, _vis, notes = process_turn(
             default_sheet(), "Me llama es Patrick", "¡Mucho gusto!")
         self.assertEqual(
             float((s["skills"].get("IP-07") or {}).get("confidence") or 0), 0.0)
+        self.assertEqual(
+            float((s["skills"].get("IP-03") or {}).get("confidence") or 0), 0.0)
+        self.assertIn("rules_backup", notes)
 
-    def test_correct_soy_still_earns_ser_credit(self):
+    def test_tool_grades_ser_credit(self):
         s, _vis, _notes = process_turn(
-            default_sheet(), "Yo soy Patrick", "¡Mucho gusto!")
+            default_sheet(),
+            "Yo soy de Guatemala",
+            "¡Qué bien!",
+            tool_delta={
+                "reason": "Learner used soy de for origin",
+                "evidence": "Yo soy de Guatemala",
+                "skills": {"IP-07": {"status": "emerging", "confidence": 0.4}},
+                "grammar": {
+                    "present_ser": {"status": "emerging", "confidence": 0.4},
+                },
+            },
+        )
         self.assertGreater(
             float((s["skills"].get("IP-07") or {}).get("confidence") or 0), 0.0)
 
-    def test_cap_stacked_bumps_cannot_reach_known(self):
-        """Stacked success bumps: conf <= start+0.25; known re-gated below gate."""
+    def test_tool_cap_cannot_reach_known_in_one_turn(self):
+        """Tool grade: conf <= start+0.25; known re-gated without enough uses."""
         base = default_sheet()
         base["skills"]["IP-03"] = {
             "status": "emerging", "confidence": 0.5, "solid_uses": 1,
         }
-        s, _vis, _notes = process_turn(base, "Me llamo Alex", "¡Mucho gusto!")
+        s, _vis, _notes = process_turn(
+            base,
+            "Me llamo Alex",
+            "¡Mucho gusto!",
+            tool_delta={
+                "reason": "Produced Me llamo cleanly",
+                "evidence": "Me llamo Alex",
+                "skills": {
+                    "IP-03": {"status": "known", "confidence": 0.95},
+                },
+            },
+        )
         entry = s["skills"]["IP-03"]
         self.assertLessEqual(entry["confidence"], 0.75)
         self.assertLessEqual(entry["solid_uses"], 2)
@@ -181,14 +229,10 @@ class TestSheetCore(unittest.TestCase):
         self.assertAlmostEqual(s["skills"]["IP-01"]["confidence"], 0.25)
 
     def test_confidence_cap_and_known_gate(self):
-        """One tool turn cannot jump 0 → known 0.9; known needs OBSERVED uses.
+        """One tool merge cannot jump 0 → known 0.9; known needs enough uses.
 
-        CHAR-BUG-008 fix (2026-07-29): the old version of this test pinned
-        a 4-call claim climb to known (each merge minted a solid use via
-        the rose/promoted heuristic). Uses now come only from code
-        observation, so claim-only climbing stalls at emerging forever and
-        promotion lands only once the sheet's own recorded uses reach the
-        gate.
+        Conf rises mint solid_uses (+1 per successful tool merge). Known still
+        requires conf ≥ gate and uses ≥ 2; a single over-claim stays emerging.
         """
         s = apply_delta(
             default_sheet(),
@@ -196,22 +240,21 @@ class TestSheetCore(unittest.TestCase):
         )
         self.assertLessEqual(s["skills"]["IP-02"]["confidence"], 0.25)
         self.assertNotEqual(s["skills"]["IP-02"]["status"], "known")
-        # Claim-only climbing: conf ceilings at 0.75, status stays
-        # emerging, zero uses minted — the gate is uncrossable by claim.
+        self.assertEqual(s["skills"]["IP-02"]["solid_uses"], 1)
+        # Second successful grade: uses=2, conf still capped below known.
+        s = apply_delta(
+            s,
+            {"skills": {"IP-02": {"status": "known", "confidence": 0.95}}},
+        )
+        self.assertEqual(s["skills"]["IP-02"]["solid_uses"], 2)
+        # conf 0.25+0.25=0.5 — still not known
+        self.assertNotEqual(s["skills"]["IP-02"]["status"], "known")
+        # Climb conf with enough uses until known gate clears.
         for _ in range(4):
             s = apply_delta(
                 s,
                 {"skills": {"IP-02": {"status": "known", "confidence": 0.95}}},
             )
-        self.assertEqual(s["skills"]["IP-02"]["status"], "emerging")
-        self.assertEqual(s["skills"]["IP-02"]["solid_uses"], 0)
-        self.assertLessEqual(s["skills"]["IP-02"]["confidence"], 0.75)
-        # Once code observation supplies the uses, the same claim promotes.
-        s["skills"]["IP-02"]["solid_uses"] = 2  # code-observed (_bump_status)
-        s = apply_delta(
-            s,
-            {"skills": {"IP-02": {"status": "known", "confidence": 0.95}}},
-        )
         self.assertEqual(s["skills"]["IP-02"]["status"], "known")
         self.assertGreaterEqual(s["skills"]["IP-02"]["confidence"], 0.8)
 
@@ -230,17 +273,27 @@ class TestSheetCore(unittest.TestCase):
         self.assertIsNone(s["identity"]["preferred_name"])
         self.assertEqual(s["identity"].get("engagement_notes") or "", "")
 
-    def test_limited_time_not_boredom(self):
+    def test_affect_via_tool_not_regex(self):
+        """Affect energy is no longer set by regex; tool may set it."""
         s = apply_rule_updates(
             default_sheet(),
             "gracias. Yo solo tango un pequito tiemp. I only have a little time",
         )
-        self.assertEqual(s["affect"]["energy"], "limited_time")
-        self.assertNotEqual(s["affect"].get("boredom_risk"), "high")
+        self.assertNotEqual(s.get("affect", {}).get("energy"), "limited_time")
+        s2, _, _ = process_turn(
+            default_sheet(),
+            "I only have a little time",
+            "Ok, corto.",
+            tool_delta={
+                "reason": "Learner said they have limited time",
+                "affect": {"energy": "limited_time"},
+            },
+        )
+        self.assertEqual(s2["affect"]["energy"], "limited_time")
+        # No boredom machinery from text alone
+        self.assertNotEqual(s.get("affect", {}).get("boredom_risk"), "high")
         s = recompute_next_best(s)
-        # Must NOT force boredom change_activity reason
         self.assertNotIn("boredom", (s["next_best"].get("reason") or "").lower())
-        self.assertIn("limited time", (s["next_best"].get("reason") or "").lower())
 
     def test_session_energy_clears_on_new_session(self):
         """'Few minutes' from yesterday must not haunt today's open."""
@@ -288,10 +341,11 @@ class TestSheetCore(unittest.TestCase):
         self.assertEqual(t["name"], "update_character_sheet")
         self.assertIn("input_schema", t)
         self.assertIn("skills", t["input_schema"]["properties"])
+        self.assertIn("reason", t["input_schema"]["required"])
         # Personal-data capture disabled: no identity in schema or description.
         self.assertNotIn("identity", t["input_schema"]["properties"])
         self.assertNotIn("preferred_name", t["description"])
-        self.assertIn("Do not record learner names", t["description"])
+        self.assertIn("Do not record names", t["description"])
 
     def test_parse_sheet_json(self):
         raw = '```json\n{"version": 2, "identity": {"preferred_name": "Pat"}}\n```'
@@ -304,12 +358,16 @@ class TestSheetCore(unittest.TestCase):
 
     def test_greet_known_shifts_next_best(self):
         s = default_sheet()
-        for _ in range(6):
-            s = apply_rule_updates(s, "Hola! Buenos dias")
+        s["skills"]["IP-01"] = {
+            "status": "known", "confidence": 0.9, "solid_uses": 3,
+        }
         s = recompute_next_best(s)
         # after strong greet (IP-01), prefer another can-do e.g. introduce
         self.assertNotEqual(s["next_best"].get("can_do"), "IP-01")
-        self.assertIn(s["next_best"].get("can_do"), ("IP-03", "IP-04", "IP-05", "IP-06", "IP-07", "IP-08", None))
+        self.assertIn(
+            s["next_best"].get("can_do"),
+            ("IP-03", "IP-04", "IP-05", "IP-06", "IP-07", "IP-08", None),
+        )
 
     def test_human_format(self):
         t = format_sheet_human(default_sheet())
@@ -317,18 +375,24 @@ class TestSheetCore(unittest.TestCase):
         self.assertIn("Can-dos", t)
         self.assertIn("IP-01", t)
 
-    def test_me_llama_es_earns_ip03_but_stores_no_name(self):
-        # Personal-data capture disabled (2026-07-28): the introduction
-        # surface form still earns IP-03 ability credit, but no name is
-        # ever written to the sheet.
-        s = apply_rule_updates(default_sheet(), "estoy bien. Me llama es Patrick")
+    def test_me_llama_es_tool_earns_ip03_but_stores_no_name(self):
+        # Personal-data capture disabled: tool grades IP-03; no name stored.
+        s, _, _ = process_turn(
+            default_sheet(),
+            "estoy bien. Me llama es Patrick",
+            "¡Mucho gusto!",
+            tool_delta={
+                "reason": "Learner attempted name formula (me llama es)",
+                "evidence": "Me llama es Patrick",
+                "skills": {"IP-03": {"status": "emerging", "confidence": 0.4}},
+            },
+        )
         self.assertIsNone((s.get("identity") or {}).get("preferred_name"))
         self.assertGreater(s["skills"]["IP-03"]["confidence"], 0.1)
 
     def test_scaffold_stays_on_with_english_meta(self):
         from tutor.character_sheet import update_scaffold_flag
         s = default_sheet()
-        s = apply_rule_updates(s, "estoy bien")
         s = update_scaffold_flag(s, "what does ves mean?")
         self.assertTrue(s["receptive"]["needs_english_scaffold"])
 
@@ -554,10 +618,14 @@ class TestAbilityStateMachine(unittest.TestCase):
         }
         s, _vis, _notes = process_turn(
             base, "me gusta el pan", "¡Qué rico!",
-            tool_delta={"lexicon": {"pan": {
-                "status": "emerging", "confidence": 0.6,
-                "next_due": "2020-01-01",  # cross-axis attempt: stripped
-            }}},
+            tool_delta={
+                "reason": "Learner used pan in a preference line",
+                "evidence": "me gusta el pan",
+                "lexicon": {"pan": {
+                    "status": "emerging", "confidence": 0.6,
+                    "next_due": "2020-01-01",  # cross-axis attempt: stripped
+                }},
+            },
         )
         after = s["lexicon"]["pan"]
         self.assertEqual(
@@ -565,33 +633,29 @@ class TestAbilityStateMachine(unittest.TestCase):
         )
 
     def test_char_bug_008_009_resolved_tool_cannot_jump_bands(self):
-        """CHAR-BUG-008/009 RESOLVED (2026-07-29): the model's sheet tool
-        lost the power to inflate the diagnosis (PEDAGOGY §3.2/P7 — the
-        sheet is the targeting instrument; §4.5 — capability removal).
+        """CHAR-BUG-008/009 + tool-only ability (2026-07-31).
 
-        008: solid_uses claims are no longer evidence — the merge starts
-        from the sheet's own recorded (observed) count, a claim may LOWER
-        it but never raise it, and no merge heuristic mints uses. The
-        known gate (conf ≥ 0.80 + 2 solid uses) is uncrossable by claim
-        alone. 009: apply_delta's lexicon branches (dict + bare-string)
-        route through _clamp_skill_entry (via="delta_lexicon") — no branch
-        mints band/confidence unclamped; a new-word known-claim at conf
-        1.0 lands emerging at the +0.25 first-appearance ceiling.
-        Inverted from the Phase 1.5 batch 2 characterization pin; the
-        registry entries flipped RESOLVED in the same change (Phase 0 law).
+        Conf rise under a tool merge mints at most +1 solid_use. A solid_uses
+        claim may only lower the count. Known still needs conf ≥ 0.80 and
+        uses ≥ 2 — claim-alone inflation is clamped. Lexicon new-word
+        known-claims land emerging at the +0.25 first-appearance ceiling.
         """
-        # Unchanged guard: unknown at conf 0 cannot reach known.
+        # Unchanged guard: unknown at conf 0 cannot reach known in one tool call.
         s, _v, _n = process_turn(
             default_sheet(), "hola", "¡Hola!",
-            tool_delta={"skills": {"IP-02": {
-                "status": "known", "confidence": 0.9, "solid_uses": 5,
-            }}},
+            tool_delta={
+                "reason": "Overclaim known on first formal greet",
+                "skills": {"IP-02": {
+                    "status": "known", "confidence": 0.9, "solid_uses": 5,
+                }},
+            },
         )
         self.assertEqual(s["skills"]["IP-02"]["status"], "emerging")
         self.assertAlmostEqual(s["skills"]["IP-02"]["confidence"], 0.25)
-        self.assertEqual(s["skills"]["IP-02"]["solid_uses"], 0)
-        # 008 INVERTED: the old one-call crossing claim now lands clamped —
-        # emerging at the 0.75 over-claim ceiling, uses still 0.
+        # conf rise mints 1 use; claim cannot raise past that
+        self.assertEqual(s["skills"]["IP-02"]["solid_uses"], 1)
+        # 008: claim known with conf jump + uses claim still clamped;
+        # uses = min(prev+1 from conf, claimed) = 1 when prev was 0.
         base = default_sheet()
         base["skills"]["IP-02"] = {
             **base["skills"]["IP-02"],
@@ -599,15 +663,17 @@ class TestAbilityStateMachine(unittest.TestCase):
         }
         s, _v, _n = process_turn(
             base, "hola", "¡Hola!",
-            tool_delta={"skills": {"IP-02": {
-                "status": "known", "confidence": 0.85, "solid_uses": 2,
-            }}},
+            tool_delta={
+                "reason": "Still overclaiming known without history",
+                "skills": {"IP-02": {
+                    "status": "known", "confidence": 0.85, "solid_uses": 2,
+                }},
+            },
         )
         self.assertEqual(s["skills"]["IP-02"]["status"], "emerging")
         self.assertAlmostEqual(s["skills"]["IP-02"]["confidence"], 0.75)
-        self.assertEqual(s["skills"]["IP-02"]["solid_uses"], 0)
-        # 008 lawful landing: with OBSERVED uses at the gate the same claim
-        # promotes — the diagnosis follows evidence, not claims.
+        self.assertEqual(s["skills"]["IP-02"]["solid_uses"], 1)
+        # Lawful landing: prior solid_uses at gate + conf promotes.
         base = default_sheet()
         base["skills"]["IP-02"] = {
             **base["skills"]["IP-02"],
@@ -615,9 +681,12 @@ class TestAbilityStateMachine(unittest.TestCase):
         }
         s, _v, _n = process_turn(
             base, "hola", "¡Hola!",
-            tool_delta={"skills": {"IP-02": {
-                "status": "known", "confidence": 0.85,
-            }}},
+            tool_delta={
+                "reason": "Second clear formal exchange",
+                "skills": {"IP-02": {
+                    "status": "known", "confidence": 0.85,
+                }},
+            },
         )
         self.assertEqual(s["skills"]["IP-02"]["status"], "known")
         # A uses claim may LOWER the observed count (honest demotion).
@@ -628,30 +697,39 @@ class TestAbilityStateMachine(unittest.TestCase):
         }
         s, _v, _n = process_turn(
             base, "hola", "¡Hola!",
-            tool_delta={"skills": {"IP-02": {"solid_uses": 1}}},
+            tool_delta={
+                "reason": "Correcting overcounted uses",
+                "skills": {"IP-02": {"solid_uses": 1}},
+            },
         )
         self.assertEqual(s["skills"]["IP-02"]["solid_uses"], 1)
-        # 009 INVERTED: lexicon absent + claim {known, 1.0, uses 2} lands
-        # emerging at the first-appearance ceiling, zero uses.
+        # 009: lexicon new word known-claim lands emerging at +0.25; uses=1.
         s, _v, _n = process_turn(
             default_sheet(), "hola", "¡Hola!",
-            tool_delta={"lexicon": {"perro": {
-                "status": "known", "confidence": 1.0, "solid_uses": 2,
-            }}},
+            tool_delta={
+                "reason": "Learner said perro once",
+                "evidence": "perro",
+                "lexicon": {"perro": {
+                    "status": "known", "confidence": 1.0, "solid_uses": 2,
+                }},
+            },
         )
         self.assertEqual(s["lexicon"]["perro"]["status"], "emerging")
         self.assertAlmostEqual(s["lexicon"]["perro"]["confidence"], 0.25)
-        self.assertEqual(s["lexicon"]["perro"]["solid_uses"], 0)
-        # Without the uses claim the landing is the same — pre-fix, conf
-        # 1.0 survived the cap re-gate demotion; now the merge clamps it.
+        self.assertEqual(s["lexicon"]["perro"]["solid_uses"], 1)
         s, _v, _n = process_turn(
             default_sheet(), "hola", "¡Hola!",
-            tool_delta={"lexicon": {"perro": {
-                "status": "known", "confidence": 1.0,
-            }}},
+            tool_delta={
+                "reason": "Learner said perro once",
+                "evidence": "perro",
+                "lexicon": {"perro": {
+                    "status": "known", "confidence": 1.0,
+                }},
+            },
         )
         self.assertEqual(s["lexicon"]["perro"]["status"], "emerging")
         self.assertAlmostEqual(s["lexicon"]["perro"]["confidence"], 0.25)
+        self.assertEqual(s["lexicon"]["perro"]["solid_uses"], 1)
 
     def test_tool_vias_tightened_char_bug_008_009(self):
         """The tool_merge/delta_lexicon edge tables are no longer

@@ -268,7 +268,7 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
 }
 .j-chip {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.28rem;
   max-width: 100%;
   font-size: 0.74rem;
@@ -276,16 +276,26 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
   color: var(--text);
   background: var(--bg-chat);
   border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0.12rem 0.55rem 0.12rem 0.4rem;
+  border-radius: 0.65rem;
+  padding: 0.28rem 0.55rem 0.28rem 0.4rem;
   cursor: default;
 }
-.j-chip-icon { font-size: 0.8rem; line-height: 1; }
-.j-chip-name { min-width: 0; overflow-wrap: anywhere; }
+.j-chip-icon { font-size: 0.9rem; line-height: 1.2; flex-shrink: 0; }
+.j-chip-body { min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+.j-chip-name { min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+.j-chip-why {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 400;
+}
 /* Single-state chip: recheck REPLACES the celebration icon/label */
 .j-chip.recheck { border-style: dashed; color: var(--muted); }
 .j-chip.recheck .j-chip-icon { color: var(--warn); }
-.j-chip.down { color: var(--warn); border-color: #6b5420; }
+.j-chip.down, .j-chip.grade-down { color: var(--warn); border-color: #6b5420; }
+.j-chip.grade-up { border-color: #2a5a3a; }
+.j-chip.grade-up .j-chip-icon { color: #3d9a5f; }
 /* Quiet badge — informational, never celebration chrome */
 .j-badge {
   display: inline-block;
@@ -600,6 +610,14 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
   font-weight: 500;
 }
 .part-try .part-label { color: var(--warn); }
+.part-gate-fail {
+  background: #3a1518;
+  border: 1px solid #a04048;
+  color: #f0c0c4;
+}
+.part-gate-fail .part-label { color: #ff8a90; font-weight: 700; }
+.part-gate-fail .gate-fail-body { display: block; margin-top: 0.25rem; font-size: 0.85rem; line-height: 1.35; }
+.part-gate-fail code { color: #ffd0a8; font-size: 0.8em; }
 .part-image {
   background: #1a222c;
   border: 1px solid #3a4a5c;

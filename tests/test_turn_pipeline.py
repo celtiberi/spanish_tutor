@@ -155,7 +155,7 @@ class TestPipelineOrder:
             "stage_settle_pixels",
             "stage_gate_context",
             "stage_gate_check",
-            "stage_gate_repair",
+            "stage_gate_verdict",
         ]
         # The realize/gate families never leak into the head sequence.
         for f in tp.REALIZE_STAGES + tp.GATE_REPAIR_STAGES:
@@ -206,7 +206,7 @@ class TestPipelineOrder:
             + DOCUMENTED_REALIZE
             + [
                 "stage_settle_pixels", "stage_gate_context",
-                "stage_gate_check", "stage_gate_repair",
+                "stage_gate_check", "stage_gate_verdict",
             ]
             + DOCUMENTED_RECORDERS
             + DOCUMENTED_CAPTURE_LOG
@@ -248,7 +248,7 @@ class TestPipelineOrder:
             "realization_artifact",
             "final", "raw", "tool_delta", "usage", "error_result",
             "render_drops",
-            "gate_ctx", "gate_result", "need_recast", "gate_hold",
+            "gate_ctx", "gate_result", "need_recast", "gate_hold", "gate_fail",
             "result", "phase_label", "phase_note_key", "soft_plan",
         ])
 

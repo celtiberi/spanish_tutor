@@ -1454,6 +1454,7 @@ class ConversationalSession:
             composed,
             tool_delta=tool_delta if self.use_tools else None,
             event_sink=sheet_events,
+            session_id=getattr(self, "progress_session_id", "") or "",
         )
         visible = composed or _sheet_visible or compose_if_needed(tutor_parts)
         # CHAR-BUG-001 RESOLVED (Phase 4 batch 4): _finish's historical
@@ -1789,6 +1790,12 @@ class ConversationalSession:
             from . import progress_ledger as pl
 
             pl.record_epoch(session_id=self.progress_session_id)
+            try:
+                from . import grade_log as gl
+
+                gl.record_epoch(session_id=self.progress_session_id)
+            except Exception:
+                pass
         except Exception:
             pass
         # Unified reset (batch 2): the batch-1 twelve stores + the four

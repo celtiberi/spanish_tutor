@@ -78,8 +78,8 @@ The GATE/REPAIR family (batch 3, E3): ``stage_gate_context`` builds the
 turn-constant ``output_gate.GateContext`` from the TurnContext — the
 historical 18-argument call-site seam dies there; ``stage_gate_check``
 parses the reply and runs the gate (+ the recast re-check);
-``stage_gate_repair`` owns the verdict events and the single bounded
-repair round + re-gate.  The executor wraps check+repair in the
+``stage_gate_verdict`` owns audit events only (no rewrite).  The executor
+wraps check+verdict in the
 historical try/except (any gate exception → OUTPUT_GATE_ERROR, turn
 proceeds ungated) — context build stays outside it, as inline.
 
@@ -198,7 +198,9 @@ class TurnContext:
     gate_ctx: Any = None                            # output_gate.GateContext
     gate_result: Any = None                         # OutputGateResult | None
     need_recast: bool = False
-    gate_hold: bool = False   # still_fail floor rung b′: payload never ships
+    gate_hold: bool = False   # legacy blank-hold (deprecated; prefer gate_fail)
+    # Loud surface of gate failure (2026-08-01): raw ships; client must show faults.
+    gate_fail: bool = False
 
     # -- produced by settlement (§1.1b, 2026-07-29) --------------------------
     render_drops: list = field(default_factory=list)  # (kind, concept, reason)
@@ -1013,8 +1015,8 @@ def stage_model_call(session, ctx: TurnContext) -> None:
     from .conv_session import TurnResult, tutor_turn
 
     try:
-        # No tool round-trips by default (SHEET_TOOLS=0); hard_observer
-        # updates the sheet.
+        # Ability grades via update_character_sheet when SHEET_TOOLS
+        # (default on). No regex hard-observer ability path (2026-07-31).
         tools = (
             session.tools if getattr(config, "SHEET_TOOLS", False) else None
         )
@@ -1085,41 +1087,12 @@ GATE_CRITICAL_FAULTS = frozenset({
 # the ladder — strip-part → constrained recovery → degraded ship.
 GATE_SHIP_BAN_FAULTS = GATE_CRITICAL_FAULTS
 
-# HARM PARTITION (Grok countersign 2026-07-30, ITEM 1b — my first cut
-# shipped every non-garbage fault "degraded", which re-legalized fail-open
-# for the exact probe-loop class the floor was built to stop).
-#
-# INTEGRITY residuals may never reach the learner as Marisol's teaching
-# text: a repeated probe, an English wall, or a naked new item is ACTIVELY
-# BAD TEACHING, not merely imperfect. Garbage classes (leak/truncation)
-# are scrubbed first, then judged the same way.
+# Fault classes (audit labels only — no longer used to blank or rewrite).
 _INTEGRITY_HOLD = frozenset({
     "gate:sheet_leak", "gate:truncated", "gate:probe_loop",
     "gate:english_wall", "gate:unscaffolded_new_item",
 })
-# Contract misses that are still COMMUNICATION — imperfect teaching beats
-# silence, so these ship degraded with the fault logged.
 _DEGRADE_OK = frozenset({"gate:missing_recast", "pedagogy:no_teach_move"})
-# Content classes scrubbed before any ship/hold decision (surface hygiene).
-_HARMFUL_TO_SHOW = frozenset({"gate:sheet_leak", "gate:truncated"})
-
-_JSON_BLOCK_RE = __import__("re").compile(
-    r"```[a-z]*\s*[\[{].*?[\]}]\s*```|(?<![\w])[\[{][^\n]*[\"'][a-z_]+[\"']\s*:"
-    r"[^\n]*[\]}]", __import__("re").S | __import__("re").I,
-)
-
-
-def _scrub_harmful(text: str) -> str:
-    """Remove displayable-garbage: fenced/inline JSON-ish dumps, then cut a
-    mid-sentence truncation back to the last complete sentence. Surface
-    cleanup of OUR OWN reply text — not judgment about meaning (§4.2)."""
-    t = _JSON_BLOCK_RE.sub(" ", str(text or "")).strip()
-    if t and t[-1] not in ".!?¡¿…":
-        for stop in range(len(t) - 1, 0, -1):
-            if t[stop] in ".!?…":
-                return t[: stop + 1].strip()
-        return ""
-    return t
 
 
 def stage_gate_context(session, ctx: TurnContext) -> None:
@@ -1226,284 +1199,72 @@ def stage_gate_check(session, ctx: TurnContext) -> None:
         )
 
 
-def _gate_floor(session, ctx: TurnContext, residual: set) -> None:
-    """The still_fail FLOOR (system review 2026-07-30, Grok-amended R1;
-    PEDAGOGY §6 amendment): ship-ban faults may never reach the learner
-    after a failed repair. Ladder:
-    (a) part surgery — a residual probe_loop lives in the question parts;
-        drop try/continue, rebuild the raw, re-gate the remainder. Ship
-        the stripped turn only if no ship-ban fault remains.
-    (b′) hold — the faulting payload is NOT delivered. ctx.gate_hold makes
-        the client render a non-teaching system hold (client-owned copy —
-        never code-owned Spanish presented as Marisol, §1.1a).
-    Session consequence + operator surface: still-fail counter on the
-    session (debug ring shows it; SUMMONS-class visibility)."""
-    from dataclasses import replace
+def _surface_gate_fail(session, ctx: TurnContext, faults: list | set) -> None:
+    """Mark and ship the raw attempt — never rewrite, strip, scrub, or blank.
 
-    from .output_gate import check_output_gate
-    from .tutor_response import compose_raw, process_tutor_raw as _ptr
+    2026-08-01 user directive: repair/hold/scrub hide prompt failures.
+    """
     from .turn_events import TurnEventKind as EV
 
+    fault_list = sorted(set(faults or []))
     session.gate_still_fail_count = (
         getattr(session, "gate_still_fail_count", 0) + 1
     )
-    if residual == {"gate:probe_loop"}:
-        _vis, _parts = _ptr(ctx.raw or "")
-        pd = _parts.as_dict()
-        if (pd.get("try") or pd.get("continue")):
-            raw2 = compose_raw({**pd, "try": "", "continue": ""})
-            vis2, parts2 = _ptr(raw2)
-            gate3 = check_output_gate(replace(
-                ctx.gate_ctx,
-                parts=parts2.as_dict(), visible=vis2, raw=raw2,
-                require_recast=ctx.need_recast, truncated=False,
-                image_present=bool(ctx.teach_images),
-            ))
-            if not (set(gate3.faults or []) & GATE_SHIP_BAN_FAULTS):
-                ctx.raw = raw2
-                ctx.gate_result = gate3
-                ctx.ev.emit(
-                    EV.OUTPUT_GATE_STRIPPED,
-                    payload={"parts": ["try", "continue"]}, stage="gate",
-                )
-                # Surgery changed the reply — re-settle pixels against the
-                # stripped text (§1.1b; floor amendment: settlement bound
-                # is ≤3 with the floor rung, still no loop).
-                _settle_pixels(session, ctx)
-                return
-    # (b) MODEL-OWNED RECOVERY under capability bans — the rung that was
-    # specified in the countersigned ladder and MISSING from the first
-    # implementation. Incident 2026-07-30 (session 133545): a learner
-    # wrote "I do not understand what you are asking. Too advanced for
-    # me" and received SILENCE, because strip-part could not fix a
-    # mixed residual and the floor fell straight through to hold. A dead
-    # turn at the moment of confusion is worse than an imperfect turn.
-    # Constraints only — never code-authored Spanish (§1.1a).
-    if not getattr(ctx, "_recovery_spent", False):
-        ctx._recovery_spent = True
-        from .conv_session import tutor_turn
-
-        bans = [
-            "Do NOT introduce ANY new Spanish word or phrase this turn — "
-            "use only Spanish the learner has already met.",
-            "Do NOT ask any comprehension quiz, A/B question, or repeat a "
-            "question you already asked.",
-            "Keep it to at most 2 short sentences.",
-            "If the learner said they are confused or asked a question, "
-            "answer THAT first, simply, then stop.",
-        ]
-        recovery = {
-            "role": "user",
-            "content": (
-                "(harness) RECOVERY — your last reply was blocked by the "
-                "quality gate and was NOT shown to the learner.\n"
-                f"Blocked for: {', '.join(sorted(residual))}\n"
-                "Rewrite the turn under these hard constraints:\n- "
-                + "\n- ".join(bans)
-                + "\nSame reply format as always."
-            ),
-        }
-        try:
-            final3, raw3, _t3, usage3, _ = tutor_turn(
-                session.client, session.caps, ctx.system,
-                ctx.messages
-                + [{"role": "assistant", "content": ctx.raw or ""}]
-                + [recovery],
-                tools=None,
-            )
-        except Exception:
-            raw3, final3, usage3 = "", None, None
-        if usage3:
-            ctx.usage = {
-                k: (ctx.usage or {}).get(k, 0) + (usage3 or {}).get(k, 0)
-                for k in ("input_tokens", "output_tokens",
-                          "thinking_tokens", "cached_input_tokens")
-            }
-        if raw3 and raw3.strip():
-            vis3, parts3 = _ptr(raw3)
-            gate4 = check_output_gate(replace(
-                ctx.gate_ctx,
-                parts=parts3.as_dict(), visible=vis3, raw=raw3,
-                require_recast=ctx.need_recast,
-                image_present=bool(ctx.teach_images),
-                truncated=(
-                    (getattr(final3, "stop_reason", "") or "") == "max_tokens"
-                ),
-            ))
-            if not (set(gate4.faults or []) & GATE_SHIP_BAN_FAULTS):
-                ctx.raw = raw3
-                ctx.final = final3
-                ctx.gate_result = gate4
-                ctx.ev.emit(
-                    EV.OUTPUT_GATE_RECOVERED,
-                    payload={"blocked_for": sorted(residual)}, stage="gate",
-                )
-                _settle_pixels(session, ctx)
-                return
-
-    # (c) DEGRADED SHIP — the harm ranking (junk audit 2026-07-30, Grok
-    # priority #1: "a silent tutor is not a tutor"). My first floor made
-    # never-ship terminal, and it produced SILENCE for a learner who said
-    # "I do not understand" (session 133545). Silence ends the exchange;
-    # a suboptimal turn does not. So the terminal rung ships the best
-    # available attempt EXCEPT for content that is harmful to display —
-    # tool/sheet JSON and mid-sentence truncation are scrubbed first,
-    # because that content is garbage, not merely imperfect teaching.
-    harmful = residual & _HARMFUL_TO_SHOW
-    visible_now, parts_now = _ptr(ctx.raw or "")
-    if harmful:
-        pd = parts_now.as_dict()
-        cleaned = {
-            k: _scrub_harmful(str(pd.get(k) or ""))
-            for k in ("acknowledge", "recast", "model", "explain",
-                      "try", "continue")
-        }
-        candidate = compose_raw(cleaned)
-        vis_c, _p = _ptr(candidate)
-        if vis_c.strip():
-            ctx.raw = candidate
-            visible_now = vis_c
-    integrity = residual & _INTEGRITY_HOLD
-    if visible_now.strip() and not integrity:
-        ctx.ev.emit(
-            EV.OUTPUT_GATE_DEGRADED,
-            payload={"faults": sorted(residual)}, stage="gate",
-        )
-        _settle_pixels(session, ctx)
-        return
-
-    # (b′) HOLD — the integrity floor. Reached when an integrity residual
-    # survives recovery, or nothing displayable remains. The CLIENT renders
-    # a non-teaching system notice: a hold must never present as blank
-    # silence (that presentation bug caused session 133545), and it must
-    # never present as Marisol teaching text carrying these faults.
-    ctx.raw = ""
-    ctx.gate_hold = True
-    for img in ctx.teach_images or []:
-        concept = str((img or {}).get("concept") or "?")
-        ctx.render_drops.append(("image", concept, "gate_hold"))
-        ctx.ev.emit(
-            EV.RENDER_DROPPED, key=f"image:{concept}",
-            payload={"reason": "gate_hold"}, stage="gate",
-        )
-    ctx.teach_images = []
+    ctx.gate_hold = False
+    ctx.gate_fail = True
     ctx.ev.emit(
-        EV.OUTPUT_GATE_HELD,
-        payload={"faults": sorted(residual)}, stage="gate",
+        EV.OUTPUT_GATE_STILL_FAIL,
+        payload={"faults": fault_list, "surface": "visible", "no_hide": True},
+        stage="gate",
     )
+    _settle_pixels(session, ctx)
 
 
-def stage_gate_repair(session, ctx: TurnContext) -> None:
-    """Verdict events + the single bounded repair round.  A critical fault
-    (GATE_CRITICAL_FAULTS) re-asks once with the specific fault; the
-    rewrite is re-gated (require_recast sticky, truncation re-derived from
-    the NEW response) and the verdict lands as a typed event."""
-    from dataclasses import replace
+def stage_gate_verdict(session, ctx: TurnContext) -> None:
+    """Audit-only gate: log faults, never rewrite or hide the model reply.
 
-    from . import config
-    from .conv_session import tutor_turn
-    from .output_gate import check_output_gate, repair_user_message
-    from .tutor_response import process_tutor_raw as _ptr
+    Soft faults → soft_fail telemetry (reply still ships).
+    Critical/ship-ban → gate_fail banner + raw reply ships as-is.
+    """
     from .turn_events import TurnEventKind as EV
 
     gate_result = ctx.gate_result
-    needs_repair = (
-        getattr(config, "GATE_REPAIR", True)
-        and not gate_result.ok
-        and any(
-            f in GATE_CRITICAL_FAULTS for f in (gate_result.faults or [])
-        )
+    faults = list(gate_result.faults or [])
+    critical = any(f in GATE_CRITICAL_FAULTS for f in faults)
+
+    if gate_result.ok:
+        ctx.ev.emit(EV.OUTPUT_GATE_OK, stage="gate")
+        return
+
+    ctx.ev.emit(
+        EV.OUTPUT_GATE_FAIL,
+        payload={"faults": faults},
+        stage="gate",
     )
-    if not gate_result.ok and not needs_repair:
+
+    if faults and not critical:
         ctx.ev.emit(
             EV.OUTPUT_GATE_SOFT_FAIL,
-            payload={"faults": list(gate_result.faults)},
+            payload={"faults": faults},
             stage="gate",
         )
-    elif needs_repair:
-        ctx.ev.emit(
-            EV.OUTPUT_GATE_FAIL,
-            payload={"faults": list(gate_result.faults)},
-            stage="gate",
-        )
-        repair_msg = {
-            "role": "user",
-            "content": repair_user_message(gate_result, ctx.raw or ""),
-        }
-        final2, raw2, _td2, usage2, _ = tutor_turn(
-            session.client,
-            session.caps,
-            ctx.system,
-            ctx.messages
-            + [{"role": "assistant", "content": ctx.raw or ""}]
-            + [repair_msg],
-            tools=None,
-        )
-        if usage2:
-            ctx.usage = {
-                k: (ctx.usage or {}).get(k, 0) + (usage2 or {}).get(k, 0)
-                for k in (
-                    "input_tokens", "output_tokens",
-                    "thinking_tokens", "cached_input_tokens",
-                )
-            }
-        if raw2 and raw2.strip():
-            ctx.raw = raw2
-            ctx.final = final2
-            # settle_pixels₁ (§1.1b, Grok OQ3): the rewrite may have
-            # dropped the concept — re-settle BEFORE the re-gate so
-            # image_present cannot license a scaffold the learner will
-            # not see. Shrink-only; ≤2 settlements per turn, no loop.
-            _settle_pixels(session, ctx)
-            _vis1, _parts1 = _ptr(ctx.raw or "")
-            gate2 = check_output_gate(
-                replace(
-                    ctx.gate_ctx,
-                    parts=_parts1.as_dict(),
-                    visible=_vis1,
-                    raw=ctx.raw or "",
-                    require_recast=ctx.need_recast,
-                    image_present=bool(ctx.teach_images),
-                    truncated=(
-                        (getattr(final2, "stop_reason", "") or "")
-                        == "max_tokens"
-                    ),
-                )
-            )
-            ctx.gate_result = gate2
-            if gate2.ok:
-                ctx.ev.emit(EV.OUTPUT_GATE_REPAIRED, stage="gate")
-            else:
-                ctx.ev.emit(
-                    EV.OUTPUT_GATE_STILL_FAIL,
-                    payload={"faults": list(gate2.faults)},
-                    stage="gate",
-                )
-                # System review 2026-07-30: still_fail used to ship the
-                # faulting reply with a log note ("fail open" was policy).
-                # Ship-ban residuals now hit the floor.
-                residual = set(gate2.faults or []) & GATE_SHIP_BAN_FAULTS
-                if residual:
-                    _gate_floor(session, ctx, residual)
-        else:
-            # Repair produced nothing usable — the ORIGINAL failing reply
-            # is the payload; it gets the same floor, not a free pass.
-            residual = set(gate_result.faults or []) & GATE_SHIP_BAN_FAULTS
-            if residual:
-                _gate_floor(session, ctx, residual)
-    else:
-        ctx.ev.emit(EV.OUTPUT_GATE_OK, stage="gate")
+        return
+
+    # Critical: surface raw + loud fail. No second model call, no surgery.
+    residual = set(faults) & GATE_SHIP_BAN_FAULTS
+    _surface_gate_fail(session, ctx, residual or faults)
 
 
-# The gate/repair census — the executor calls settle_pixels then
-# context-build first (both outside the historical try/except), then
-# check + repair inside it. settle_pixels precedes context build so
-# image_present is settled truth (§1.1b, 2026-07-29).
+# Backward-compatible names (old repair path deleted 2026-08-01).
+stage_gate_repair = stage_gate_verdict
+_gate_floor = _surface_gate_fail
+
+# Gate audit census: settle → context → check → verdict (no rewrite stage).
 GATE_REPAIR_STAGES: tuple = (
     stage_settle_pixels,
     stage_gate_context,
     stage_gate_check,
-    stage_gate_repair,
+    stage_gate_verdict,
 )
 
 
@@ -1956,9 +1717,17 @@ def stage_parts_notes(session, ctx: TurnContext) -> None:
         if ctx.gate_result is not None:
             result.parts["output_gate"] = ctx.gate_result.as_dict()
         if ctx.gate_hold:
-            # Floor rung b′: the client renders a non-teaching system hold
-            # (client-owned copy — never presented as Marisol's Spanish).
+            # Legacy blank-hold flag (should be rare after 2026-08-01).
             result.parts["gate_hold"] = True
+        if ctx.gate_fail or (
+            ctx.gate_result is not None and not ctx.gate_result.ok
+        ):
+            # Loud failure: client must show faults + the raw attempt.
+            result.parts["gate_fail"] = True
+            if ctx.gate_result is not None:
+                result.parts["gate_faults"] = list(
+                    ctx.gate_result.faults or []
+                )
         if ctx.image_decision is not None:
             result.parts["image_decision"] = ctx.image_decision.as_dict()
             ctx.ev.emit(EV.IMAGE_DECISION, key=ctx.image_decision.reason,

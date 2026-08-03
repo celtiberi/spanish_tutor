@@ -164,17 +164,17 @@ FOCUS_ASYNC = (
     os.environ.get("FOCUS_ASYNC", "true").strip().lower()
     in ("1", "true", "yes", "on")
 )
-# Tool-call sheet updates add a second model round-trip; hard_observer already
-# writes evidence. Default off for latency; set SHEET_TOOLS=1 to re-enable.
+# Sheet ability grades come from the teaching model via update_character_sheet
+# (tool-only path; regex hard-observer ability writes removed 2026-07-31).
+# Default ON so live sessions can grade. Set SHEET_TOOLS=0 to disable tools
+# (ability then freezes — no silent regex bumps).
 SHEET_TOOLS = (
-    os.environ.get("SHEET_TOOLS", "false").strip().lower()
+    os.environ.get("SHEET_TOOLS", "true").strip().lower()
     in ("1", "true", "yes", "on")
 )
-# Second LLM only for critical output-gate failures (missing teach move / English wall).
-GATE_REPAIR = (
-    os.environ.get("GATE_REPAIR", "true").strip().lower()
-    in ("1", "true", "yes", "on")
-)
+# Gate model-rewrite DELETED 2026-08-01 (user: never hide problems).
+# Env GATE_REPAIR is ignored — kept only so old shells don't crash on import.
+GATE_REPAIR = False
 # --- Teacher context to the AI model ---
 # Testing default: FULL context (no char / history caps). Latency optimisations
 # that slice sheet/pack/stance/history broke teaching quality before. Only re-enable

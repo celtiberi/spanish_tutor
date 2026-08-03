@@ -40,8 +40,6 @@
     "introduce_planned:me llamo:R-D",
     "output_gate_ok",
     "rules_backup",
-    "hard_observer",
-    "can-dos=*",
     "scaffold=ES-forward+EN-rescue",
     "focus_async",
     "structured_reply",

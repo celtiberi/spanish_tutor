@@ -69,21 +69,15 @@ _GRAMMAR_COVERAGE = {
 _SHEET_DELTA_RE = re.compile(
     r"<sheet_delta>\s*(\{.*?\})\s*</sheet_delta>", re.S)
 
-# Rough token → lexicon lemma + can-do id
-_LEXICON_PATTERNS = [
-    (r"\bhola\b", "hola", "IP-01"),
-    (r"\bbuenos\s+d[ií]as\b", "buenos días", "IP-01"),
-    (r"\bbuenas\s+tardes\b", "buenas tardes", "IP-01"),
-    (r"\bbuenas\s+noches\b", "buenas noches", "IP-01"),
-    (r"\bme\s+llamo\b", "me llamo", "IP-03"),
-    (r"\bmucho\s+gusto\b", "mucho gusto", "IP-03"),
-    (r"\bc[oó]mo\s+te\s+llamas\b", "cómo te llamas", "IP-03"),
-    (r"\bestoy\b", "estoy", "IP-04"),
-    (r"\bgracias\b", "gracias", "IP-01"),
-    (r"\badi[oó]s\b|\bhasta\s+luego\b|\bhasta\s+mañana\b", "leave-taking", "IP-05"),
-    (r"\busted\b", "usted", "IP-02"),
-    (r"\bme\s+gusta\b|\bprefiero\b", "preference", "IP-06"),
-]
+# Regex lexicon/can-do graders RETIRED 2026-07-31 (tool-only ability).
+# Empty so leftover references are obvious no-ops.
+_LEXICON_PATTERNS: list[tuple[str, str, str]] = []
+
+# Minimum evidence string for a grade tool call (ability claim).
+MIN_GRADE_WHY_LEN = 12
+_ABILITY_DELTA_KEYS = frozenset({
+    "skills", "grammar", "lexicon", "error_patterns",
+})
 
 
 def today() -> str:
@@ -984,24 +978,16 @@ def _clamp_skill_entry(
 ) -> dict:
     """Merge a tool/model skills, grammar, or lexicon claim with honesty clamps.
 
-    CHAR-BUG-008/009 fix (2026-07-29) — the model's tool cannot inflate the
-    diagnosis (PEDAGOGY §3.2/P7: the sheet is the instrument; §4.5:
-    capability removal over instruction):
+    CHAR-BUG-008/009 (2026-07-29) + tool-only ability (2026-07-31) — the model
+    cannot inflate the diagnosis by claim alone (PEDAGOGY §3.2/P7, §4.5):
 
     - confidence is rate-limited around prev (±MAX_CONF_UP/DOWN_PER_TURN);
-    - solid_uses: code-observed evidence (_bump_status on real learner
-      text) is the ONLY source that increments it. The merge starts from
-      the sheet's own recorded count, mints no uses of its own (the old
-      rose/promoted +1 heuristic is gone), and an incoming claim may LOWER
-      the observed count (honest demotion), never raise it — so the known
-      gate (KNOWN_MIN_CONF + KNOWN_MIN_SOLID_USES) is uncrossable by claim
-      alone;
-    - known promotion requires prior known (legacy claims on seeded sheets
-      stay honored) or a sub-known EVIDENCE band (emerging/fragile) with
-      observed uses + conf at the gate. Everything else claiming known is
-      clamped to emerging (conf capped 0.75): unknown → known and
-      blocked → known are not producible here — the machine's tightened
-      edge tables raise on them as the regression backstop.
+    - solid_uses: a tool conf **rise** mints at most +1 use this merge
+      (tool-confirmed success). An incoming solid_uses claim may only
+      **lower** the count (honest demotion), never raise past observed.
+      Known still needs conf ≥ KNOWN_MIN_CONF and uses ≥ KNOWN_MIN_SOLID_USES;
+    - known promotion requires prior known, or emerging/fragile with uses
+      + conf at the gate. Over-claims clamp to emerging (conf capped 0.75).
     """
     prev = prev or {}
     incoming = incoming or {}
@@ -1021,11 +1007,14 @@ def _clamp_skill_entry(
     else:
         new_c = prev_c
 
-    # CHAR-BUG-008 fix: uses = the sheet's own recorded (observed) count;
-    # a claim can only lower it. Never `max(uses, claim)`, never a merge
-    # heuristic +1.
+    # solid_uses: code-owned counter of tool-confirmed successes.
+    # Regex observer no longer increments this (2026-07-31). A conf rise from
+    # the teacher tool counts as one solid use this turn; claimed solid_uses
+    # may only lower the count (honest demotion), never raise past observed.
     uses = int(prev.get("solid_uses") or 0)
     status_in = incoming.get("status")
+    if "confidence" in incoming and new_c > prev_c + 0.02:
+        uses = uses + 1
     if "solid_uses" in incoming:
         try:
             uses = min(uses, max(0, int(incoming["solid_uses"])))
@@ -1343,122 +1332,37 @@ def apply_rule_updates(
     preferred_name: str | None = None,
     store_identity: bool = True,
 ) -> dict:
-    """Heuristic ability updates from one learner turn (no extra API call).
+    """DEPRECATED 2026-07-31 — regex ability grading removed.
 
-    Personal-data capture is disabled (2026-07-28): this observer is
-    ability-only and never writes identity. `store_identity` is accepted for
-    caller compatibility but ignored. `preferred_name` feeds pedagogy that
-    depends on knowing the name (IP-03 gating) — always None now.
+    Ability (skills / grammar / lexicon / error_patterns conf) changes only
+    via ``update_character_sheet`` tool + ``process_turn``. This function is a
+    no-op identity kept for callers/tests that still import it: it deep-copies,
+    recomputes ``next_best`` from existing sheet state, and stamps
+    ``updated_at``. Learner text is ignored for ability.
+
+    ``store_identity`` / ``preferred_name`` remain accepted for compatibility
+    and are ignored (personal-data capture disabled 2026-07-28).
     """
+    del learner, tutor_visible, store_identity  # ability no longer from text
     s = copy.deepcopy(sheet)
-    text = learner or ""
-    f = fold(text)
-    low = text.lower()
-
-    # Affect: energy / time pressure (boredom machinery deleted 2026-07-30)
-    aff = s.setdefault("affect", {})
-    if re.search(
-        r"\b(what are we|why are we|boring|stuck|better way|this again|"
-        r"same thing|too hard|hate this)\b",
-        low,
-    ):
-        aff["last_meta"] = text[:200]  # truncation-ok: affect note storage
-        aff["energy"] = "frustrated_or_bored"
-    elif re.search(
-        # Topic fatigue: complaints about repetition, not general frustration
-        r"\byou\s+always\s+(talk|ask|say)\b|"
-        r"\bsame\s+(topic|topics|questions?|stuff)\b|"
-        r"\bsiempre\s+(hablamos|hablando|preguntas)\b|"
-        r"\botra\s+vez\s+lo\s+mismo\b",
-        low,
-    ):
-        aff["last_meta"] = text[:200]  # truncation-ok: affect note storage
-    elif re.search(
-        r"\b(little time|only have|don'?t have (much|a lot of) time|"
-        r"gotta go|have to go|in a hurry|in a rush|quick session|"
-        r"limited time|solo tengo|un poco de tiempo|pequito tiemp)\b",
-        low,
-    ):
-        aff["last_meta"] = text[:200]  # truncation-ok: affect note storage
-        aff["energy"] = "limited_time"
-
-    skills = s.setdefault("skills", default_skills_block())
-
-    # Name introduction — Spanish ability evidence ONLY (IP-03). English
-    # "my name is" is L1 communicative intent, not Spanish production
-    # (ACTFL: target-language performance only) — it earns no IP-03 credit.
-    # The name VALUE is never extracted or stored anywhere (personal-data
-    # capture disabled 2026-07-28): the old value-capture regex once made
-    # "I am searching for eggs" the learner's name.
-    if re.search(r"\bme\s+llam[oa]\b", low):
-        skills["IP-03"] = _bump_status(
-            skills.get("IP-03") or {}, success=True, amount=0.25)
-        _touch_coverage(s, "introduce_self")
-
-    # Lexicon + can-dos from successful-looking use
-    for pat, lemma, can_do in _LEXICON_PATTERNS:
-        if re.search(pat, f, re.I) or re.search(pat, low, re.I):
-            lex = s.setdefault("lexicon", {})
-            prev = lex.get(lemma) or {"status": "unknown", "confidence": 0.0}
-            lex[lemma] = _bump_status(prev, success=True, amount=0.12)
-            if can_do in skills:
-                skills[can_do] = _bump_status(
-                    skills[can_do], success=True, amount=0.1)
-
-    # Conceptual signals (supporting forms + related can-dos)
-    g = s.setdefault("grammar", default_grammar_block())
-    if re.search(r"\besta\s+bien\b", f) and not re.search(r"\bestoy\b", f):
-        g["present_estar_person"] = _bump_status(
-            g.get("present_estar_person") or {}, success=False, amount=0.2)
-        _note_evidence(g["present_estar_person"], "esta bien (wanted estoy?)")
-        skills["IP-04"] = _bump_status(skills.get("IP-04") or {}, success=False, amount=0.1)
-        _touch_coverage(s, "estar_basic")
-    if re.search(r"\bestoy\b", f):
-        g["present_estar_person"] = _bump_status(
-            g.get("present_estar_person") or {}, success=True, amount=0.18)
-        _note_evidence(g["present_estar_person"], "used estoy")
-        skills["IP-04"] = _bump_status(skills.get("IP-04") or {}, success=True)
-        _touch_coverage(s, "estar_basic")
-
-    # Register: informal to formal addressee
-    if re.search(r"\b(senora|senor|profesor|maestr)\b", f):
-        if re.search(r"\b(como estas|te llamas|y tu)\b", f) and not re.search(
-                r"\busted\b", f):
-            g["register_tu_usted"] = _bump_status(
-                g.get("register_tu_usted") or {}, success=False, amount=0.2)
-            _note_evidence(g["register_tu_usted"], "tú form with formal addressee")
-            skills["IP-02"] = _bump_status(skills.get("IP-02") or {}, success=False, amount=0.12)
-            _touch_coverage(s, "register_tu_usted")
-        elif re.search(r"\b(como esta|usted)\b", f):
-            g["register_tu_usted"] = _bump_status(
-                g.get("register_tu_usted") or {}, success=True, amount=0.15)
-            skills["IP-02"] = _bump_status(skills.get("IP-02") or {}, success=True)
-            _touch_coverage(s, "register_tu_usted")
-
-    if re.search(r"\b(hola|buenos|buenas)\b", f):
-        _touch_coverage(s, "greetings_time_of_day")
-        if re.search(r"\b(usted|senor|senora)\b", f):
-            skills["IP-02"] = _bump_status(
-                skills.get("IP-02") or {}, success=True, amount=0.12)
-        else:
-            skills["IP-01"] = _bump_status(
-                skills.get("IP-01") or {}, success=True, amount=0.12)
-
-    # The "es" inside erroneous "me llamo/llama es" is the me_llamo_es error
-    # (tracked in error_patterns) — it must not earn ser credit.
-    f_ser = re.sub(r"\bme\s+llam[ao]\s+es\b", " ", f)
-    if re.search(r"\b(soy|eres|es)\b", f_ser):
-        g["present_ser"] = _bump_status(
-            g.get("present_ser") or {}, success=True, amount=0.12)
-        skills["IP-07"] = _bump_status(skills.get("IP-07") or {}, success=True, amount=0.08)
-        _touch_coverage(s, "ser_basic")
-
-    # Recurring construction errors (yo está, me llamo es, …)
-    s = apply_error_pattern_updates(s, learner)
-
     s = recompute_next_best(s, preferred_name=preferred_name)
     s["updated_at"] = today()
     return s
+
+
+def grade_why_ok(delta: dict | None) -> bool:
+    """True when delta carries a non-trivial why/reason for a grade."""
+    if not isinstance(delta, dict):
+        return False
+    why = delta.get("reason") or delta.get("why") or delta.get("notes")
+    return isinstance(why, str) and len(why.strip()) >= MIN_GRADE_WHY_LEN
+
+
+def delta_claims_ability(delta: dict | None) -> bool:
+    """True when delta tries to change skills/grammar/lexicon/error_patterns."""
+    if not isinstance(delta, dict):
+        return False
+    return any(k in delta for k in _ABILITY_DELTA_KEYS)
 
 
 def sanitize_tool_delta(delta: dict | None) -> dict:
@@ -1470,6 +1374,7 @@ def sanitize_tool_delta(delta: dict | None) -> dict:
     allowed = {
         "affect", "next_best", "lexicon", "skills", "grammar",
         "coverage", "receptive", "error_patterns", "reason", "notes",
+        "why", "evidence",
     }
     return {k: v for k, v in delta.items() if k in allowed}
 
@@ -1573,11 +1478,9 @@ def apply_delta(sheet: dict, delta: dict) -> dict:
             if isinstance(topic, str):
                 _touch_coverage(s, topic)
 
-    # Tool error_patterns: normalize ids; store examples only (no multi-count).
-    # Counts come from harness apply_error_pattern_updates on learner text —
-    # otherwise one tool call with 4 examples inflated count by +4.
+    # Tool error_patterns: one harness count bump per tool call (not per
+    # example) via note_error_pattern — no regex auto-detect (2026-07-31).
     if "error_patterns" in delta and isinstance(delta["error_patterns"], dict):
-        eps = s.setdefault("error_patterns", {})
         for pid, v in delta["error_patterns"].items():
             if not isinstance(v, dict):
                 continue
@@ -1587,29 +1490,22 @@ def apply_delta(sheet: dict, delta: dict) -> dict:
             if v.get("resolved") or v.get("resolved_streak"):
                 note_error_pattern(s, pid, "tool:resolved", resolved=True)
                 continue
-            cat = ERROR_PATTERN_CATALOG.get(pid) or {}
-            ent = dict(eps.get(pid) or {
-                "count": 0,
-                "priority": "low",
-                "last_examples": [],
-                "label": cat.get("label") or pid,
-                "form_id": cat.get("form_id"),
-                "can_dos": list(cat.get("can_dos") or []),
-                "teach_hint": cat.get("teach_hint") or "",
-                "last_seen": None,
-                "resolved_streak": 0,
-            })
-            ex = list(ent.get("last_examples") or [])
-            for item in v.get("last_examples") or []:
-                if isinstance(item, str) and item.strip() and item not in ex:
-                    ex.append(item.strip()[:100])  # truncation-ok: sheet storage example cap
-            ent["last_examples"] = ex[-5:]
-            if cat:
-                ent["label"] = cat.get("label") or ent.get("label")
-                ent["form_id"] = cat.get("form_id")
-                ent["can_dos"] = list(cat.get("can_dos") or [])
-                ent["teach_hint"] = cat.get("teach_hint") or ""
-            eps[pid] = ent
+            examples = [
+                item.strip()[:100]  # truncation-ok: sheet storage example cap
+                for item in (v.get("last_examples") or [])
+                if isinstance(item, str) and item.strip()
+            ]
+            snippet = examples[-1] if examples else "tool:noted"
+            note_error_pattern(s, pid, snippet, resolved=False)
+            # Keep extra examples on the entry without further count bumps.
+            if examples:
+                ent = (s.get("error_patterns") or {}).get(pid)
+                if isinstance(ent, dict):
+                    ex = list(ent.get("last_examples") or [])
+                    for item in examples:
+                        if item not in ex:
+                            ex.append(item)
+                    ent["last_examples"] = ex[-5:]
 
     _auto_coverage_from_evidence(
         s, skill_ids=touched_skills, grammar_ids=touched_grammar,
@@ -1631,31 +1527,46 @@ def apply_delta(sheet: dict, delta: dict) -> dict:
 UPDATE_CHARACTER_SHEET_TOOL = {
     "name": "update_character_sheet",
     "description": (
-        "Update your working model of this Spanish learner when you have NEW "
-        "evidence from the latest exchange (can-do use, scaffold need, "
-        "affect, error patterns, next stretch). Skip if nothing meaningful changed. "
-        "Partial delta only — not the full sheet. Be conservative: prefer "
-        "emerging/fragile over known; one good turn is not mastery. "
-        "Do not claim solid_uses; observation records it (claimed counts "
-        "are capped at the code-observed count, and 'known' requires "
-        "observed uses — it cannot be granted by claim). "
-        "For repeated construction errors (e.g. yo está), set error_patterns "
-        "examples. Do not record learner names or personal facts; ability "
-        "evidence only. Student never sees this tool."
+        "Grade the learner's Spanish ability when THIS turn gives clear NEW "
+        "evidence (solo success, repeated failure, recovery after repair, "
+        "durable re-use). Partial delta only.\n"
+        "USE when: you can quote what they produced (or failed to produce) "
+        "and ability should move up or down.\n"
+        "DO NOT use when: you only modeled the form, they only echoed you, "
+        "you are unsure, or you are tidying the sheet. Prefer no call.\n"
+        "REQUIRED: reason (why, evidence-based, ≥12 chars) whenever you "
+        "change skills, grammar, lexicon, or error_patterns. Strongly "
+        "preferred: evidence (short quote from the LEARNER, not you). "
+        "Calls without a real reason are rejected — ability does not change.\n"
+        "Be conservative: prefer emerging/fragile over known; one good turn "
+        "is not mastery. Do not claim solid_uses (code counts tool-confirmed "
+        "successes). Do not record names or personal facts. "
+        "Student never sees this tool."
     ),
     "input_schema": {
         "type": "object",
+        "required": ["reason"],
         "properties": {
             "reason": {
                 "type": "string",
-                "description": "One line: why this update (evidence-based).",
+                "description": (
+                    "Why this grade changes: what they did in Spanish "
+                    "(or failed to do). Min ~12 chars. Required for ability."
+                ),
+            },
+            "evidence": {
+                "type": "string",
+                "description": (
+                    "Short quote from the LEARNER's message that justifies "
+                    "the grade (not your model line)."
+                ),
             },
             "error_patterns": {
                 "type": "object",
                 "description": (
                     "Recurring construction errors. Keys e.g. "
                     "estar_yo_estoy_vs_esta, me_llamo_es, tengo_not_tango, soy_de_origin. "
-                    "Pass last_examples: [\"yo está en…\"]. Harness increments counts."
+                    "Pass last_examples: [\"yo está en…\"]."
                 ),
                 "additionalProperties": {
                     "type": "object",
@@ -1673,7 +1584,7 @@ UPDATE_CHARACTER_SHEET_TOOL = {
                 "description": (
                     "Can-do ids (IP-01…IP-08, IT-01, PR-01) → "
                     "{status, confidence}. status: unknown|emerging|fragile|known|blocked. "
-                    "Never solid_uses — observation records it."
+                    "Never solid_uses."
                 ),
                 "additionalProperties": {
                     "type": "object",
@@ -1705,7 +1616,7 @@ UPDATE_CHARACTER_SHEET_TOOL = {
                 "type": "object",
                 "description": (
                     "Lemma → {status, confidence} for words they used. "
-                    "Never solid_uses — observation records it."
+                    "Never solid_uses."
                 ),
                 "additionalProperties": {
                     "type": "object",
@@ -2067,36 +1978,34 @@ def process_turn(
     revised_sheet: dict | None = None,
     profile: dict | None = None,
     event_sink: list | None = None,
+    session_id: str = "",
+    grade_log_path: str | None = None,
 ) -> tuple[dict, str, list[str]]:
-    """Apply post-turn sheet maintenance.
+    """Apply post-turn sheet maintenance (tool-only ability, 2026-07-31).
 
     Priority:
-      1. `tool_delta` — teaching AI called update_character_sheet (primary)
-      2. `revised_sheet` — legacy full AI rewrite (optional)
-      3. rules + optional inline <sheet_delta> (backup)
+      1. `tool_delta` — teaching AI called update_character_sheet (primary).
+         Ability claims require a non-trivial ``reason``/``why``; otherwise
+         the **entire** tool_delta is rejected and the sheet holds.
+      2. `revised_sheet` — legacy full AI rewrite (no regex observer).
+      3. No tool — ability frozen; optional inline <sheet_delta> only with why.
 
-    `profile` is accepted for caller compatibility but IGNORED — personal-data
-    capture is disabled (2026-07-28); the sheet stays ability-only.
+    Scaffold (``receptive.needs_english_scaffold``) remains code-owned via
+    ``update_scaffold_flag`` on every path (not ability grading).
+
+    No regex hard-observer ability writes. ``profile`` is IGNORED (ability-only
+    sheet; personal-data capture disabled 2026-07-28).
     Returns (sheet, visible_tutor_text, change_notes).
 
     Phase 3 batch 2 leaf push-down: the change notes are minted as typed
     (kind, key, payload) triples; the returned strings are their render-table
-    projection (byte-identical to the historical f-strings). When
-    ``event_sink`` (a list) is given, the deduped triples are appended to it
-    1:1 with the returned notes so conv_session emits TurnEvents natively
-    instead of absorbing strings.
+    projection. When ``event_sink`` (a list) is given, the deduped triples are
+    appended to it 1:1 with the returned notes.
     """
     visible, inline_delta = extract_sheet_delta(tutor_reply)
     before = copy.deepcopy(sheet)
 
-    # Personal-data capture is disabled (2026-07-28): `profile` is accepted
-    # for caller compatibility but never read or written. The sheet stays
-    # ability-only regardless.
-    _rule_kwargs = {"preferred_name": None, "store_identity": False}
-
-    if tool_delta:
-        s = apply_delta(sheet, tool_delta)
-        # Keep can-do statements stamped even if the tool omitted them
+    def _stamp_can_dos(s: dict) -> None:
         for cid, entry in default_skills_block().items():
             sk = s.setdefault("skills", {})
             sk.setdefault(cid, entry)
@@ -2104,40 +2013,86 @@ def process_turn(
                 sk[cid]["mode"] = CAN_DOS[cid]["mode"]
                 sk[cid]["band"] = CAN_DOS[cid]["band"]
                 sk[cid]["statement"] = CAN_DOS[cid]["statement"]
-        s = _preserve_identity(sheet, s)
-        events: list[tuple] = [(_EVK.SHEET_TOOL_UPDATE, "", {})]
-        reason = tool_delta.get("reason") or tool_delta.get("notes")
-        if isinstance(reason, str) and reason.strip():
-            events.append((_EVK.SHEET_WHY, reason.strip()[:80], {}))
-        # Hard observer always runs (PR3): can-do/lexicon/error evidence is
-        # code-owned — never depend only on tool compliance.
-        staged = copy.deepcopy(s)
-        s = apply_rule_updates(s, learner, visible, **_rule_kwargs)
-        s = _cap_turn_confidence(before, staged, s)
-        events.append((_EVK.SHEET_HARD_OBSERVER, "", {}))
+
+    if tool_delta:
+        td = sanitize_tool_delta(tool_delta)
+        if delta_claims_ability(td) and not grade_why_ok(td):
+            s = copy.deepcopy(sheet)
+            _stamp_can_dos(s)
+            s = _preserve_identity(sheet, s)
+            events: list[tuple] = [
+                (_EVK.SHEET_WHY, "rejected:need_reason", {}),
+            ]
+            s = recompute_next_best(s, preferred_name=None)
+        else:
+            s = apply_delta(sheet, td)
+            _stamp_can_dos(s)
+            s = _preserve_identity(sheet, s)
+            events = [(_EVK.SHEET_TOOL_UPDATE, "", {})]
+            reason = (
+                td.get("reason") or td.get("why") or td.get("notes") or ""
+            )
+            if isinstance(reason, str) and reason.strip():
+                # Full why for grade feed (cap for note render only).
+                events.append(
+                    (_EVK.SHEET_WHY, reason.strip()[:200], {})  # truncation-ok: note render cap
+                )
+            evidence = td.get("evidence")
+            if isinstance(evidence, str) and evidence.strip():
+                events.append(
+                    # truncation-ok: note render cap
+                    (_EVK.SHEET_WHY, f"evidence:{evidence.strip()[:80]}", {})
+                )
+            staged = copy.deepcopy(s)
+            s = _cap_turn_confidence(before, staged, s)
+            # Learner-visible grade feed (Phase 3): one log row per ability field
+            # that actually moved under this tool call.
+            try:
+                from .grade_log import record_grades_from_diff
+
+                why_txt = (
+                    (td.get("reason") or td.get("why") or td.get("notes") or "")
+                    if isinstance(td, dict) else ""
+                )
+                ev_txt = (
+                    td.get("evidence") if isinstance(td, dict) else ""
+                ) or ""
+                if isinstance(why_txt, str) and why_txt.strip():
+                    record_grades_from_diff(
+                        before,
+                        s,
+                        why=why_txt.strip(),
+                        evidence=str(ev_txt).strip() if ev_txt else "",
+                        session_id=session_id or "",
+                        ledger_path=grade_log_path,
+                    )
+            except Exception:
+                pass  # grade feed must never break the teaching turn
     elif revised_sheet is not None:
         s = normalize_sheet(revised_sheet)
         s = _preserve_identity(sheet, s)
         events = [(_EVK.SHEET_AI_UPDATE, "", {})]
         staged = copy.deepcopy(s)
-        s = apply_rule_updates(s, learner, visible, **_rule_kwargs)
         s = _cap_turn_confidence(before, staged, s)
-        events.append((_EVK.SHEET_HARD_OBSERVER, "", {}))
     else:
-        # Backup: rules + optional inline delta (no second model call)
-        s = apply_rule_updates(sheet, learner, visible, **_rule_kwargs)
-        events = [
-            (_EVK.SHEET_RULES_BACKUP, "", {}),
-            (_EVK.SHEET_HARD_OBSERVER, "", {}),
-        ]
+        # No tool: ability frozen. Inline delta only if it has why for ability.
+        s = copy.deepcopy(sheet)
+        events = [(_EVK.SHEET_RULES_BACKUP, "", {})]
         if inline_delta:
-            s = apply_delta(s, inline_delta)
-            events.append((_EVK.SHEET_INLINE_DELTA, "", {}))
-        # Cap after all staged work so inline cannot exceed the turn ceiling.
-        s = _cap_turn_confidence(before, before, s)
-        s = update_scaffold_flag(s, learner)
+            idelta = sanitize_tool_delta(inline_delta)
+            if delta_claims_ability(idelta) and not grade_why_ok(idelta):
+                events.append((_EVK.SHEET_WHY, "rejected:need_reason", {}))
+            elif idelta:
+                s = apply_delta(s, idelta)
+                events.append((_EVK.SHEET_INLINE_DELTA, "", {}))
+                s = _cap_turn_confidence(before, before, s)
         s = recompute_next_best(s, preferred_name=None)
         s = _preserve_identity(sheet, s)
+
+    # Scaffold is not ability: keep code-owned English-scaffold flag from
+    # learner text (tool may also set receptive explicitly earlier).
+    s = update_scaffold_flag(s, learner)
+
     # Surface hot error patterns in console notes
     for ep in active_error_patterns(s):
         events.append(

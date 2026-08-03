@@ -8,7 +8,7 @@ Your standing roles here:
 - **Course-pack verification:** fact-check pack content (Spanish grammar claims, misconception taxonomies, association-table anchors) against authoritative references.
 - **Plan countersigns:** research plans and design changes come to you item-by-item — COUNTERSIGN/AMEND (exact replacement)/REJECT with reasons.
 
-Conventions: absolute dates; append-ready output; the review trail lives in docs/ — rounds append, never rewrite prior authors' text. **Do not duplicate law text** into reviews or this briefing — point at PEDAGOGY.md.
+Conventions: absolute dates; append-ready output; review **outcomes** live at `docs/reviews-*.md` (catalog: `docs/reviews-index.md`); full debate transcripts append under `docs/archive/reviews/` — never rewrite prior authors' text. **Do not duplicate law text** into reviews or this briefing — point at PEDAGOGY.md.
 
 **Teacher context:** no silent truncation of sheet/pack/stance/history fed to the tutor model while testing. See `docs/teacher-context-no-truncate.md`. Commit gate: `scripts/check_teacher_truncation.py` via `.githooks/pre-commit`.
 

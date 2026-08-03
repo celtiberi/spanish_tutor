@@ -82,15 +82,27 @@ class TestErrorPatterns(unittest.TestCase):
         s = recompute_next_best(s)
         self.assertIsNone(s["next_best"].get("error_pattern"))
 
-    def test_process_turn_notes_error(self):
+    def test_process_turn_notes_error_via_tool(self):
+        """Error patterns are tool-noted, not regex-graded (2026-07-31)."""
         s = default_sheet()
         s, _, notes = process_turn(
-            s, "Yo está en mi bote.", "Estoy en mi bote.",
+            s,
+            "Yo está en mi bote.",
+            "Estoy en mi bote.",
+            tool_delta={
+                "reason": "Learner used yo está instead of estoy",
+                "evidence": "Yo está en mi bote",
+                "error_patterns": {
+                    "estar_yo_estoy_vs_esta": {
+                        "last_examples": ["Yo está en mi bote."],
+                    }
+                },
+            },
         )
-        s, _, notes = process_turn(
-            s, "Yo está en Río Dulce.", "Estoy…",
+        self.assertTrue(
+            any(n.startswith("err×") for n in notes)
+            or "estar_yo_estoy_vs_esta" in s.get("error_patterns", {})
         )
-        self.assertTrue(any(n.startswith("err×") for n in notes))
         self.assertIn("estar_yo_estoy_vs_esta", s["error_patterns"])
 
     def test_normalize_alias(self):
@@ -100,7 +112,7 @@ class TestErrorPatterns(unittest.TestCase):
         )
 
     def test_tool_examples_do_not_multi_count(self):
-        """Tool listing many examples must not +N count; harness counts once."""
+        """Tool listing many examples bumps count once, stores all examples."""
         s = default_sheet()
         s = apply_delta(s, {
             "error_patterns": {
@@ -113,13 +125,12 @@ class TestErrorPatterns(unittest.TestCase):
                 }
             }
         })
-        # examples stored under canonical id, count still 0 until harness
         ep = s["error_patterns"].get("estar_yo_estoy_vs_esta") or {}
         self.assertIn("Yo está bien", ep.get("last_examples") or [])
-        self.assertEqual(int(ep.get("count") or 0), 0)
+        self.assertEqual(int(ep.get("count") or 0), 1)
         self.assertNotIn("estar_yo_esta", s["error_patterns"])
-        s = apply_error_pattern_updates(s, "Yo está en mi bote.")
-        self.assertEqual(s["error_patterns"]["estar_yo_estoy_vs_esta"]["count"], 1)
+        # Regex apply_error_pattern_updates is no longer the ability path;
+        # tool already counted once for this grade event.
 
 
 if __name__ == "__main__":

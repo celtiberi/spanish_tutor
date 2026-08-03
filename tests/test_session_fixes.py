@@ -160,11 +160,20 @@ class TestNoPersonalCapture(unittest.TestCase):
             ((s2.get("identity") or {}).get("preferred_name") or "").strip()
         )
 
-    def test_me_llamo_gives_ability_credit_without_storing_name(self):
+    def test_me_llamo_tool_gives_ability_without_storing_name(self):
         sheet = default_sheet()
         sheet.pop("identity", None)
-        s2 = apply_rule_updates(sheet, "me llamo Patrick")
-        self.assertNotIn("identity", s2)
+        s2, _, _ = process_turn(
+            sheet,
+            "me llamo Patrick",
+            "¡Hola!",
+            tool_delta={
+                "reason": "Learner produced me llamo with a name",
+                "evidence": "me llamo Patrick",
+                "skills": {"IP-03": {"status": "emerging", "confidence": 0.4}},
+            },
+        )
+        self.assertIsNone((s2.get("identity") or {}).get("preferred_name"))
         self.assertGreater(s2["skills"]["IP-03"]["confidence"], 0)
 
     def test_process_turn_ignores_profile_entirely(self):
@@ -175,7 +184,15 @@ class TestNoPersonalCapture(unittest.TestCase):
         prof = default_profile()
         before = dict(prof)
         s2, _vis, _notes = process_turn(
-            sheet, "me llamo Patrick", "¡Hola!", profile=prof
+            sheet,
+            "me llamo Patrick",
+            "¡Hola!",
+            profile=prof,
+            tool_delta={
+                "reason": "Learner produced me llamo",
+                "evidence": "me llamo Patrick",
+                "skills": {"IP-03": {"status": "emerging", "confidence": 0.4}},
+            },
         )
         self.assertEqual(prof, before)  # never read or written
         # identity is re-stamped as an explicitly-empty block (stripper)
