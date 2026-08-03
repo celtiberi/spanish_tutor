@@ -485,39 +485,7 @@ def compute_progress_score(sheet: dict | None) -> dict:
 DOMAIN_SCOPE: dict = _DOMAIN.domain_scope
 
 
-def _untouched_targets(lex: dict, table: dict | None = None) -> dict:
-    """Domain targets the learner has NOT touched yet, by theme —
-    "key — gloss" lines from the association table (the level slice's
-    closed vocabulary; lexicon-table residue, NOT full ability coverage —
-    skills/grammar lag independently).  Unavailability is VISIBLE,
-    never silent.  ``table``: the SESSION's table when available (audit D
-    finding 7 — the default cache can disagree with a --pack session)."""
-    if table is None:
-        try:
-            from .association_table import cached_default_table
-
-            table = cached_default_table() or {}
-        except Exception as e:  # no-hide: the model should see the gap
-            return {"unavailable": f"{type(e).__name__}: {e}"}
-    out: dict[str, list[str]] = {}
-    for key, ent in table.items():
-        if key in lex:
-            continue
-        theme = str(ent.get("theme") or "misc")
-        gloss = str(ent.get("gloss_en") or "").strip()
-        out.setdefault(theme, []).append(
-            f"{key} — {gloss}" if gloss else key
-        )
-    return {t: sorted(v) for t, v in sorted(out.items())}
-
-
-def format_sheet_for_prompt(
-    sheet: dict,
-    *,
-    max_lex: int | None = None,
-    association_table: dict | None = None,
-    include_domain_targets: bool = True,
-) -> str:
+def format_sheet_for_prompt(sheet: dict, *, max_lex: int | None = None) -> str:
     """Full character sheet for the tutor model (testing: no silent slimming).
 
     When TEACHER_CONTEXT_TRUNCATE is later enabled, callers may still clip the
@@ -557,21 +525,14 @@ def format_sheet_for_prompt(
     payload = {
         "now": now_iso(),
         # Personal-data capture disabled 2026-07-28: identity is omitted.
-        # The sheet carries the target inventory (domain model) plus
-        # learner state, so the model can write its session plan from one
-        # artifact (USER 2026-08-03). The itemized untouched-targets list
-        # is PLANNING material: it rides PLAN turns only (USER 2026-08-03:
-        # "Why are we sending this… a list of words?" — rounds get the
-        # plan + learner state; domain_scope stays every turn, it is the
-        # live decline-briefly law). Selection lives here; SEQUENCE never.
+        # The word-inventory payload is GONE (USER 2026-08-03: "Why are we
+        # telling this smart ai what spanish words to use?") — a closed
+        # word list was machinery-era scaffolding. The model teaches
+        # level-appropriate vocabulary under domain_scope's rules; the
+        # sheet records whatever was actually taught (open lexicon). The
+        # association table remains internal data: image assets, glosses,
+        # exposure bookkeeping — never prompt content.
         "domain_scope": DOMAIN_SCOPE,
-        **(
-            {"domain_targets_not_yet_touched": _untouched_targets(
-                lex, association_table
-            )}
-            if include_domain_targets
-            else {}
-        ),
         "active_error_focus": active_focus,
         "error_patterns": errors,
         "skills": skills,

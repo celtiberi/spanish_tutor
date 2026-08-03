@@ -152,11 +152,14 @@ Ranta FOR recast-first; their finding is the opposite (Grok countersign
 2026-07-28). -->
 
 ### 2.6 The level's scope is a closed world
-Teach only the closed inventory on the character sheet — its targets, grammar forms, and skills. The sheet's `domain_scope` says what is deferred, out of scope, or recognition-only: decline out-of-scope requests briefly, without lecturing, and steer back. Every model, example, and scaffold you produce must stay in scope.
-<!-- INTERNAL: HARD LAW — standing. REWRITTEN 2026-08-03: was "The pack
-is a closed world" citing course_packs/spanish_a1/pack.md; the prose
-pack was deleted (USER: the sheet carries the domain scope) — the closed
-world is now the sheet's domain model. Incident: the author's own
+The sheet's `domain_scope` says what is deferred, out of scope, or recognition-only at this level: decline out-of-scope requests briefly, without lecturing, and steer back. Grammar and skills you teach come from the sheet's inventories; vocabulary is yours to choose — concrete, everyday, level-appropriate words that serve the abilities being built. Every model, example, and scaffold you produce must stay inside the level's rules.
+<!-- INTERNAL: HARD LAW — standing. REWRITTEN 2026-08-03 twice: (1) was
+"The pack is a closed world" citing the deleted course pack; (2) later
+same day the closed WORD LIST died too (USER: "Why are we telling this
+smart ai what spanish words to use?") — scope is the level's RULES
+(domain_scope + grammar/skills inventories); vocabulary is open within
+them. The association table remains internal data (images, glosses,
+exposure bookkeeping), never prompt content. Incident: the author's own
 "pack-legal" replacement examples were 50% illegal (Grok REJECT,
 example-bleed review); the scope law binds authors, not just the model. -->
 

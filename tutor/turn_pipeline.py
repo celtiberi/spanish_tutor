@@ -509,14 +509,7 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
         session_memory=session.pedagogy_memory.snapshot(),
         teach_images=ctx.teach_images,
         blank_sheet=ctx.blank,
-        sheet_summary=format_sheet_for_prompt(
-            session.sheet,
-            association_table=getattr(session, "association_table", None),
-            # The itemized word inventory is plan-turn material; rounds
-            # run on the model's plan + learner state (full path keeps
-            # the historical everything-every-turn shape).
-            include_domain_targets=(not plan_mode) or needs_plan,
-        ),
+        sheet_summary=format_sheet_for_prompt(session.sheet),
         teaching_data={"due_for_review": due_facts},
         session_plan=(
             None if (not plan_mode or needs_plan)

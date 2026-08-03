@@ -46,10 +46,11 @@ PLAN_INSTRUCTIONS = """## Your session plan (required on this turn)
 
 You have the full teaching guide in this request — later turns will NOT
 include it, only the plan you write now. The character sheet carries
-everything you need: `domain_targets_not_yet_touched` + `grammar` +
-`skills` are everything this learner is meant to learn, `domain_scope`
-is what to defer or decline, and the per-item state shows where they
-are. The path through it is YOURS — the sheet never sequences.
+everything you need: `skills` + `grammar` + `coverage` are the abilities
+this learner is building and where they stand; `domain_scope` is the
+level's limits (what to defer or decline). Vocabulary is YOURS to
+choose — level-appropriate words that serve the abilities and the
+conversation. The path is YOURS too — the sheet never sequences.
 Before your normal `<tutor>` reply, write a session plan the future you
 can teach from:
 
