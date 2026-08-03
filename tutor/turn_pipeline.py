@@ -1304,6 +1304,7 @@ def stage_debug_capture(session, ctx: TurnContext) -> None:
         is_open=ctx.is_open,
         raw=ctx.model_raw or ctx.raw,
         reply=getattr(ctx.result, "reply", "") or "",
+        tool_delta=ctx.tool_delta if isinstance(ctx.tool_delta, dict) else None,
     )
 
 

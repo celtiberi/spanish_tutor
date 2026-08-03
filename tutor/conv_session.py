@@ -301,9 +301,13 @@ def build_debug_entry(
         "task_message": task or "",
         "response": {
             # What was RECEIVED: raw = untouched provider text (incl. any
-            # <plan> block before harvest); reply = learner-visible text.
+            # <plan> block before harvest); reply = learner-visible text;
+            # tool_calls = the model's OTHER output channel (sheet grades
+            # via update_character_sheet — USER 2026-08-03: "I do not see
+            # it in the model output").
             "raw": raw or "",
             "reply": reply or "",
+            "tool_calls": tool_delta,
             "usage": {
                 "input_tokens": int(u.get("input_tokens") or 0),
                 "output_tokens": int(u.get("output_tokens") or 0),
@@ -804,6 +808,7 @@ class ConversationalSession:
         is_open: bool = False,
         raw: str = "",
         reply: str = "",
+        tool_delta: dict | None = None,
     ) -> None:
         """Append one entry to the in-memory debug ring buffer and, when
         session logging is on, mirror it verbatim to the on-disk model
@@ -823,6 +828,7 @@ class ConversationalSession:
                 is_open=is_open,
                 raw=raw,
                 reply=reply,
+                tool_delta=tool_delta,
             )
             self.debug_requests.append(entry)
         except Exception as e:

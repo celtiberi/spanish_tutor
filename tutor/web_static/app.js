@@ -615,6 +615,13 @@ function dbgOutputView(e) {
     dbgSection("VISIBLE REPLY", reply ? dbgPre(reply) : '<p class="muted">none recorded</p>', {
       open: !planM,
     }) +
+    (e.response?.tool_calls
+      ? dbgSection(
+          "TOOL CALL — sheet grade (update_character_sheet)",
+          dbgJson(e.response.tool_calls),
+          { open: true }
+        )
+      : "") +
     dbgSection(`RAW MODEL TEXT · ${raw.length} chars`, raw ? dbgPre(raw) : '<p class="muted">none</p>')
   );
 }
