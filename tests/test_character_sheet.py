@@ -776,3 +776,29 @@ class TestAbilityStateMachine(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestNumbersMigration(unittest.TestCase):
+    def test_numbers_0_20_state_carries_to_0_100(self):
+        # Audit D finding 6: the post-merge migration was dead (deep_merge
+        # seeds numbers_0_100 first) and silently DESTROYED learner state.
+        import json as _json
+        import tempfile
+        from pathlib import Path as _P
+
+        from tutor.character_sheet import default_sheet, load_sheet, save_sheet
+
+        sheet = default_sheet()
+        sheet["grammar"].pop("numbers_0_100", None)
+        sheet["grammar"]["numbers_0_20"] = {
+            "status": "known", "confidence": 0.9, "priority": "low",
+            "supports": ["IP-07"], "evidence": ["counted to veinte"],
+        }
+        with tempfile.TemporaryDirectory() as d:
+            path = _P(d) / "sheet.json"
+            path.write_text(_json.dumps(sheet), encoding="utf-8")
+            loaded = load_sheet(path)
+        self.assertNotIn("numbers_0_20", loaded["grammar"])
+        entry = loaded["grammar"]["numbers_0_100"]
+        self.assertEqual(entry["status"], "known")
+        self.assertAlmostEqual(float(entry["confidence"]), 0.9)

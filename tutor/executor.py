@@ -183,7 +183,13 @@ def build_ai_tutor_system(
     if CONV_PROMPT.exists():
         try:
             stance = CONV_PROMPT.read_text(encoding="utf-8")
-        except OSError:
+        except OSError as e:
+            # no-hide (audit C top offender #1): losing the stance strips
+            # most of the teacher's instructions — never silently.
+            import sys as _sys
+
+            print(f"[no-hide] stance load FAILED, teaching without it: "
+                  f"{type(e).__name__}: {e}", file=_sys.stderr, flush=True)
             stance = ""
     text = AI_TUTOR_SYSTEM
     # Testing default: no truncation (config.clip_prompt with cap=0 is a no-op).

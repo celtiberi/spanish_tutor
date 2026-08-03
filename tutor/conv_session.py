@@ -1814,8 +1814,10 @@ class ConversationalSession:
         try:
             if self.profile_path.exists():
                 self.profile_path.unlink()
-        except OSError:
-            pass
+        except OSError as e:
+            # no-hide: a failed personal-data deletion must never read as
+            # success (audit C — the site the 2026-08-03 sweep missed).
+            self._oops("reset_profile.unlink", e)
         return self.profile
 
     def reset_sheet(self) -> dict:

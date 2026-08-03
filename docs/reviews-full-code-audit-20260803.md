@@ -176,3 +176,192 @@ countersign needed)
 - forced periodic replan: model replanned 0× in 10 turns; plan went
   stale beyond the 12-message window. Nudge, force every N turns, or
   trust ROUND_NOTE?
+
+
+---
+
+## GROK (Grok Build CLI (1e1687c1cf6a)) - 2026-08-03 17:10 UTC
+*Headless via grok_collab.py; genuine output appended verbatim; sandboxed cwd (inlined files only).*
+
+I'll read the full prompt and the audit slate so I can rule each item independently against the code and evidence.The prompt path failed; I'll locate the full request and inlined audit materials in the workspace.I have the full slate and the gate/session_plan sources. Checking one quantitative claim and a couple of gate mechanics before issuing item-by-item verdicts.## Grok countersign — full-code-audit slate (2026-08-03)
+
+Evidence checked: inlined `tutor/output_gate.py`, inlined `tutor/session_plan.py`, slate claims, 9/10 still_fail on evals/results/20260803-104618-student. Law frame: ENGINEERING §1.1 (model teaches; code facts/honesty/audit), §4.6 (dead code deleted), no-hide (2026-08-01/03). Verdicts: **COUNTERSIGN** / **AMEND** (exact text) / **REJECT**. S9 = recommendation only.
+
+---
+
+### S1 — §1.1 violations still shipping
+
+| Item | Verdict | Notes |
+|------|---------|--------|
+| **S1a** scenes ship scripts | **COUNTERSIGN** | Scripted `model_lines` / elicit / transfer / tutor_private_info into the teacher prompt is exactly the forbidden class (§1.1a). boat_likes pushing GUSTAR against stance is not a side note — it proves code still steers moves. Fix: strip scripts from the prompt path immediately. Residual goals/exit = **S9**, not a soft alternative that delays the strip. |
+| **S1b** next_best ships | **COUNTERSIGN** | “Prefer next_best” is a code agenda. Remove from prompt payload; rail/telemetry only. |
+| **S1c** teach_hint imperatives | **COUNTERSIGN** | Ship misconception label + example as facts; drop “Recast X → Y” imperatives. |
+| **S1d** conversational_tutor.md | **COUNTERSIGN** | Dead pack law + full scripted `<tutor>` dialogues must go. Scope → sheet `domain_scope`; exemplars = shape only. |
+| **S1e** tutor_persona.md | **COUNTERSIGN** | Authorities list must not cite MODE instructions or pack palette. |
+| **S1f** p2_structured / referee arms | **COUNTERSIGN** | Dormant script blocks + B0_brief silently aliasing plan arm is a fabricated-comparison hazard. DELETE falsifier arms; fix referee arm list. |
+
+---
+
+### S2 — Dead code DELETE (§4.6)
+
+**COUNTERSIGN** the whole delete list and zero-model-path claim class.
+
+**AMEND (execution hygiene, not scope cut):** before merge, run a reference-count / import-graph check so “0 callers” is machine-verified, not auditor memory — especially `modes._phase_prefix`, pack_topics chain, and the 8 orphan prompts. Git history is the archive; no `docs/archive/code/`.
+
+Exact replacement for the S2 header line:
+
+> **S2. Dead code — DELETE (§4.6; zero model-path behavior change).** Delete the listed corpses in one PR after an automated zero-reference check fails closed on any still-live symbol. Tests that pin corpses are deleted or rewritten to assert absence, not behavior of dead APIs. `GATE_REPAIR_STAGES` rename lands in the same PR as doc sweep S8.
+
+---
+
+### S3 — Shadow machinery: delete text, keep wire
+
+**COUNTERSIGN.** Text that only exists to script teaching must die; ledger/event wires that still record facts may stay until S9 retires the subsystem.
+
+**AMEND:** each “keep wire” item must name the single consumer (event → frames_seen / ledger / eval pin). If the only consumer is an eval pin, schedule deletion with the eval retool (S9), not indefinite shadow life.
+
+---
+
+### S4 — Mode router + gate (highest stakes)
+
+**Overall direction: COUNTERSIGN with AMENDs.** Execution order gate-first, then router: **COUNTERSIGN.**
+
+#### Arithmetic (why the gate is structurally obsolete)
+
+1. **Mode-contract rules demand tags the model was never asked for.** Inlined `_check_output_gate`:
+   - `gate:missing_recast` if `mode_l in ("cf_recast", "form_focus")` (or `require_recast`)
+   - `gate:form_focus_needs_model` if `mode_l == "form_focus"`
+   - `gate:comprehension_needs_check` if `mode_l == "comprehension_check"`
+   - english_wall / unscaffolded placement exemption if `mode_l == "placement"`
+
+   If mode is shadow-only (stripped from prompts — slate claims this held under audit), these are code-owned contracts against a decision the teacher never received. **Retire mode-keyed contracts.** Keep `require_recast` only if it is derived from learner-evidence (error this turn), not from shadow mode name.
+
+2. **Flood severity is inverted.**  
+   `FLOOD_MIN_DISTINCT = 3` (inlined):  
+   - bare count \(n \in \{1,2\}\) → **CRITICAL** `gate:unscaffolded_new_item`  
+   - bare count \(n \ge 3\) → **SOFT** `gate:unscaffolded_flood`  
+   Severity \(S(1)=\text{CRITICAL} > S(3)=\text{SOFT}\). Non-monotonic: dumping more bare keys is rewarded. **Fold bare keys into one soft advisory.**
+
+3. **9/10 still_fail on a “healthy” sibling-check run.**  
+   still_fail rate \(= 9/10 = 0.90\). Under no-hide, a gate that still encodes the dead code-owned-teaching contract will fail nearly every turn that (a) hits 1–2 bare table keys without code `introduce_key`, or (b) sits in a shadow mode with a tag contract. That is not a model quality signal; it is gate/constitution drift. **Split still_fail by rule** before trusting student_checks.
+
+#### Per-rule
+
+| Rule | Verdict |
+|------|---------|
+| Retire missing_recast / form_focus_needs_model / comprehension_needs_check (mode-keyed) | **COUNTERSIGN** |
+| english_wall: drop placement-mode arm, keep blank_zero floor + truncated + pedagogy_contract + cluster veto | **COUNTERSIGN** — only if `blank_zero` remains independently computed (slate: turn_pipeline re-derive). Placement must not be the sole true-zero path. |
+| unscaffolded_new_item CRITICAL + IntroducePlan exempt | **AMEND** (below) |
+| unscaffolded_flood fold into soft | **COUNTERSIGN** |
+| probe_loop retune | **COUNTERSIGN** (restrict to try/continue; drop shown-skill permanent ban + seed_from_sheet permanence; fix topic-key derivation). Keep true-positive class (identical try re-ask). |
+| regloss revive on first_seen ledger | **COUNTERSIGN** |
+| sheet_leak JSON-ish context | **COUNTERSIGN** |
+| student_checks split + probe_on_known / “ o ” / english_wall docstring | **COUNTERSIGN** |
+| Then delete/shrink modes.py | **AMEND** (below) |
+
+**AMEND — replace the slate’s unscaffolded_new_item fix paragraph with:**
+
+> **gate:unscaffolded_new_item / flood:** Structurally obsolete as CRITICAL under §1.1 — the exempt slot requires a code `IntroducePlan` (`introduce_key`), and only code-planned introduces reliably write `first_seen`, so bare keys re-fault forever (e.g. «bien» 5×). **Fix:** (1) Write `first_seen` for every association-table key the tutor visibly used this turn (scaffold optional for the ledger write; same-turn teach_image counts as scaffold). (2) Bare unscaffolded keys → **SOFT advisory only** (merge flood into the same soft path; delete the inverted ≥3 soften). (3) **KEEP CRITICAL only for same-theme cluster extras** (near-synonym interference — real constraint, not mode theater). (4) **Do not parse free-text `<plan>` for “promised an anchored introduce.”** That re-implements code-owned teaching judgment over unstructured prose and will thrash. If a hard introduce contract is needed later, require a structured tag the model emits (e.g. `<introduce key="…"/>`), not NLP over the plan.
+
+**AMEND — router teardown sequencing:**
+
+> After mode-keyed gate rules are retired, delete shadow mode text and the mode router’s teaching decisions. **Do not delete the image-attach path until a replacement is wired** (evidence-based trigger: tutor-declared image / table key with asset / explicit teach_image). Until then, keep the minimum image_concept wire or document images as off. No silent loss of image attach.
+
+---
+
+### S5 — No-hide gaps
+
+**COUNTERSIGN** the CRITICAL-first list.
+
+Call-out on inlined `load_pedagogy`: OSError → `""` is **not** no-hide-compliant if nothing surfaces a typed note. Docstring’s “visible because the guide is simply missing” fails ENGINEERING no-hide — absence without `_oops`/typed event is silent degradation of the teacher’s entire rule set. Same class: stance → `""` at executor.
+
+---
+
+### S6 — New-tech bugs (sanity-check)
+
+| Bug | Verdict |
+|-----|---------|
+| empty `<plan></plan>` / always use cleaned raw | **COUNTERSIGN** — `extract_plan` strips tags even when plan body is empty (`strip() or None`); leak is at the call site if `ctx.raw` keeps pre-clean text. Always assign cleaned. |
+| replan flag clear only after successful model call | **COUNTERSIGN** |
+| plan-turn without `<plan>` → SESSION_PLAN missing event | **COUNTERSIGN** — **AMEND add:** after 2 consecutive plan turns with no `<plan>`, surface a visible internal note; do not silently burn full-context forever without telemetry. |
+| plan text in audit trail | **COUNTERSIGN** |
+| numbers_0_20→0_100 migrate pre-merge on raw | **COUNTERSIGN** — deep_merge seeding the new key first makes migration dead and can destroy state; pre-merge on raw is the correct direction. |
+| `_untouched_targets` default table / `in_pack:false` | **COUNTERSIGN** |
+| traffic log under evals | **COUNTERSIGN** |
+| gloss_after_key Spanish parenthetical | **COUNTERSIGN** — inlined detector accepts any ≤6-token parenthetical; needs non-ES / gloss-language check. |
+| GateContext asked/shown live refs | **AMEND** — inlined `_check_output_gate` already does `asked = set(already_asked or [])` / `shown = set(...)` (copies). Confirm a real mutation bug at construction or a different field before “fixing” a non-bug. If the defect is elsewhere (e.g. session mutates the same set mid-repair loop before the copy), state that site. Defensive copy at `GateContext` build remains cheap hygiene. |
+
+---
+
+### S7 — Grades path
+
+**COUNTERSIGN** all four: smoke must exercise grading (SHEET_TOOLS on + pinned GRADE_LOG_PATH); tool_result must not claim `ok: true` pre-validation; empty grade reason → typed event; ai_student `max_tokens=768` too small (parse fail ~turn 7 freezes true_ability) — raise ceiling and pin.
+
+---
+
+### S8 — Docs/briefings
+
+**COUNTERSIGN.** GROK.md rewrite-first was correct (commit e3a4fc4). README / system-overview / PEDAGOGY§→ENGINEERING§ sweep / CLAUDE.md dual law homes / log hygiene (no logs until first learner turn; date subfolders): all **COUNTERSIGN**.
+
+---
+
+### S9 — Open policy (recommendation only, not rulings)
+
+| Question | Recommendation |
+|----------|----------------|
+| **focus_enrich.py** (277 LOC + grok-3-mini every turn for right-rail chrome) | **Delete or make on-demand.** Paying a model call every turn for non-teaching chrome adds cost, latency, and silent-failure surface for zero learner-facing pedagogy. Default: delete; if UI wants enrichment, trigger on rail open, not every turn. |
+| **scenes after S1a** | **Delete scenes entirely** until an eval shows goal/exit data improves outcomes without reintroducing scripts. Goal/exit without scripts is still code-selected steering (which scene fires). Thin residual data is not worth the machinery. |
+| **session-phase + task_runtime** | **Delete in the same milestone as eval retool**, not “after someday.” Shadow + one ledger write + eval pins is exactly the class that drifts forever. One PR: update pins → delete. |
+| **forced periodic replan** | **Soft nudge, not blind trust, not full-pedagogy force every N.** Evidence: 0/10 model-initiated `<replan/>` in the 10-turn run. `ROUND_HISTORY_MESSAGES = 12` ⇒ 6 exchanges of window; a 10-exchange session drops \(20-12=8\) messages. Plan can reference world that left the window. Recommend: every 6 ROUND turns append a short note “history window advanced; revise plan or emit `<replan/>` if needed” — do **not** auto-inject full PEDAGOGY every N (cost + trains the model to ignore ROUND_NOTE). Force full replan only on `<replan/>`, missing plan, or explicit out-of-plan learner steer detected by the model. |
+
+---
+
+### Blockers before “slate is final”
+
+1. **S4 AMEND** on unscaffolded (no plan-NLP; soft bare; CRITICAL cluster only; first_seen for every visible key).  
+2. **S4 AMEND** on image-attach sequencing before router death.  
+3. **S6** GateContext copy — verify real bug site.  
+4. **S9** USER picks on scenes / focus_enrich / phase machinery / replan policy.
+
+### Ready to execute without further debate (if AMENDs accepted)
+
+S1a–S1f, S2 (with refcheck), S3, S5, S7, S8, S6 (except GateContext pending verify), and S4 mode-contract retirement + flood fold + probe_loop retune + regloss-on-first_seen + student_checks split.
+
+---
+
+**Summary scorecard:** COUNTERSIGN dominant on S1–S3, S5, S7–S8; S4 COUNTERSIGN direction with two binding AMENDs; S6 mostly COUNTERSIGN + one hygiene AMEND; S9 four recommendations (delete focus_enrich; delete scenes; delete phase/task with eval retool; soft replan nudge every 6 rounds). No full-item REJECT. Highest-stakes failure mode confirmed in source: mode-keyed gate contracts + inverted flood + IntroducePlan-gated first_seen explain a ~90% still_fail rate on an otherwise healthy transcript — fix the gate constitution before trusting tutor grades.
+
+---
+
+## CLAUDE — adjudication of the countersign (2026-08-03)
+
+Zero REJECTs. All four binding AMENDs ACCEPTED:
+
+1. **S4 unscaffolded rework** — accepted verbatim: first_seen for every
+   visibly-used table key; bare keys = SOFT advisory (flood folded in);
+   CRITICAL retained ONLY for same-theme cluster extras; NO free-text
+   plan parsing (a structured <introduce key=""/> tag if a hard contract
+   is ever needed). Grok's plan-NLP warning is right — parsing prose for
+   promises re-creates code-owned judgment.
+2. **S4 image-attach sequencing** — accepted: router teaching decisions
+   die first; the image_concept wire survives until an evidence-based
+   trigger replaces it. No silent loss of image attach.
+3. **S6 GateContext** — Grok's challenge VERIFIED CORRECT: the gate
+   copies at output_gate.py:600-601 (`asked = set(already_asked or [])`)
+   before any use; audit D's finding is a NON-BUG. No change shipped
+   (a second copy would be redundancy, §4.6 spirit).
+4. **S2 refcheck** — accepted: deletions land only after an automated
+   zero-reference check (grep-based import/symbol scan) fails closed.
+   Plus S6 plan-missing addendum accepted: 2 consecutive plan-less plan
+   turns escalate to a visible internal note.
+
+S9 goes to the USER (4 recommendations relayed: delete focus_enrich or
+on-demand; delete scenes entirely; delete phase+task in the same PR as
+the eval retool; soft replan nudge every 6 round turns).
+
+Execution begins with the ready-to-execute set (S1, S2+refcheck, S3,
+S5, S6 remainder, S7, S8, S4 per AMENDs), each phase suite-green.
+Shipped pre-countersign (already green): S6 empty-plan leak, replan
+preserve-on-failure, session_plan:missing event, numbers-migration
+state carry, _untouched_targets session-table threading, profile-unlink
+_oops, stance/pedagogy load failures now shout on stderr.

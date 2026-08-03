@@ -91,11 +91,17 @@ def load_pedagogy() -> str:
     """PEDAGOGY.md for the teacher: NOTES/INTERNAL spans and every HTML
     comment cut (USER 2026-08-03: "one THEORY AND NOTES file and one
     HERE ARE THE RULES file" — realized with markers; the sent copy IS
-    the rules file). Missing file → "" (visible: the plan prompt then
-    simply lacks the guide; no silent substitute)."""
+    the rules file). A missing/unreadable file returns "" AND shouts on
+    stderr — the earlier docstring claimed the absence was visible when
+    nothing surfaced it (audit C top offender #1)."""
     try:
         raw = PEDAGOGY_PATH.read_text(encoding="utf-8")
-    except OSError:
+    except OSError as e:
+        import sys as _sys
+
+        print(f"[no-hide] PEDAGOGY.md load FAILED — plan turn ships "
+              f"WITHOUT the teaching guide: {type(e).__name__}: {e}",
+              file=_sys.stderr, flush=True)
         return ""
     cut = _CUT_SPANS_RE.sub("", raw)
     cut = _HTML_COMMENT_RE.sub("", cut)

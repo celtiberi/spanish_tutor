@@ -235,3 +235,49 @@ class TestFullPathUntouched:
             assert "## Your session plan" not in blob
             assert ROUND_NOTE not in blob
         assert '"your_session_plan"' not in ctx.fake.task_text(-1)
+
+
+class TestPlanEdgeCases:
+    def test_empty_plan_block_never_leaks_tags(
+        self, plan_mode, tutor_session_factory
+    ):
+        # Audit D finding 1: <plan></plan> with no content must still be
+        # stripped from the learner-visible reply.
+        body = "<plan>   </plan>\n" + BODY_PLAIN
+        ctx = tutor_session_factory(replies=[body])
+        res = ctx.session.open_session()
+        assert "<plan>" not in (res.reply or "")
+        assert ctx.session.session_plan is None
+
+    def test_planless_plan_turn_emits_missing(
+        self, plan_mode, tutor_session_factory
+    ):
+        # Audit D finding 2: a plan turn that returns no <plan> is VISIBLE
+        # (session_plan:missing) instead of silently re-running full
+        # context with no trace.
+        ctx = tutor_session_factory(replies=[BODY_PLAIN])
+        res = ctx.session.open_session()
+        assert any("session_plan:missing" in str(n) for n in res.notes)
+        # And the next turn is another plan turn (plan still None).
+        assert ctx.session.session_plan is None
+
+    def test_failed_call_preserves_replan_request(
+        self, plan_mode, tutor_session_factory, monkeypatch
+    ):
+        # Audit D finding 3: a provider error on the plan turn must not
+        # swallow the model's earlier <replan/> request.
+        ctx = tutor_session_factory(
+            replies=[BODY_WITH_PLAN, BODY_WITH_REPLAN]
+        )
+        s = ctx.session
+        s.open_session()
+        s.user_turn("Hola")
+        assert s.replan_requested is True
+
+        def _boom(*a, **k):
+            raise RuntimeError("provider down")
+
+        monkeypatch.setattr(ctx.fake.messages, "create", _boom)
+        turn = s.user_turn("¿Qué?")
+        assert turn.error
+        assert s.replan_requested is True  # NOT swallowed by the failure

@@ -573,6 +573,16 @@ def load_sheet(path: Path) -> dict:
         data = json.loads(path.read_text())
     except (json.JSONDecodeError, OSError):
         return default_sheet()
+    # numbers_0_20 → numbers_0_100 migration MUST run on the RAW data:
+    # after _deep_merge the default block has already seeded
+    # numbers_0_100, so a post-merge check can never fire and the
+    # learner's old state would be silently dropped (audit D finding 6).
+    raw_gr = data.get("grammar")
+    if isinstance(raw_gr, dict) and "numbers_0_20" in raw_gr:
+        if "numbers_0_100" not in raw_gr:
+            raw_gr["numbers_0_100"] = raw_gr.pop("numbers_0_20")
+        else:
+            raw_gr.pop("numbers_0_20", None)
     base = default_sheet()
     merged = _deep_merge(base, data)
     # Migrate legacy skill keys → can-do ids
@@ -580,13 +590,8 @@ def load_sheet(path: Path) -> dict:
     # Ensure all can-dos / forms exist
     for cid, entry in default_skills_block().items():
         merged["skills"].setdefault(cid, entry)
-    # numbers_0_20 → numbers_0_100 (2026-08-03 domain absorb: the
-    # deleted pack's law was 0–100; carry the learner's state across).
     gr = merged.setdefault("grammar", {})
-    if "numbers_0_20" in gr and "numbers_0_100" not in gr:
-        gr["numbers_0_100"] = gr.pop("numbers_0_20")
-    else:
-        gr.pop("numbers_0_20", None)
+    gr.pop("numbers_0_20", None)  # migrated pre-merge above
     for fid, entry in default_grammar_block().items():
         gr.setdefault(fid, entry)
     merged.setdefault("error_patterns", {})
@@ -727,18 +732,20 @@ DOMAIN_SCOPE: dict = {
 }
 
 
-def _untouched_targets(lex: dict) -> dict:
+def _untouched_targets(lex: dict, table: dict | None = None) -> dict:
     """Domain targets the learner has NOT touched yet, by theme —
     "key — gloss" lines from the association table (the level slice's
     closed vocabulary; lexicon-table residue, NOT full ability coverage —
     skills/grammar lag independently).  Unavailability is VISIBLE,
-    never silent."""
-    try:
-        from .association_table import cached_default_table
+    never silent.  ``table``: the SESSION's table when available (audit D
+    finding 7 — the default cache can disagree with a --pack session)."""
+    if table is None:
+        try:
+            from .association_table import cached_default_table
 
-        table = cached_default_table() or {}
-    except Exception as e:  # no-hide: the model should see the gap
-        return {"unavailable": f"{type(e).__name__}: {e}"}
+            table = cached_default_table() or {}
+        except Exception as e:  # no-hide: the model should see the gap
+            return {"unavailable": f"{type(e).__name__}: {e}"}
     out: dict[str, list[str]] = {}
     for key, ent in table.items():
         if key in lex:
@@ -751,7 +758,12 @@ def _untouched_targets(lex: dict) -> dict:
     return {t: sorted(v) for t, v in sorted(out.items())}
 
 
-def format_sheet_for_prompt(sheet: dict, *, max_lex: int | None = None) -> str:
+def format_sheet_for_prompt(
+    sheet: dict,
+    *,
+    max_lex: int | None = None,
+    association_table: dict | None = None,
+) -> str:
     """Full character sheet for the tutor model (testing: no silent slimming).
 
     When TEACHER_CONTEXT_TRUNCATE is later enabled, callers may still clip the
@@ -780,7 +792,9 @@ def format_sheet_for_prompt(sheet: dict, *, max_lex: int | None = None) -> str:
         # theme; touched ones already appear in lexicon/grammar with
         # learner state. Selection lives here; SEQUENCE never does.
         "domain_scope": DOMAIN_SCOPE,
-        "domain_targets_not_yet_touched": _untouched_targets(lex),
+        "domain_targets_not_yet_touched": _untouched_targets(
+            lex, association_table
+        ),
         "next_best": sheet.get("next_best"),
         "active_error_focus": active_error_patterns(sheet),
         "error_patterns": errors,

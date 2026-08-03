@@ -192,6 +192,7 @@ class TurnContext:
     raw: str = ""                                   # raw model text
     model_raw: str = ""                             # untouched provider text
     #   (pre <plan>-strip — what was RECEIVED, for the traffic log)
+    plan_turn: bool = False                         # this call was a PLAN turn
     tool_delta: Any = None                          # sheet tool blocks
     usage: dict | None = None                       # token usage (merged)
     error_result: Any = None                        # TurnResult on call error
@@ -1012,7 +1013,10 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
         teach_images=ctx.teach_images,
         blank_sheet=ctx.blank,
         open_scene_hints=scene_hints_for_prompt(ctx.open_scenes),
-        sheet_summary=format_sheet_for_prompt(session.sheet),
+        sheet_summary=format_sheet_for_prompt(
+            session.sheet,
+            association_table=getattr(session, "association_table", None),
+        ),
         teaching_data={"due_for_review": due_facts},
         session_plan=(
             None if (not plan_mode or needs_plan)
@@ -1039,7 +1043,10 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
                 })
             extra.append({"type": "text", "text": PLAN_INSTRUCTIONS})
             ctx.system = list(ctx.system) + extra
-            session.replan_requested = False
+            # replan_requested is cleared AFTER a successful model call
+            # (stage_model_call) — clearing here would swallow the replan
+            # when the provider call fails (audit D finding 3).
+            ctx.plan_turn = True
             ctx.ev.emit(EV.SESSION_PLAN, key="requested", stage="plan")
             history = session.history
         else:
@@ -1111,7 +1118,16 @@ def stage_model_call(session, ctx: TurnContext) -> None:
     if _replan:
         session.replan_requested = True
         ctx.ev.emit(EV_.SESSION_PLAN, key="replan_requested", stage="plan")
-    ctx.raw = _cleaned if (_plan is not None or _replan) else raw
+    if ctx.plan_turn:
+        # The call succeeded: the requested re-plan (if any) is consumed.
+        session.replan_requested = _replan
+        if _plan is None:
+            # Plan turn produced no plan — VISIBLE, and next turn will be
+            # another (expensive) full-context plan turn (audit D f.2).
+            ctx.ev.emit(EV_.SESSION_PLAN, key="missing", stage="plan")
+    # Always the stripped text: an EMPTY <plan></plan> yields _plan=None
+    # but must still never leak tags to the learner (audit D finding 1).
+    ctx.raw = _cleaned
     ctx.tool_delta = tool_delta
     ctx.usage = usage
 
