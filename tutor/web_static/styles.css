@@ -996,3 +996,15 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
 }
 .dbg-tabbar .dbg-model { margin-left: auto; font-size: 0.7rem; }
 .dbg-view { max-height: calc(100vh - 14rem); overflow-y: auto; }
+
+/* Grade cards: visible evidence + time (2026-08-03 — history must read
+   as history, not as a verdict about now) */
+.j-chip-ev {
+  display: block; font-style: italic; font-size: 0.74rem;
+  color: var(--text); opacity: 0.85; margin-top: 0.1rem;
+}
+.j-chip-meta {
+  display: block; font-size: 0.68rem; color: var(--muted);
+  margin-top: 0.15rem;
+}
+.j-chip.grade-past { opacity: 0.62; }

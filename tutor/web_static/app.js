@@ -460,7 +460,7 @@ function gradeLabel(g) {
   return g.field_id || "grade";
 }
 
-function gradeChip(g) {
+function gradeChip(g, curSid) {
   const dir = g.direction === "down" ? "down" : g.direction === "up" ? "up" : "hold";
   const arrow = dir === "up" ? "↑" : dir === "down" ? "↓" : "·";
   const band =
@@ -473,12 +473,23 @@ function gradeChip(g) {
   const whyLine = g.why
     ? `<span class="j-chip-why">${esc(g.why)}</span>`
     : "";
+  const ev = (g.evidence || "").trim();
+  const evLine = ev
+    ? `<span class="j-chip-ev">“${esc(ev.length > 90 ? ev.slice(0, 90) + "…" : ev)}”</span>`
+    : "";
+  const earlier = curSid && g.session_id && g.session_id !== curSid;
+  const metaLine =
+    `<span class="j-chip-meta">${esc(gradeWhen(g.ts) || "")}` +
+    (earlier ? " · earlier session" : "") +
+    `</span>`;
   return (
-    `<li class="j-chip grade-${dir}" title="${esc(tip)}">` +
+    `<li class="j-chip grade-${dir}${earlier ? " grade-past" : ""}" title="${esc(tip)}">` +
     `<span class="j-chip-icon" aria-hidden="true">${arrow}</span>` +
     `<span class="j-chip-body">` +
     `<span class="j-chip-name">${esc(gradeLabel(g))}</span>` +
+    evLine +
     whyLine +
+    metaLine +
     `</span></li>`
   );
 }
@@ -490,7 +501,9 @@ function renderJourney(progress) {
     els.journeyBody.innerHTML =
       `<p class="j-empty">${esc(GRADES_EMPTY_COPY)}</p>`;
   } else {
-    const chips = grades.map(gradeChip).join("");
+    const chips = grades
+      .map((g) => gradeChip(g, progress?.session_id || ""))
+      .join("");
     els.journeyBody.innerHTML =
       `<div class="j-rail"><section class="j-day current">` +
       `<header class="j-date"><span class="j-dot" aria-hidden="true"></span>` +
