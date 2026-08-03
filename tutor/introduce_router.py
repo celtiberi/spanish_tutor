@@ -289,46 +289,7 @@ def plan_introduction(
     )
 
 
-def plan_instructions(plan: IntroducePlan) -> str:
-    """Teacher-facing INTRODUCE block realizing the plan (model performs)."""
-    p = plan.scaffold_payload or {}
-    if plan.scaffold_type == "cognate":
-        core = (
-            f"INTRODUCE (one item, rule {plan.rule_id}): present "
-            f"**{plan.key}** anchored to the English cognate "
-            f"'{p.get('anchor')}' (≤6 English words for the anchor; no other "
-            f"English). The anchor line must contain **{plan.key}** "
-            "itself — never a floating anchor the learner must re-attach."
-        )
-    elif plan.scaffold_type == "image":
-        core = (
-            f"INTRODUCE (one item, rule {plan.rule_id}): present "
-            f"**{plan.key}** — an image of {plan.key} is attached; the "
-            "caption is the Spanish form. No L1 unless the learner fails."
-        )
-    elif plan.scaffold_type == "keyword":
-        core = (
-            f"INTRODUCE (one item, rule {plan.rule_id}): present "
-            f"**{plan.key}** with the memory keyword '{p.get('keyword')}' "
-            f"(≤6 English words; no other English). The keyword line "
-            f"must contain **{plan.key}** itself — never a floating anchor."
-        )
-    else:
-        core = (
-            f"INTRODUCE (one item, rule {plan.rule_id}): present "
-            f"**{plan.key}** — give the gloss format {p.get('format')} "
-            "exactly once, then Spanish only."
-        )
-    lines = [
-        core,
-        "Model it in one short sentence, then a simple comprehension check "
-        "or try.",
-    ]
-    if plan.forbid_cluster_with:
-        lines.append(
-            "Do NOT also introduce: "
-            + ", ".join(plan.forbid_cluster_with)
-            + "."
-        )
-    lines.append("Introduce NOTHING else new this turn.")
-    return " ".join(lines)
+# (plan_instructions DELETED 2026-08-03, full-code-audit S3 remainder:
+# the teacher-facing INTRODUCE render had zero production callers after
+# the §1.1 strip — the plan drives only the R-B image attach, the R-B→R-D
+# downgrade and the post-turn ledger.  Git history is the archive.)

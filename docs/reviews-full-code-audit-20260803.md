@@ -472,3 +472,72 @@ them). first_seen exposure bookkeeping survives (it is record-keeping,
 not judgment). ENGINEERING §6 gate contract + §9 rows amended with the
 execution chunk. Supersedes the S4 retune's remaining teaching-opinion
 criticals (the retune was the right direction; this is the destination).
+
+
+## EXECUTION — prompt purge + dead-code sweep + S3 remainder (chunk 3, 2026-08-03)
+
+Suite 689 passed; `scripts/check_teacher_truncation.py` ok. Goldens
+byte-stable (no regeneration needed — they pin notes/sheet state, never
+the prompt payload). Zero-ref grep before every cut; every deleted API's
+tests deleted or turned into absence pins. NOT COMMITTED (this chunk).
+
+**S1b** next_best OUT of the model payload: format_sheet_for_prompt drops
+the key (sheet FILE keeps it — UI rail/telemetry); executor sheet notes
+lose "prefer next_best"; AI_TUTOR_SYSTEM rule 8 (next_best guide)
+deleted, list renumbered.  conftest assert_full_teacher_context now
+asserts next_best ABSENT + teach_hint ABSENT from every shipped sheet
+block (flipped from asserting present).
+**S1c** teach_hint imperatives stripped from the model projection
+(active_error_focus + error_patterns entries); catalog "source" (pack
+M-ID provenance) added to active_error_focus as a FACT; the catalog +
+sheet file keep teach_hint for UI/telemetry.
+**S1d** prompts/conversational_tutor.md rewritten: the 4 scripted <tutor>
+dialogue exemplars DELETED (the required-shape block with "…"
+placeholders is the one skeleton, now marked SHAPE-only); "Curriculum
+palette" section + pack law DELETED → new "Scope" section (authority =
+the sheet's domain_scope); every pack/next_best reference replaced with
+sheet facts (active_error_focus, domain_targets_not_yet_touched);
+teaching-method prose kept.
+**S1e** prompts/tutor_persona.md authorities fixed (header + hard rules:
+teaching guide, sheet domain scope, output gate; "MODE"/"pack palette"
+gone); variety rule now cites the course default, not "pack law".
+**S1f** TEACHER_PROMPT_ORDER falsifier arms DELETED: config selector +
+executor p1_reorder/p2_structured branches incl.
+FINAL_CONSTRAINTS_check_before_replying (no tests pinned them).
+evals/run_referee.py: ARMS reduced to the single live plan arm; module
+docstring marked RETIRED pending a new pre-registration (the old arm list
+would have run four copies of one config — fabricated-comparison hazard);
+manifest preregistration=None; driver mechanics kept.
+
+**S2** tutor/corpus.py DELETED (load_pack/planner_index/pack_topic_titles,
+zero refs; truncation script's TEACHER_PATHS row + load_pack pattern
+removed, named-constant history pattern intact; TestPackTopics deleted).
+pedagogy_contract.TEACH_MODALITIES DELETED (+ absence pin).
+OUTPUT_GATE_REPAIRED kind + catalog row + render row DELETED; catalog
+59 (docstring counts corrected to measured: eval-pinned 9, ui-pinned 2,
+log-only 48); conv_checks._GATE_EVENT_KINDS now five; tests replaced
+with kind-absence pins (test_turn_events, test_gate_floor).
+turn_pipeline: realization_artifact field + dead B0 debug-mirror block
+DELETED; stage_prompt_build docstring B0 paragraph rewritten;
+GATE_REPAIR_STAGES → GATE_AUDIT_STAGES + stage_gate_repair alias DELETED
+(conv_session calls stage_gate_verdict directly; absence pins added);
+duplicate build_ai_tutor_system on the ROUND branch removed (build once,
+reuse).  executor dead params DELETED: build_ai_tutor_system
+sheet_summary/personal_context (system = static stance+persona only),
+build_ai_tutor_user_message observations= + personal_context/
+learner_personal_context row (test_persona/test_asked_topics/
+test_plan_card updated).  conv_session "course pack palette"→course_pack
+debug labeller branch DELETED (+ test fixture now stance/persona(cached)/
+plan-extra).  config: POLICY_PATH, CONTROLLER_PLANNER/EXECUTOR,
+GATE_REPAIR stub DELETED (incl. conftest monkeypatch); LEARNER_PROFILE
+comment fixed (capture disabled; path exists solely for legacy-file
+deletion).  9 orphan prompts/ files DELETED (teaching_policy,
+executor_controller/law_core/reply_protocol, planner_controller/_brief/
+structured/wrapper, thin_runtime) — prompts/ = conversational_tutor +
+tutor_persona + ai_student, exactly the three with loaders.
+
+**S3 remainder** introduce_router.plan_instructions DELETED (zero
+production callers; plan/downgrade/ledger wires untouched; tests →
+absence pin).  The S2 "stale ladder comment" (:1161-1163) was already
+rewritten by chunk 2's gate retune (the still_fail-floor text now states
+the no-hide reality) — verified, nothing to do.

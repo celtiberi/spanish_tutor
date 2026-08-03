@@ -154,10 +154,8 @@ class TurnContext:
     system: str = ""                                # static system blocks
     task: str = ""                                  # per-turn task message
     messages: list = field(default_factory=list)    # full request messages
-    # B0 brief path only (PEDAGOGY §3.3 amended): the completeness_v1 turn
-    # artifact from realization_context — stashed for the lint + debug ring.
-    # None on the full path.
-    realization_artifact: Any = None
+    # (realization_artifact DELETED 2026-08-03, full-code-audit S2: the B0
+    # brief path died with the course pack — nothing produced it.)
     final: Any = None                               # provider response obj
     raw: str = ""                                   # raw model text
     model_raw: str = ""                             # untouched provider text
@@ -444,30 +442,22 @@ def stage_introduce_render(session, ctx: TurnContext) -> None:
 
 
 def stage_prompt_build(session, ctx: TurnContext) -> None:
-    """System = STATIC blocks only (stance/persona/pack) so the provider
+    """System = STATIC blocks only (stance/persona) so the provider
     prefix-cache covers system + chat history.  The per-turn sheet rides
     in the task message at the request tail.  No personal context —
     personal-data capture is disabled.  Full history in testing
     (HISTORY_TURNS=0); never mutates session.history.
 
-    B0 dual path (PEDAGOGY §3.3 AMENDED 2026-07-30, USER-ratified;
-    docs/design-planner-rounds.md): TEACHER_CONTEXT=brief swaps the prompt
-    for the ten-member floor — system = law core + persona (cache-stable),
-    task = realization context (brief + slice + bans + manifest, volatile
-    tail), messages = last-K exchange window (the only legal windowing,
-    versioned in realization_context.K_EXCHANGES).  The completeness_v1
-    artifact is stashed on ctx and mirrored into the debug ring entry.
-    This is the ONLY branch point — the default ("full") path below is
-    byte-identical to the historical prompt, and everything downstream
-    (gate, settlement, recorders) runs unchanged on both paths."""
+    The only branch point is plan-mode (TEACHER_CONTEXT, below): PLAN
+    turns append the pedagogy guide + plan instructions as extra system
+    blocks; ROUND turns append the round note and run on the sanctioned
+    12-message window.  (The B0 "brief" arm and its realization_artifact
+    DIED 2026-08-03 with the course pack — full-code-audit S1f/S2.)"""
     from . import config
     from .character_sheet import format_sheet_for_prompt
     from .executor import build_ai_tutor_system, build_ai_tutor_user_message
     from .turn_events import TurnEventKind as EV
 
-    # B0 "brief" arm DELETED 2026-08-03 with the course pack it fed on
-    # (referee: N=19 power FAIL; blind grade responsiveness −0.93; then
-    # USER: "the character sheet IS the course pack").
     # Course pack DELETED 2026-08-03 (USER: "the character sheet IS the
     # course pack") — the sheet carries the target inventory; no palette.
     ctx.system = build_ai_tutor_system()
@@ -556,11 +546,10 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
             ctx.ev.emit(EV.SESSION_PLAN, key="requested", stage="plan")
             history = session.history
         else:
-            # ROUND turn: drop the pedagogy guide from the system; the
-            # model's plan already digested it.
-            from .executor import build_ai_tutor_system
-
-            ctx.system = build_ai_tutor_system()
+            # ROUND turn: the pedagogy guide stays out of the system; the
+            # model's plan already digested it.  ctx.system is the plain
+            # stance/persona build from above — reuse it (the duplicate
+            # build_ai_tutor_system call DELETED 2026-08-03, S2).
             ctx.system = list(ctx.system) + [
                 {"type": "text", "text": ROUND_NOTE}
             ]
@@ -837,12 +826,14 @@ def stage_gate_verdict(session, ctx: TurnContext) -> None:
     _surface_gate_fail(session, ctx, residual or faults)
 
 
-# Backward-compatible names (old repair path deleted 2026-08-01).
-stage_gate_repair = stage_gate_verdict
+# Backward-compatible name (old repair path deleted 2026-08-01; the
+# stage_gate_repair alias was DELETED 2026-08-03, full-code-audit S2 —
+# conv_session calls stage_gate_verdict directly).
 _gate_floor = _surface_gate_fail
 
 # Gate audit census: settle → context → check → verdict (no rewrite stage).
-GATE_REPAIR_STAGES: tuple = (
+# (Renamed from GATE_REPAIR_STAGES 2026-08-03 — no repair exists.)
+GATE_AUDIT_STAGES: tuple = (
     stage_settle_pixels,
     stage_gate_context,
     stage_gate_check,
@@ -1347,16 +1338,6 @@ def stage_debug_capture(session, ctx: TurnContext) -> None:
         raw=ctx.model_raw or ctx.raw,
         reply=getattr(ctx.result, "reply", "") or "",
     )
-    # B0 brief path (§3.3 amended): mirror the completeness_v1 artifact
-    # into the ring entry just captured — the lint's logged evidence.
-    # Pure passthrough (None on the full path); never raises.
-    if ctx.realization_artifact is not None:
-        try:
-            session.debug_requests[-1]["realization_artifact"] = (
-                ctx.realization_artifact
-            )
-        except (IndexError, TypeError, KeyError):
-            pass
 
 
 def stage_log_turn(session, ctx: TurnContext) -> None:

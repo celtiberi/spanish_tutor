@@ -783,6 +783,23 @@ def format_sheet_for_prompt(
     if max_lex is not None and max_lex > 0:
         lex = dict(list(lex.items())[:max_lex])
 
+    # §1.1a purge (full-code-audit S1b/S1c, 2026-08-03): the MODEL-facing
+    # projection ships FACTS only.  next_best (code's agenda) is dropped —
+    # the sheet FILE keeps it for the UI rail/telemetry.  teach_hint
+    # imperatives ("Recast X → Y") are stripped from error entries — the
+    # catalog keeps them for any UI/telemetry use; the model gets label +
+    # source + example evidence and decides the move itself.
+    active_focus = []
+    for e in active_error_patterns(sheet):
+        proj = {k: v for k, v in e.items() if k != "teach_hint"}
+        src = (ERROR_PATTERN_CATALOG.get(e.get("id")) or {}).get("source")
+        if src:
+            proj["source"] = src
+        active_focus.append(proj)
+    for ent in errors.values():
+        if isinstance(ent, dict):
+            ent.pop("teach_hint", None)
+
     payload = {
         "now": now_iso(),
         # Personal-data capture disabled 2026-07-28: identity is omitted.
@@ -795,8 +812,7 @@ def format_sheet_for_prompt(
         "domain_targets_not_yet_touched": _untouched_targets(
             lex, association_table
         ),
-        "next_best": sheet.get("next_best"),
-        "active_error_focus": active_error_patterns(sheet),
+        "active_error_focus": active_focus,
         "error_patterns": errors,
         "skills": skills,
         "grammar": grammar,

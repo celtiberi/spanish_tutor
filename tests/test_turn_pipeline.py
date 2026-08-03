@@ -162,18 +162,22 @@ class TestPipelineOrder:
         assert [f.__name__ for f in tp.REALIZE_STAGES] == DOCUMENTED_REALIZE
         assert all(callable(f) for f in tp.REALIZE_STAGES)
 
-    def test_gate_repair_sequence_matches_documented_list(self):
-        # Batch 3 census: GATE/REPAIR = 3; §1.1b settlement round added
+    def test_gate_audit_sequence_matches_documented_list(self):
+        # Batch 3 census: GATE AUDIT = 4 (renamed from GATE_REPAIR_STAGES
+        # 2026-08-03 — no repair exists); §1.1b settlement round added
         # stage_settle_pixels FIRST (outside the executor's try, like the
         # context build) so image_present is settled truth before gating.
-        assert [f.__name__ for f in tp.GATE_REPAIR_STAGES] == [
+        assert [f.__name__ for f in tp.GATE_AUDIT_STAGES] == [
             "stage_settle_pixels",
             "stage_gate_context",
             "stage_gate_check",
             "stage_gate_verdict",
         ]
+        # The repair-era names stay deleted (full-code-audit S2).
+        assert not hasattr(tp, "GATE_REPAIR_STAGES")
+        assert not hasattr(tp, "stage_gate_repair")
         # The realize/gate families never leak into the head sequence.
-        for f in tp.REALIZE_STAGES + tp.GATE_REPAIR_STAGES:
+        for f in tp.REALIZE_STAGES + tp.GATE_AUDIT_STAGES:
             assert f not in tp.PRE_MODEL_STAGES
 
     def test_recorder_sequence_matches_documented_list(self):
@@ -188,7 +192,7 @@ class TestPipelineOrder:
         for f in tp.RECORDER_STAGES:
             assert f not in tp.PRE_MODEL_STAGES
             assert f not in tp.REALIZE_STAGES
-            assert f not in tp.GATE_REPAIR_STAGES
+            assert f not in tp.GATE_AUDIT_STAGES
 
     def test_capture_log_sequence_matches_documented_list(self):
         # Batch 5 census: CAPTURE/LOG = 2 (the batch-1 re-derived
@@ -210,7 +214,7 @@ class TestPipelineOrder:
         full = (
             list(tp.PRE_MODEL_STAGES)
             + list(tp.REALIZE_STAGES)
-            + list(tp.GATE_REPAIR_STAGES)
+            + list(tp.GATE_AUDIT_STAGES)
             + list(tp.RECORDER_STAGES)
             + list(tp.CAPTURE_LOG_STAGES)
         )
@@ -244,16 +248,14 @@ class TestPipelineOrder:
         # batches 3/4 already carry (the keep-it-lean law held to the end).
         # §1.1b settlement round (2026-07-29) added render_drops (the
         # settle_pixels → settle_chrome drop trail for TurnRender).
-        # B0 dual path (§3.3 amended 2026-07-30) added realization_artifact
-        # — produced by stage_prompt_build (brief path only, None on full),
-        # consumed by stage_debug_capture + the completeness_v1 lint.
-        # (decision + need_recast died with the router, 2026-08-03.)
+        # (decision + need_recast died with the router, 2026-08-03;
+        # realization_artifact died with the B0 brief path —
+        # full-code-audit S2, 2026-08-03.)
         assert sorted(tp.TurnContext.__dataclass_fields__) == sorted([
             "learner", "is_open", "ev", "input_mode", "log_learner",
             "llm_signals", "sig_pre", "obs", "blank", "sigs",
             "intro_plan",
             "teach_images", "image_decision", "system", "task", "messages",
-            "realization_artifact",
             "final", "raw", "model_raw", "plan_turn", "tool_delta",
             "usage", "error_result",
             "render_drops",

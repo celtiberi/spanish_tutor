@@ -20,7 +20,6 @@ from tutor.introduce_router import (
     PRIORITY_THEMES,
     candidate_keys,
     plan_introduction,
-    plan_instructions,
 )
 from tutor.retrieval_scheduler import mark_introduced
 
@@ -166,38 +165,13 @@ class TestRuleRouting(TableCase):
             self.assertIn(self.table[key]["gloss_en"], fmt, key)
 
 
-class TestPlanInstructions(TableCase):
-    def test_contains_forbid_list_and_closing_law(self):
-        plan = plan_introduction(
-            default_sheet(), self.table, _fresh_snap(), key="hasta luego"
-        )
-        text = plan_instructions(plan)
-        self.assertIn("adiós", text)
-        self.assertIn("hasta mañana", text)
-        self.assertIn("Do NOT also introduce", text)
-        self.assertTrue(text.endswith("Introduce NOTHING else new this turn."))
+class TestPlanInstructionsDeleted(unittest.TestCase):
+    def test_instruction_render_stays_deleted(self):
+        # Full-code-audit S3 remainder (2026-08-03): the teacher-facing
+        # INTRODUCE render had zero production callers — absence pin.
+        import tutor.introduce_router as ir
 
-    def test_scaffold_specific_wording(self):
-        cog = plan_introduction(
-            default_sheet(), self.table, _fresh_snap(), key="igualmente"
-        )
-        self.assertIn("cognate", plan_instructions(cog))
-        img = plan_introduction(
-            default_sheet(), self.table, _fresh_snap(), key="casa"
-        )
-        img_text = plan_instructions(img)
-        self.assertIn("image", img_text)
-        self.assertIn("No L1 unless the learner fails", img_text)
-        glo = plan_introduction(
-            default_sheet(), self.table, _fresh_snap(), key="me llamo"
-        )
-        glo_text = plan_instructions(glo)
-        self.assertIn("**me llamo** (my name is)", glo_text)
-        self.assertIn("exactly once", glo_text)
-        for text in (plan_instructions(cog), img_text, glo_text):
-            self.assertTrue(
-                text.endswith("Introduce NOTHING else new this turn.")
-            )
+        self.assertFalse(hasattr(ir, "plan_instructions"))
 
 
 class TestCandidateKeys(TableCase):

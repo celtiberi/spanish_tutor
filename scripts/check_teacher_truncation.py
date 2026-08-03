@@ -35,9 +35,9 @@ TEACHER_PATHS = frozenset(
         "tutor/config.py",
         "tutor/observe.py",
         "tutor/output_gate.py",
-        # tutor/scenes.py DELETED 2026-08-03 (full-code-audit S9).
+        # tutor/scenes.py DELETED 2026-08-03 (full-code-audit S9);
+        # tutor/corpus.py DELETED 2026-08-03 (full-code-audit S2).
         "tutor/session_memory.py",
-        "tutor/corpus.py",
         "tutor/plan_card.py",
         "tutor/pedagogy_contract.py",
         "tutor/tutor_response.py",
@@ -76,10 +76,9 @@ HIGH_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
             r"format_sheet_for_prompt\s*\([^)]*\))\s*\[\s*:\s*\d+\s*\]"
         ),
     ),
-    (
-        "load_pack(...)[:N] for teacher",
-        re.compile(r"load_pack\s*\([^)]*\)\s*\[\s*:\s*\d+\s*\]"),
-    ),
+    # (The load_pack(...)[:N] pattern was removed with tutor/corpus.py —
+    # the course pack and its loader are DELETED; the named-constant
+    # history-window pattern above still guards windowing by any name.)
     (
         "clip_prompt with hard positive literal cap",
         re.compile(r"clip_prompt\s*\([^)]*?,\s*[1-9]\d*\s*\)"),

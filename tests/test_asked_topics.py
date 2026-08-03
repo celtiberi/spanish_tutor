@@ -126,7 +126,6 @@ class TestExecutorPayload(unittest.TestCase):
                 "asked_topics": ["size:ciudad", "location:casa"],
                 "turns": 4,
             },
-            observations={"signals": [], "next_best": {}},
             blank_sheet=False,
         )
         self.assertIn("do_not_re_ask", msg)

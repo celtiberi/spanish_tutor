@@ -18,17 +18,21 @@ from tutor.session_memory import SessionMemory
 
 
 def _system_blocks():
+    # Mirrors the live build: stance, then persona carrying the
+    # cache_control marker (the course-pack block was DELETED 2026-08-03 —
+    # full-code-audit S2 — with its "course_pack" labeller branch), then a
+    # plan-turn extra block that labels by position only.
     return [
         {
             "type": "text",
             "text": "# You are a skilled conversational Spanish tutor\n\nstance…",
         },
-        {"type": "text", "text": "# Tutor persona — Marisol\n\npersona…"},
         {
             "type": "text",
-            "text": "# Course pack palette (stay in scope)\nPACK…",
+            "text": "# Tutor persona — Marisol\n\npersona…",
             "cache_control": {"type": "ephemeral"},
         },
+        {"type": "text", "text": "# The teaching guide (yours)\n\nguide…"},
     ]
 
 
@@ -63,10 +67,10 @@ class TestDebugEntryShape(unittest.TestCase):
     def test_entry_has_labeled_system_blocks(self):
         e = _make_entry(turn=3)
         labels = [b["label"] for b in e["system_blocks"]]
-        self.assertEqual(labels, ["tutor_stance", "persona", "course_pack"])
+        self.assertEqual(labels, ["tutor_stance", "persona", "system_block_2"])
         # Full text kept (local debug tool — no truncation)
         self.assertIn("stance…", e["system_blocks"][0]["text"])
-        self.assertTrue(e["system_blocks"][2]["cached"])
+        self.assertTrue(e["system_blocks"][1]["cached"])
         # Router-shadow fields DELETED with the mode router (2026-08-03).
         for gone in ("mode", "reason", "hard_break", "instructions"):
             self.assertNotIn(gone, e)

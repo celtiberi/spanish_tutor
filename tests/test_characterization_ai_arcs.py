@@ -137,7 +137,6 @@ def test_golden_gate_fault_surfaces_no_repair(tutor_session_factory):
     assert "output_gate_fail:gate:unscaffolded_new_item" in turn.notes
     assert "output_gate_soft_fail:gate:unscaffolded_new_item" in turn.notes
     assert not any("output_gate_still_fail" in n for n in turn.notes)
-    assert "output_gate_repaired" not in turn.notes
     assert "output_gate_recovered" not in turn.notes
     assert "output_gate_ok" not in turn.notes
     assert len(ctx.fake.requests) == 2  # open + turn only (no repair call)

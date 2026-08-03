@@ -223,11 +223,12 @@ def emit_progress_events(
 
 
 def _label_system_block(text: str, index: int) -> str:
-    """Human label for a system block (marker-based, position fallback)."""
+    """Human label for a system block (marker-based, position fallback).
+
+    (The "course pack palette" → course_pack branch was DELETED 2026-08-03,
+    full-code-audit S2: no pack block exists to label.)"""
     # The debug entry stores the FULL block text; only the label sniffs a head.
     head = (text or "").lstrip()[:200].lower()  # truncation-ok: label sniffing only, full text kept
-    if "course pack palette" in head:
-        return "course_pack"
     if "student character sheet" in head or "character sheet" in head:
         return "character_sheet"
     if "tutor persona" in head:
@@ -1343,10 +1344,10 @@ class ConversationalSession:
         in tutor/turn_pipeline.py ARE the documentation.  Executor order:
         PRE_MODEL_STAGES → REALIZE_STAGES (a
         provider exception becomes ctx.error_result, returned immediately)
-        → the GATE_REPAIR_STAGES trio (context build outside the historical
-        try/except; any gate exception emits OUTPUT_GATE_ERROR and the turn
-        proceeds ungated) → RECORDER_STAGES (incl. the atomic sheet commit)
-        → CAPTURE_LOG_STAGES.
+        → the GATE_AUDIT_STAGES members (context build outside the
+        historical try/except; any gate exception emits OUTPUT_GATE_ERROR
+        and the turn proceeds ungated) → RECORDER_STAGES (incl. the atomic
+        sheet commit) → CAPTURE_LOG_STAGES.
         """
         ev = begin_turn_log(self)
         from .turn_pipeline import (
@@ -1357,7 +1358,7 @@ class ConversationalSession:
             TurnContext,
             stage_gate_check,
             stage_gate_context,
-            stage_gate_repair,
+            stage_gate_verdict,
             stage_settle_pixels,
         )
 
@@ -1381,7 +1382,7 @@ class ConversationalSession:
         stage_gate_context(self, ctx)
         try:
             stage_gate_check(self, ctx)
-            stage_gate_repair(self, ctx)
+            stage_gate_verdict(self, ctx)
         except Exception as ge:
             ev.emit(
                 EV.OUTPUT_GATE_ERROR, key=type(ge).__name__, stage="gate",

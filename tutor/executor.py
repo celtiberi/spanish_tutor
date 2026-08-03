@@ -50,9 +50,7 @@ Use the character sheet, session facts, and what they just said.
    monologue intermediate Spanish. Feel out with real chat, not "Say: Hola."
    For a TRUE ZERO, English orientation + glossed tiny Spanish + one
    bilingual try IS placement.
-8. **next_best** on the sheet is a *guide*, not a railroad. Prefer reacting to
-   what they just said first.
-9. **Teach every turn** — at least model and/or try (or recast+retry). Bare
+8. **Teach every turn** — at least model and/or try (or recast+retry). Bare
    hangout with no Spanish model is a fail.
 
 ## Anti-patterns (forbidden)
@@ -82,7 +80,7 @@ Use the character sheet, session facts, and what they just said.
 - **acknowledge**: react to *their* content (Spanish first)
 - **model**: natural Spanish they should hear (not a vocab bullet list)
 - **explain**: normally 1–2 lines. The FIRST introduction of a new
-  structural item this session (verb form, copula, or other pack
+  structural item this session (verb form, copula, or other structural
   pattern — not a passing re-mention) earns a real beat — 2–3 lines:
   what it means and when you'd use it. Never conjugation tables in chat;
   the app's Morphology card carries verb paradigms.
@@ -169,15 +167,13 @@ def load_persona() -> str:
         return ""
 
 
-def build_ai_tutor_system(
-    *,
-    sheet_summary: str = "",
-    personal_context: str = "",
-) -> list[dict]:
-    """System blocks in cache-friendly order: stance → persona →
-    personal_context → ability sheet (sheet last; it changes every turn).
-    The course-pack palette block was DELETED 2026-08-03 (USER: "the
-    character sheet IS the course pack")."""
+def build_ai_tutor_system() -> list[dict]:
+    """STATIC system blocks only: stance → persona.  The per-turn sheet
+    rides in the task message (build_ai_tutor_user_message) — any changed
+    byte here would break provider prefix-caching for the whole chat.
+    (The sheet_summary / personal_context params were DELETED 2026-08-03,
+    full-code-audit S2: zero callers passed them — the sheet ships in the
+    task payload and personal-data capture is disabled.)"""
     stance = ""
     if CONV_PROMPT.exists():
         try:
@@ -193,14 +189,11 @@ def build_ai_tutor_system(
     text = AI_TUTOR_SYSTEM
     # Testing default: no truncation (config.clip_prompt with cap=0 is a no-op).
     stance_cap = getattr(config, "STANCE_PROMPT_CHARS", 0)
-    sheet_cap = getattr(config, "SHEET_PROMPT_CHARS", 0)
     if stance:
         text += "\n\n# Teaching methods (detail)\n" + config.clip_prompt(stance, stance_cap)
     # Block ORDER is a cost decision: providers cache by longest common
-    # PREFIX, so static content (stance, persona) must
-    # come before anything that changes per turn. The sheet changes every
-    # turn — it goes LAST. Putting it before the pack silently disabled
-    # prompt caching and billed the full ~20k-token prefix fresh each turn.
+    # PREFIX, so static content (stance, persona) must come before anything
+    # that changes per turn.
     blocks: list[dict] = [{"type": "text", "text": text}]
     persona = load_persona()
     if persona:
@@ -210,22 +203,6 @@ def build_ai_tutor_system(
             # Anthropic explicit caching: marks the end of the stable prefix
             "cache_control": {"type": "ephemeral"},
         })
-    if personal_context:
-        blocks.append({"type": "text", "text": personal_context})
-    if sheet_summary:
-        blocks.append({
-            "type": "text",
-            "text": (
-                "# Student character sheet — Spanish ABILITIES\n"
-                "What they can do in Spanish (skills, grammar, errors). Adapt "
-                "teaching from this. Prefer next_best and active errors over "
-                "re-probing known can-dos.\n"
-                "Update ability only via the update_character_sheet tool "
-                "(with reason + evidence). FORBIDDEN: never copy, quote, or "
-                "re-emit this JSON in the learner reply.\n\n"
-                + config.clip_prompt(sheet_summary, sheet_cap)
-            ),
-        })
     return blocks
 
 def build_ai_tutor_user_message(
@@ -233,19 +210,19 @@ def build_ai_tutor_user_message(
     learner: str = "",
     is_open: bool = False,
     session_memory: dict | None = None,
-    observations: dict | None = None,  # accepted, no longer injected (§1.1)
     teach_images: list | None = None,
     blank_sheet: bool = False,
     sheet_summary: str = "",
-    personal_context: str = "",
     teaching_data: dict | None = None,
     session_plan: str | None = None,
 ) -> str:
     """User-turn task: facts only; the AI is the teacher (§1.1).
 
-    (The mode_decision parameter DELETED 2026-08-03 with the mode router.)
-    The character sheet and personal context ride HERE (per-turn tail of the
-    request), not in the system prompt: they change every turn, and any
+    (The mode_decision parameter DELETED 2026-08-03 with the mode router;
+    observations= and personal_context/learner_personal_context DELETED
+    2026-08-03, full-code-audit S2 — no caller passed them and nothing
+    injected them.)  The character sheet rides HERE (per-turn tail of the
+    request), not in the system prompt: it changes every turn, and any
     changed byte in the system message would break provider prefix-caching
     for the entire chat history behind it. Cost decision, content unchanged.
     """
@@ -270,8 +247,9 @@ def build_ai_tutor_user_message(
         "your_session_plan": session_plan or None,
         "student_character_sheet": {
             "note": (
-                "Spanish ABILITIES. Adapt teaching from this; prefer "
-                "next_best and active errors over re-probing known can-dos. "
+                "Spanish ABILITIES + the domain inventory. Adapt teaching "
+                "from this; address active errors rather than re-probing "
+                "known can-dos. "
                 "Grade ability only via update_character_sheet (reason + "
                 "evidence required). FORBIDDEN: never copy or re-emit this "
                 "data in the learner reply."
@@ -280,7 +258,6 @@ def build_ai_tutor_user_message(
                 sheet_summary, getattr(config, "SHEET_PROMPT_CHARS", 0)
             ),
         } if sheet_summary else None,
-        "learner_personal_context": personal_context or None,
         "session_facts": {
             "skills_learner_already_showed": mem.get("shown") or [],
             # Semantic asked-topic registry (2026-07-28 repetition forensics):
@@ -307,31 +284,10 @@ def build_ai_tutor_user_message(
         },
     }
     payload = {k: v for k, v in payload.items() if v is not None}
-    # r9 falsifier arms (docs/design-planner-rounds.md, frozen order;
-    # USER-ratified 2026-07-30). Same-content position/structure controls
-    # for the lost-in-the-middle hypothesis — NEVER a truncation (§3.3):
-    #   legacy        — historical order (sheet buried mid-message)
-    #   p1_reorder    — identical keys, constraints LAST (zero token delta)
-    #   p2_structured — legacy order + compact structured constraints echo
-    #                   pinned to the tail (~200 tokens)
-    order = getattr(config, "TEACHER_PROMPT_ORDER", "legacy")
-    if order == "p1_reorder":
-        tail_keys = ("session_facts", "teaching_data")
-        payload = {
-            **{k: v for k, v in payload.items() if k not in tail_keys},
-            **{k: payload[k] for k in tail_keys if k in payload},
-        }
-    elif order == "p2_structured":
-        payload["FINAL_CONSTRAINTS_check_before_replying"] = {
-            "do_not_re_ask_these_frames": mem.get("asked_topics") or [],
-            "hard_rules": [
-                "no A/B or yes/no English-meaning quiz on known material",
-                "never re-ask any do_not_re_ask frame (any person/formality "
-                "variant counts as the same ask)",
-                "every NEW Spanish item carries its gloss/anchor on the "
-                "same line",
-            ],
-        }
+    # The r9 TEACHER_PROMPT_ORDER falsifier arms (p1_reorder /
+    # p2_structured FINAL_CONSTRAINTS) were DELETED 2026-08-03
+    # (full-code-audit S1f): dormant script blocks; the referee run
+    # settled the question and the arms had no live selector.
     return (
         "<tutor_turn_task>\n"
         + json.dumps(payload, ensure_ascii=False, indent=2)

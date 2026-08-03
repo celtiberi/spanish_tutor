@@ -6,7 +6,6 @@ from pathlib import Path
 from tutor.character_sheet import default_sheet
 from tutor.pedagogy_contract import (
     CONTRACT_VERSION,
-    TEACH_MODALITIES,
     VIOLATION_NO_TEACH_MOVE,
     VIOLATION_OPEN_NEEDS_MODEL_TRY,
     VIOLATION_RECAST_WITHOUT_TRY,
@@ -40,15 +39,12 @@ class TestPedagogyContract(unittest.TestCase):
         self.assertFalse(is_blank_learner(s))
         self.assertEqual(open_phase(s), "known")
 
-    def test_visual_image_is_registered_modality(self):
-        """Images are pedagogy (planned), not an afterthought feature."""
-        self.assertIn("visual_image", TEACH_MODALITIES)
-        vis = TEACH_MODALITIES["visual_image"]
-        self.assertEqual(vis["status"], "planned")
-        self.assertIn("target_linked", vis.get("rules") or [])
-        # Active text modalities still enforced in v1
-        self.assertEqual(TEACH_MODALITIES["text_model"]["status"], "active")
-        self.assertEqual(TEACH_MODALITIES["text_try"]["status"], "active")
+    def test_teach_modalities_registry_stays_deleted(self):
+        # Full-code-audit S2 (2026-08-03): the zero-reader modality
+        # registry was deleted — absence pin, not a behavior test.
+        import tutor.pedagogy_contract as pc
+
+        self.assertFalse(hasattr(pc, "TEACH_MODALITIES"))
 
     def test_chat_buddy_open_fails(self):
         """Bare greeting = the failure mode we actually shipped."""

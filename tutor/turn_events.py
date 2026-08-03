@@ -8,8 +8,10 @@ typed event vocabulary and the dual-emit machinery.
 
 THE MEASURED INVENTORY (2026-07-28, this batch; re-measured 2026-08-03
 after the S9 deletions removed activity/phase_consumed/open_scenes/
-task_*/close_phase_offered/focus_async): the ``result.notes`` bus carries
-**63 catalogued prefix families** — the review's "~40" undercounted.
+task_*/close_phase_offered/focus_async, the S4 router teardown removed
+mode/mode_reason/hard_break, and the S2 sweep removed
+output_gate_repaired): the ``result.notes`` bus carries
+**59 catalogued prefix families** — the review's "~40" undercounted.
 Every family is a
 ``TurnEventKind`` member with a ``NoteSpec`` row in ``NOTE_CATALOG`` below:
 emitter site(s), consumers, payload shape (the part after the separator),
@@ -46,21 +48,20 @@ THE EVENT CONTRACT (batch 2 — events are THE truth, strings the projection):
     DELETED 2026-08-03 with the mode router — full-code-audit S4.)
 
 STABILITY CLASSES (measured, not assumed):
-  - ``eval-pinned`` (14 kinds): consumed by evals/conv_checks.py — since
+  - ``eval-pinned`` (9 kinds): consumed by evals/conv_checks.py — since
     Phase 3 batch 2 every checker reads the TYPED events first (recorded per
     turn by run_conv_smoke) and falls back to the note strings only for
     historical result artifacts recorded before events existed:
-    ``mode`` (``_mode``),
     ``uptake_flagged`` (``uptake_flag_honored``), ``due_elicit_offered``
     (``due_elicit_fired``), ``progress_milestone``
     (``progress_milestones_fired``), ``introduce_planned``
-    (``introduce_scaffolded``), and the six ``output_gate*`` kinds
+    (``introduce_scaffolded``), and the five ``output_gate*`` kinds
     (``recast_or_gate_attempt``: precise event-kind + fault-payload checks
     on the event path; the legacy fallback keeps the historical
     "output_gate"/"missing_recast" joined-notes substring scan).
   - ``ui-pinned`` (2 kinds): web_static/app.js ``setNotes`` warns on
     ``rules_backup``-without-``tool_update`` membership.
-  - ``log-only`` (46 kinds): session .jsonl logs (``state.notes`` +
+  - ``log-only`` (48 kinds): session .jsonl logs (``state.notes`` +
     ``extra.sheet_notes``), the web notes line, the debug ring
     (``response.notes``), and the Phase 0 goldens where flagged.
   - ``debug-only``: NONE exist — the debug ring carries the same list the
@@ -109,7 +110,9 @@ class TurnEventKind(str, Enum):
     OUTPUT_GATE_OK = "output_gate_ok"
     OUTPUT_GATE_SOFT_FAIL = "output_gate_soft_fail"
     OUTPUT_GATE_FAIL = "output_gate_fail"
-    OUTPUT_GATE_REPAIRED = "output_gate_repaired"
+    # OUTPUT_GATE_REPAIRED DELETED 2026-08-03 (full-code-audit S2): the
+    # repair path died 2026-08-01; the kind's emission site was already
+    # gone and only absence tests kept the name alive.
     OUTPUT_GATE_STILL_FAIL = "output_gate_still_fail"
     OUTPUT_GATE_ERROR = "output_gate_error"
     INTERNAL_ERROR = "internal_error"
@@ -256,10 +259,6 @@ NOTE_CATALOG: dict[TurnEventKind, NoteSpec] = {s.kind: s for s in [
     _spec(TurnEventKind.OUTPUT_GATE_FAIL, "output_gate_fail:", False,
           "<fault id>,<fault id>,…",
           ["conv_session._execute_ai_tutor (gate)"],
-          ["evals/conv_checks.recast_or_gate_attempt (substrings)"],
-          "eval-pinned", True),
-    _spec(TurnEventKind.OUTPUT_GATE_REPAIRED, "output_gate_repaired", True,
-          "", ["conv_session._execute_ai_tutor (gate repair)"],
           ["evals/conv_checks.recast_or_gate_attempt (substrings)"],
           "eval-pinned", True),
     _spec(TurnEventKind.OUTPUT_GATE_STILL_FAIL, "output_gate_still_fail:",
@@ -503,7 +502,6 @@ _RENDER = {
         lambda e: "output_gate_soft_fail:" + _join(e.payload.get("faults")),
     _K.OUTPUT_GATE_FAIL:
         lambda e: "output_gate_fail:" + _join(e.payload.get("faults")),
-    _K.OUTPUT_GATE_REPAIRED: lambda e: "output_gate_repaired",
     _K.OUTPUT_GATE_STILL_FAIL:
         lambda e: "output_gate_still_fail:" + _join(e.payload.get("faults")),
     _K.OUTPUT_GATE_ERROR: lambda e: f"output_gate_error:{e.key}",

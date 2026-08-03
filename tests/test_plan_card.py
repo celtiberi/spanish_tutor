@@ -38,19 +38,15 @@ class TestAiTutorContext(unittest.TestCase):
             learner="Estoy bien",
             is_open=False,
             session_memory={"shown": ["estoy"], "asked": ["ask_how"], "turns": 1},
-            observations={
-                "signals": ["estoy", "spanish_ok"],
-                "error_hits": [],
-                "active_errors": [],
-                "next_best": {"can_do": "IP-03"},
-            },
             blank_sheet=False,
         )
         self.assertIn("session_facts", msg)
         # §1.1 rewrite (USER 2026-08-03): the routers' opinions no longer
         # ship — the model plans from facts. No mode block, no regex
-        # observations, no next_best opinion.
+        # observations, no next_best opinion (the observations= param
+        # itself was DELETED 2026-08-03, full-code-audit S2).
         self.assertNotIn("hard_observations", msg)
+        self.assertNotIn("next_best", msg)
         self.assertNotIn("mode_instructions", msg)
         self.assertNotIn("next_best_can_do", msg)
         # Must not ship a scripted next-card ladder

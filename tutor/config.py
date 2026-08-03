@@ -24,7 +24,6 @@ def _find_repo_root() -> Path:
 
 
 REPO_ROOT = _find_repo_root()
-POLICY_PATH = REPO_ROOT / "prompts" / "teaching_policy.md"
 # Domain-model DATA only (association table = target inventory,
 # teach-asset sidecar, scenes as domain-situated materials — never path
 # law). The prose course pack was DELETED 2026-08-03; the sheet carries
@@ -48,8 +47,8 @@ _DATA_ROOT = Path(
 LOG_DIR = _DATA_ROOT / "sessions"
 PROFILE_PATH = _DATA_ROOT / "profile.json"
 CHARACTER_SHEET_PATH = _DATA_ROOT / "character_sheet.json"
-# Personal facts (name, hooks, sensitive notes) — separate lifecycle from the
-# ability sheet: resetting Spanish progress never forgets who the learner is.
+# Personal-data capture is DISABLED (2026-07-28) — nothing writes this file.
+# The path survives solely so reset_profile can delete a legacy on-disk file.
 LEARNER_PROFILE_PATH = _DATA_ROOT / "learner_profile.json"
 
 
@@ -76,10 +75,6 @@ MODEL = os.environ.get("TUTOR_MODEL", "gemini-3.6-flash")
 # Persona toggle (see PERSONA_PATH above): TUTOR_PERSONA=off disables.
 TUTOR_PERSONA = (os.environ.get("TUTOR_PERSONA", "on") or "on").strip().lower()
 PERSONA_ENABLED = TUTOR_PERSONA not in ("off", "0", "false", "no", "none")
-# Plan/realize defaults (Anthropic credits tight → grok planner on xAI billing).
-# Override with CONTROLLER_PLANNER / CONTROLLER_EXECUTOR or CLI flags.
-CONTROLLER_PLANNER = os.environ.get("CONTROLLER_PLANNER", "grok-4.5")
-CONTROLLER_EXECUTOR = os.environ.get("CONTROLLER_EXECUTOR", MODEL)
 # Teacher path: planned|plan|new|ai (aliases of the ONE runtime — AI tutor
 # with sheet + memory + pedagogy direction). The former "rules" PlanCard
 # ladder and "legacy" harness were DELETED (E4/E4b,
@@ -96,12 +91,8 @@ STRICT_ERRORS = (
     in ("1", "true", "yes", "on")
 )
 
-# r9 falsifier arm selector (docs/design-planner-rounds.md, USER-ratified
-# 2026-07-30): legacy | p1_reorder | p2_structured. Position/structure
-# controls only — same content, never truncation (SS3.3).
-TEACHER_PROMPT_ORDER = (
-    os.environ.get("TEACHER_PROMPT_ORDER", "legacy") or "legacy"
-).strip().lower()
+# (The r9 TEACHER_PROMPT_ORDER falsifier-arm selector was DELETED
+# 2026-08-03, full-code-audit S1f.)
 
 # "plan" (default, USER-directed 2026-08-03): teacher writes its own
 # session plan with full context at open; rounds run small (plan + sheet
@@ -168,9 +159,8 @@ SHEET_TOOLS = (
     os.environ.get("SHEET_TOOLS", "true").strip().lower()
     in ("1", "true", "yes", "on")
 )
-# Gate model-rewrite DELETED 2026-08-01 (user: never hide problems).
-# Env GATE_REPAIR is ignored — kept only so old shells don't crash on import.
-GATE_REPAIR = False
+# (The GATE_REPAIR compat stub was DELETED 2026-08-03, full-code-audit S2:
+# the gate model-rewrite died 2026-08-01 and nothing read the constant.)
 # --- Teacher context to the AI model ---
 # Testing default: FULL context (no char / history caps). Latency optimisations
 # that slice sheet/pack/stance/history broke teaching quality before. Only re-enable

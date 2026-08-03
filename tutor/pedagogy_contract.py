@@ -56,55 +56,9 @@ OK_TEACH_MOVE = PEDAGOGY_NOTE_PREFIX + KEY_OK
 NOTE_DIAGNOSTIC_OPEN = PEDAGOGY_NOTE_PREFIX + KEY_DIAGNOSTIC_OPEN
 NOTE_KNOWN_LEARNER_OPEN = PEDAGOGY_NOTE_PREFIX + KEY_KNOWN_LEARNER_OPEN
 
-# Teaching channels the system owns. v1 only *enforces* text moves;
-# planned channels are listed so they expand via contract, not as UI toys.
-# See docs/pedagogy-contract.md § Teaching modalities.
-TEACH_MODALITIES: dict[str, dict[str, Any]] = {
-    "text_model": {
-        "status": "active",
-        "role": "Present target form(s) for comprehension/production.",
-        "contract_part": "model",
-    },
-    "text_try": {
-        "status": "active",
-        "role": "Elicit learner production of the target.",
-        "contract_part": "try",
-    },
-    "recast": {
-        "status": "active",
-        "role": "Focus on form: clean model of what they meant.",
-        "contract_part": "recast",
-    },
-    "audio_tts": {
-        "status": "active_support",
-        "role": "Voice input for memory and pronunciation (playback).",
-        "contract_part": None,
-    },
-    "audio_stt": {
-        "status": "active_support",
-        "role": "Spoken production under real conditions.",
-        "contract_part": None,
-    },
-    "visual_image": {
-        "status": "planned",
-        "role": (
-            "Associate nouns/scenes/concepts with form (dual coding / CI). "
-            "Image must match the teach target in the same turn — not decoration."
-        ),
-        "contract_part": "image",  # future structured part or teach_assets
-        "rules": [
-            "target_linked",       # same concept as model/try
-            "same_turn_as_form",   # co-present with linguistic model
-            "no_english_sticker",  # don't replace inference with labels
-            "logged_as_teach_move",
-        ],
-    },
-    "task_roleplay": {
-        "status": "sheet_guided",
-        "role": "TBLT use of form in a micro-task (next_best activity).",
-        "contract_part": None,
-    },
-}
+# (TEACH_MODALITIES DELETED 2026-08-03, full-code-audit S2: a 46-LOC
+# registry with zero readers — the contract below enforces the text moves
+# directly; git history is the archive.)
 
 
 @dataclass

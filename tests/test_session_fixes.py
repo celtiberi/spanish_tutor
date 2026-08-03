@@ -377,18 +377,6 @@ class TestSignalClassifier(unittest.TestCase):
         self.assertIn("help_request", obs["signals"])
 
 
-class TestPackTopics(unittest.TestCase):
-    def test_pack_topic_titles_empty_without_pack(self):
-        # Prose course pack DELETED 2026-08-03: shadow phase topics are
-        # empty by construction (the sheet is the curriculum now).
-        from pathlib import Path
-
-        from tutor.config import DEFAULT_PACK_DIR
-        from tutor.corpus import pack_topic_titles
-
-        self.assertEqual(pack_topic_titles(Path(DEFAULT_PACK_DIR)), [])
-
-
 class TestConceptImageAttachVisibility(unittest.TestCase):
     """Incident 2026-07-28 + audit (e): concept-attach cache misses must
     never be SILENT and must never generate on the reply thread (latency

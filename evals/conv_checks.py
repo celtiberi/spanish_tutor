@@ -54,12 +54,12 @@ def _events_of(turn: dict, *kinds: str) -> list[dict] | None:
     return [e for e in evs if str(e.get("kind")) in want]
 
 
-# The six gate event kinds (tutor/turn_events.py OUTPUT_GATE_*).
+# The five gate event kinds (tutor/turn_events.py OUTPUT_GATE_*;
+# output_gate_repaired DELETED 2026-08-03, full-code-audit S2).
 _GATE_EVENT_KINDS = (
     "output_gate_ok",
     "output_gate_soft_fail",
     "output_gate_fail",
-    "output_gate_repaired",
     "output_gate_still_fail",
     "output_gate_error",
 )

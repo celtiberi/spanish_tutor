@@ -1,17 +1,17 @@
-"""Pre-registered r9 referee driver (docs/design-planner-rounds.md).
+"""RETIRED multi-arm referee driver (pending a new pre-registration).
 
-Runs the frozen arms sequentially — A (legacy), P1 (reorder), P2
-(structured tail), B0 (brief context; B1 exists only if B0 leaves
-residual) — at N sessions × 6 turns each via evals.run_student_smoke,
-then aggregates per-arm still_fail / fixation / probe-on-known /
-english-wall counts and per-arm cost from each run's ISOLATED cost
-ledger into evals/results/referee-<stamp>/manifest.json.
+The r9 falsifier arms are DEAD (full-code-audit S1f, 2026-08-03):
+TEACHER_CONTEXT=brief was DELETED (B0 lost the blind grade, then its
+course pack was deleted) and the TEACHER_PROMPT_ORDER selector +
+p1_reorder / p2_structured branches were DELETED from
+config.py/executor.py — those env vars are now no-ops, so the historical
+arm list would have silently run FOUR COPIES of the same configuration
+(fabricated-comparison hazard, Grok countersign).
 
-Frozen bounds (Grok round-1/round-2, B0 countersign): N≥20 sessions/arm
-or CI width ≤0.10 on still_fail; session-clustered intervals computed at
-analysis time, NOT here (this driver only collects); promotion/kill per
-the design doc. Nothing in this driver may drop an arm after seeing
-data (P1 stays as control by pre-registration).
+Until a NEW pre-registered comparison exists, ARMS holds the single live
+configuration (the plan-mode teacher). The driver mechanics — isolated
+cost ledgers, transcript-backed stats, fail-fast on provider refusal —
+are kept intact for that next registration.
 
 Usage: nohup .venv/bin/python -m evals.run_referee --n 20 &
 """
@@ -25,16 +25,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Arm ORDER is load-bearing under quota risk (run-1 incident 2026-07-30:
-# a fixed A→P1→P2→B0 order made B0 the guaranteed casualty of provider
-# exhaustion — it got 0 of 20 sessions while A/P1 got 20/20). The untested
-# arm runs FIRST; --rotate shifts the order so no arm is systematically
-# starved across runs.
+# The single live arm (see module docstring — multi-arm runs require a new
+# pre-registration with real, code-backed arm selectors).
 ARMS: list[tuple[str, dict]] = [
-    ("B0_brief", {"TEACHER_CONTEXT": "brief"}),
-    ("A_legacy", {}),
-    ("P2_structured", {"TEACHER_PROMPT_ORDER": "p2_structured"}),
-    ("P1_reorder", {"TEACHER_PROMPT_ORDER": "p1_reorder"}),
+    ("plan", {}),
 ]
 
 RESULTS_ROOT = Path(__file__).resolve().parent / "results"
@@ -103,7 +97,10 @@ def main() -> int:
     out.mkdir(parents=True, exist_ok=True)
     manifest: dict = {
         "stamp": stamp, "n_per_arm": args.n, "turns": args.turns,
-        "arms": {}, "preregistration": "docs/design-planner-rounds.md",
+        "arms": {},
+        # No live pre-registration: the r9 arms died with their selectors
+        # (full-code-audit S1f). A future multi-arm run must register anew.
+        "preregistration": None,
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2))
 

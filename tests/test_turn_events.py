@@ -76,8 +76,20 @@ def test_catalog_count_published_number():
     #      2026-08-03 full-code-audit S9 deletions (scenes, session-phase
     #      clock, task runtime, focus enricher);
     # −3 = MODE/MODE_REASON/HARD_BREAK, 2026-08-03 mode-router teardown
-    #      (full-code-audit S4)).
-    assert len(NOTE_CATALOG) == 60
+    #      (full-code-audit S4);
+    # −1 = OUTPUT_GATE_REPAIRED, 2026-08-03 full-code-audit S2 (the repair
+    #      path died 2026-08-01; the kind had no emission site left)).
+    assert len(NOTE_CATALOG) == 59
+
+
+def test_output_gate_repaired_kind_stays_deleted():
+    # Absence pin (full-code-audit S2): the repair event KIND does not
+    # exist — no member, no catalog row, no render row.
+    assert not hasattr(TurnEventKind, "OUTPUT_GATE_REPAIRED")
+    assert "output_gate_repaired" not in {
+        k.value for k in TurnEventKind
+    }
+    assert classify_note("output_gate_repaired") is None
 
 
 def test_stability_classes_are_the_measured_vocabulary():
@@ -89,7 +101,7 @@ def test_stability_classes_are_the_measured_vocabulary():
         EV.UPTAKE_FLAGGED, EV.DUE_ELICIT_OFFERED,
         EV.PROGRESS_MILESTONE, EV.INTRODUCE_PLANNED,
         EV.OUTPUT_GATE_OK, EV.OUTPUT_GATE_SOFT_FAIL,
-        EV.OUTPUT_GATE_FAIL, EV.OUTPUT_GATE_REPAIRED,
+        EV.OUTPUT_GATE_FAIL,
         EV.OUTPUT_GATE_STILL_FAIL, EV.OUTPUT_GATE_ERROR,
     }
     ui_pinned = {s.kind for s in NOTE_CATALOG.values()
@@ -131,7 +143,6 @@ ROUND_TRIP = [
     (EV.OUTPUT_GATE_SOFT_FAIL, "output_gate_soft_fail:gate:regloss"),
     (EV.OUTPUT_GATE_FAIL,
      "output_gate_fail:gate:unscaffolded_new_item,gate:english_wall"),
-    (EV.OUTPUT_GATE_REPAIRED, "output_gate_repaired"),
     (EV.OUTPUT_GATE_STILL_FAIL, "output_gate_still_fail:gate:cluster_veto"),
     (EV.OUTPUT_GATE_ERROR, "output_gate_error:ValueError"),
     (EV.INTERNAL_ERROR, "internal_error:progress_note:KeyError: 'x'"),

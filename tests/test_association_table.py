@@ -22,10 +22,10 @@ from tutor.association_table import (
 ROOT = Path(__file__).resolve().parents[1]
 PACK_DIR = ROOT / "domain" / "spanish_a1"
 
-# tutor/corpus.py has no MWU parser (only topic titles / planner index), so
-# the unit01 greeting/farewell/courtesy multiword formulas are hand-listed
-# here. An honesty check below asserts each one really appears in the pack
-# unit text, so this list cannot silently drift from the pack.
+# There is no MWU parser (tutor/corpus.py DELETED 2026-08-03 with the
+# course pack — full-code-audit S2), so the unit01 greeting/farewell/
+# courtesy multiword formulas are hand-listed here and checked against the
+# association-table data so the list cannot silently drift.
 PACK_MWUS = [
     "buenos días",
     "buenas tardes",

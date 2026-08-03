@@ -4,6 +4,8 @@ No repair rewrites, no probe stripping, no blank holds, no content scrub
 that papers over model junk. Failures surface as gate_fail + raw reply.
 """
 
+import pytest
+
 from tutor.session_memory import compose_topic_key
 from tutor.tutor_response import compose_raw, process_tutor_raw
 
@@ -99,7 +101,10 @@ class TestGateNoHide:
             n.startswith("output_gate_fail:") and "probe_loop" in n
             for n in turn.notes
         )
-        assert "output_gate_repaired" not in turn.notes
+        # The repair KIND no longer exists (full-code-audit S2 absence pin).
+        from tutor.turn_events import TurnEventKind
+
+        assert not hasattr(TurnEventKind, "OUTPUT_GATE_REPAIRED")
         assert "output_gate_recovered" not in turn.notes
         assert "output_gate_stripped" not in turn.notes
         assert turn.parts.get("gate_fail") is True
@@ -124,12 +129,8 @@ class TestGateNoHide:
         # FakeModelClient: count requests if available.
         if hasattr(ctx, "fake") and hasattr(ctx.fake, "request"):
             # open used index 0; user turn used index 1 only — no repair call.
-            try:
+            with pytest.raises(IndexError):
                 ctx.fake.request(2)
-                raised = False
-            except Exception:
-                raised = True
-            assert raised or "output_gate_repaired" not in turn.notes
 
     def test_critical_fault_set_matches_retune(self):
         # Gate retune 2026-08-03: mode-keyed contracts gone; bare

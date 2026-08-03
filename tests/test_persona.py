@@ -18,27 +18,29 @@ class TestPersona(unittest.TestCase):
         self.assertIn("Personality never cancels a required recast", p)
 
     def test_persona_block_in_system(self):
-        blocks = build_ai_tutor_system(
-            sheet_summary="{}", personal_context="# Learner personal context"
-        )
+        # System = STATIC blocks only (the sheet_summary/personal_context
+        # params were DELETED 2026-08-03, full-code-audit S2 — the sheet
+        # rides the per-turn task payload, not the system prompt).
+        blocks = build_ai_tutor_system()
         joined = _block_texts(blocks)
         self.assertIn("Marisol", joined)
-        # Persona sits before the ability sheet block
+        # Persona is a separate block AFTER the stance and carries the
+        # cache marker (end of the stable prefix).
         idx_persona = next(
             i for i, b in enumerate(blocks) if "Marisol" in b.get("text", "")
         )
-        idx_sheet = next(
-            i for i, b in enumerate(blocks)
-            if "Spanish ABILITIES" in b.get("text", "")
+        self.assertGreater(idx_persona, 0)
+        self.assertEqual(
+            blocks[idx_persona].get("cache_control"), {"type": "ephemeral"}
         )
-        self.assertLess(idx_persona, idx_sheet)
+        self.assertNotIn("Spanish ABILITIES", joined)
 
     def test_persona_disabled_by_env(self):
         old = config.PERSONA_ENABLED
         try:
             config.PERSONA_ENABLED = False
             self.assertEqual(load_persona(), "")
-            blocks = build_ai_tutor_system(sheet_summary="{}")
+            blocks = build_ai_tutor_system()
             self.assertNotIn("Marisol", _block_texts(blocks))
         finally:
             config.PERSONA_ENABLED = old

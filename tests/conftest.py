@@ -241,12 +241,23 @@ def assert_full_teacher_context(ctx) -> None:
             sheet_block = payload.get("student_character_sheet")
             if sheet_block is not None:
                 sheet_json = json.loads(sheet_block["sheet"])  # parses fully
-                for key in ("next_best", "skills", "grammar", "lexicon",
-                            "updated_at"):
+                for key in ("skills", "grammar", "lexicon", "updated_at"):
                     assert key in sheet_json, (
                         f"request {i}: sheet field {key!r} missing — "
                         "teacher sheet truncated"
                     )
+                # §1.1a purge (full-code-audit S1b/S1c, 2026-08-03): the
+                # model-facing projection must NOT carry code's agenda —
+                # next_best stays on the sheet FILE (UI rail) only, and
+                # teach_hint imperatives never ship.
+                assert "next_best" not in sheet_json, (
+                    f"request {i}: next_best shipped to the model — "
+                    "code-owned agenda in the prompt (§1.1a)"
+                )
+                assert "teach_hint" not in sheet_block["sheet"], (
+                    f"request {i}: teach_hint imperative shipped to the "
+                    "model (§1.1a)"
+                )
     # Full-history law: the LAST tutor request must carry the entire chat
     # history (open pair + every completed turn pair) with no [-N:] window.
     hist = session.history
@@ -347,8 +358,7 @@ def tutor_session_factory(monkeypatch, tmp_path, request):
     monkeypatch.setattr(config, "SIGNAL_CLASSIFIER_MODEL", "off")
     monkeypatch.setattr(config, "SIGNAL_CLASSIFIER_BLOCKING", False)
     monkeypatch.setattr(config, "SHEET_TOOLS", False)
-    # Gate rewrite path deleted 2026-08-01; constant is always False.
-    monkeypatch.setattr(config, "GATE_REPAIR", False)
+    # (config.GATE_REPAIR stub deleted 2026-08-03 — nothing to pin.)
     monkeypatch.setattr(config, "TEACHER_CONTEXT_TRUNCATE", False)
     monkeypatch.setattr(config, "HISTORY_TURNS", 0)
     monkeypatch.setattr(config, "PACK_PROMPT_CHARS", 0)
