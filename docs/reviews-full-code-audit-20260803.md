@@ -365,3 +365,33 @@ Shipped pre-countersign (already green): S6 empty-plan leak, replan
 preserve-on-failure, session_plan:missing event, numbers-migration
 state carry, _untouched_targets session-table threading, profile-unlink
 _oops, stance/pedagogy load failures now shout on stderr.
+
+---
+
+## S10 (added post-countersign — USER-flagged smell, 2026-08-03)
+
+**"The sheet is being built at runtime instead of being the source of
+truth?"** Confirmed: only vocabulary targets live as data
+(association_table.json); grammar forms + paradigms (can_dos.py
+FORM_INVENTORY/MORPHOLOGY_BY_FORM), can-dos (CAN_DOS), scope
+(DOMAIN_SCOPE), and the misconception catalog (ERROR_PATTERN_CATALOG)
+are code literals. Content-as-code = the §1.1 category error one layer
+down.
+
+**Ruling:** consolidate the ENTIRE domain model into
+`domain/spanish_a1/` as one reviewable dataset; `default_sheet()` loads
+it and attaches zeroed learner state; code keeps mechanics only
+(transitions, thresholds, grading, formatting). A new level = a new
+data dir, zero code edits.
+
+**Sequencing:** executes AFTER S1/S2/S4 deletions — scenes die, the
+mode router and its detect regexes die; consolidate only what survives.
+The generated preview (logs/base_character_sheet.json) is a stopgap;
+the dataset itself becomes the inspectable artifact.
+
+**S9 replan ruling (USER-adjudicated same session):** build NOTHING —
+no nudge, no forced replan. No observed failure; the sheet + window +
+session_facts re-feed the learner's world every turn and <replan/> is
+documented in every round note. Revive condition: a live transcript
+showing the tutor contradicting its own plan or losing post-window
+context (the traffic log now captures the evidence needed to prove it).
