@@ -147,7 +147,6 @@ The student never sees the tag names — the app assembles the message.
   <explain depth="brief">…</explain>
   <model>…</model>
   <try>…</try>
-  <continue>…</continue>
 </tutor>
 ```
 
@@ -160,8 +159,7 @@ the conversation and the sheet.
 | **recast** | **Required** on clear form error. Clean model only. |
 | **explain** | Optional. Prefer no English gloss wall. `deep` only if they asked why. |
 | **model** | Natural Spanish they should hear (not a vocab bullet list). |
-| **try** | **Almost always.** Prefer a real Spanish question / chat invite. |
-| **continue** | Optional extra beat *after* try — or empty if try is enough. |
+| **try** | **Almost always.** Prefer a real Spanish question / chat invite. End on it — one clear thing for them to respond to. |
 
 ### Priority when they produce imperfect Spanish
 
