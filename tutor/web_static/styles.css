@@ -966,3 +966,31 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
 }
 .dbg-msg { margin-bottom: 0.3rem; }
 .dbg-role { color: var(--you); text-transform: uppercase; font-size: 0.68rem; }
+
+/* Debug tabs (2026-08-03: turn selector + INPUT/OUTPUT/META) */
+.dbg-turns {
+  display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.45rem;
+}
+.dbg-turn-btn {
+  font: inherit; font-size: 0.72rem; padding: 0.12rem 0.55rem;
+  border: 1px solid var(--border, #444); border-radius: 999px;
+  background: transparent; color: var(--muted, #999); cursor: pointer;
+}
+.dbg-turn-btn.active { color: inherit; border-color: var(--you, #7aa2f7); }
+.dbg-turn-btn.fault { border-color: var(--warn, #e0af68); }
+.dbg-tabbar {
+  display: flex; align-items: center; gap: 0.4rem;
+  border-bottom: 1px solid var(--border, #444);
+  margin-bottom: 0.5rem; padding-bottom: 0.3rem;
+}
+.dbg-tab {
+  font: inherit; font-size: 0.74rem; letter-spacing: 0.04em;
+  padding: 0.15rem 0.6rem; border: none; background: transparent;
+  color: var(--muted, #999); cursor: pointer; border-radius: 4px;
+}
+.dbg-tab.active {
+  color: inherit; font-weight: 600;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.dbg-tabbar .dbg-model { margin-left: auto; font-size: 0.7rem; }
+.dbg-view { max-height: 60vh; overflow-y: auto; }

@@ -547,12 +547,36 @@ function dbgSection(title, innerHtml, { open = false } = {}) {
   );
 }
 
-function renderDebugEntry(e, idx) {
-  const u = e.response?.usage || {};
-  const summary =
-    `turn ${e.turn}${e.is_open ? " (open)" : ""} · ` +
-    fmtTokens(u);
-  const sysBlocks = (e.system_blocks || [])
+let dbgSel = 0;
+let dbgTab = localStorage.getItem("debugTab") || "input";
+
+function dbgJson(obj) {
+  return `<pre class="dbg-pre">${esc(JSON.stringify(obj, null, 2))}</pre>`;
+}
+
+/** Pretty-print the <tutor_turn_task> payload. Nested JSON strings
+ *  (student_character_sheet.sheet) are parsed so the sheet reads as real
+ *  JSON, not one escaped line. Falls back to raw text on any parse miss. */
+function prettyTask(text) {
+  const t = text || "";
+  const a = t.indexOf("{");
+  const b = t.lastIndexOf("}");
+  if (a < 0 || b <= a) return dbgPre(t);
+  try {
+    const payload = JSON.parse(t.slice(a, b + 1));
+    const sheet = payload?.student_character_sheet;
+    if (sheet && typeof sheet.sheet === "string") {
+      try { sheet.sheet = JSON.parse(sheet.sheet); } catch (_) {}
+    }
+    return dbgJson(payload);
+  } catch (_) {
+    return dbgPre(t);
+  }
+}
+
+function dbgInputView(e) {
+  const blocks = e.system_blocks || [];
+  const sysBlocks = blocks
     .map((b) =>
       dbgSection(
         `${b.label}${b.cached ? " · cache-marked" : ""} · ${(b.text || "").length} chars`,
@@ -569,47 +593,44 @@ function renderDebugEntry(e, idx) {
         `</div>`
     )
     .join("");
+  return (
+    dbgSection("TASK — this turn's payload (formatted)", prettyTask(e.task_message), { open: true }) +
+    dbgSection(`SYSTEM BLOCKS · ${blocks.length}`, sysBlocks) +
+    dbgSection(`HISTORY · ${hist.length} messages`, histHtml || '<p class="muted">none</p>')
+  );
+}
+
+function dbgOutputView(e) {
   const raw = e.response?.raw || "";
   const planM = raw.match(/<plan>([\s\S]*?)<\/plan>/i);
-  const meta = {
+  const reply = e.response?.reply || "";
+  return (
+    (planM
+      ? dbgSection(
+          "SESSION PLAN — model-authored, learner never sees this",
+          dbgPre(planM[1].trim()),
+          { open: true }
+        )
+      : "") +
+    dbgSection("VISIBLE REPLY", reply ? dbgPre(reply) : '<p class="muted">none recorded</p>', {
+      open: !planM,
+    }) +
+    dbgSection(`RAW MODEL TEXT · ${raw.length} chars`, raw ? dbgPre(raw) : '<p class="muted">none</p>')
+  );
+}
+
+function dbgMetaView(e) {
+  return dbgJson({
     model: e.model,
     ts: e.ts,
+    turn: e.turn,
+    is_open: !!e.is_open,
     stop_reason: e.response?.stop_reason || "",
-    usage: u,
+    usage: e.response?.usage || {},
     gate_faults: e.response?.gate_faults || [],
     gate_notes: e.response?.gate_notes || [],
     notes: e.response?.notes || [],
-  };
-  const body =
-    `<div class="dbg-entry-head">` +
-    `<span class="dbg-model">${esc(e.model || "")} · ${esc(e.ts || "")}</span>` +
-    `<button type="button" class="btn ghost dbg-copy" data-idx="${idx}" title="Copy this entry as JSON">Copy</button>` +
-    `</div>` +
-    dbgSection(`SYSTEM BLOCKS · ${(e.system_blocks || []).length}`, sysBlocks) +
-    dbgSection("TASK MESSAGE", dbgPre(e.task_message)) +
-    dbgSection(`HISTORY · ${hist.length} messages`, histHtml || '<p class="muted">none</p>') +
-    (planM
-      ? dbgSection(
-          "SESSION PLAN (model-authored — learner never sees this)",
-          dbgPre(planM[1].trim())
-        )
-      : "") +
-    dbgSection(
-      `MODEL RESPONSE · raw · ${raw.length} chars`,
-      raw ? dbgPre(raw) : '<p class="muted">none</p>'
-    ) +
-    dbgSection(
-      "RESPONSE META",
-      dbgPre(JSON.stringify(meta, null, 2)),
-    );
-  return (
-    `<details class="dbg-entry">` +
-    `<summary class="dbg-entry-sum">${esc(summary)}` +
-    ((e.response?.gate_faults || []).length
-      ? ` <span class="dbg-faults">gate: ${esc((e.response.gate_faults || []).join(", "))}</span>`
-      : "") +
-    `</summary>${body}</details>`
-  );
+  });
 }
 
 function renderDebug(entries) {
@@ -619,17 +640,53 @@ function renderDebug(entries) {
   lastDebugEntries = entries || [];
   if (count) count.textContent = lastDebugEntries.length ? `(${lastDebugEntries.length})` : "";
   if (!lastDebugEntries.length) {
-    body.innerHTML =
-      '<p class="muted">No requests captured yet — send a message.</p>';
+    body.innerHTML = '<p class="muted">No requests captured yet — send a message.</p>';
     return;
   }
-  body.innerHTML = lastDebugEntries.map(renderDebugEntry).join("");
+  if (dbgSel >= lastDebugEntries.length) dbgSel = 0;
+  const e = lastDebugEntries[dbgSel];
+  const turnBtns = lastDebugEntries
+    .map((en, i) => {
+      const faults = (en.response?.gate_faults || []).length;
+      return (
+        `<button type="button" class="dbg-turn-btn${i === dbgSel ? " active" : ""}${faults ? " fault" : ""}" data-turn="${i}">` +
+        `turn ${en.turn}${en.is_open ? " · open" : ""}${faults ? " ⚠" : ""}</button>`
+      );
+    })
+    .join("");
+  const tabs = ["input", "output", "meta"]
+    .map(
+      (t) =>
+        `<button type="button" class="dbg-tab${t === dbgTab ? " active" : ""}" data-tab="${t}">${t.toUpperCase()}</button>`
+    )
+    .join("");
+  const view =
+    dbgTab === "output" ? dbgOutputView(e) : dbgTab === "meta" ? dbgMetaView(e) : dbgInputView(e);
+  body.innerHTML =
+    `<div class="dbg-turns">${turnBtns}</div>` +
+    `<div class="dbg-tabbar">${tabs}` +
+    `<span class="dbg-model">${esc(e.model || "")} · ${fmtTokens(e.response?.usage || {})}</span>` +
+    `<button type="button" class="btn ghost dbg-copy" data-idx="${dbgSel}" title="Copy this entry as JSON">Copy</button>` +
+    `</div>` +
+    `<div class="dbg-view">${view}</div>`;
+  body.querySelectorAll(".dbg-turn-btn").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      dbgSel = Number(btn.dataset.turn);
+      renderDebug(lastDebugEntries);
+    })
+  );
+  body.querySelectorAll(".dbg-tab").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      dbgTab = btn.dataset.tab;
+      localStorage.setItem("debugTab", dbgTab);
+      renderDebug(lastDebugEntries);
+    })
+  );
   body.querySelectorAll(".dbg-copy").forEach((btn) => {
     btn.addEventListener("click", (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
-      const i = Number(btn.dataset.idx);
-      const entry = lastDebugEntries[i];
+      const entry = lastDebugEntries[Number(btn.dataset.idx)];
       if (!entry) return;
       navigator.clipboard
         ?.writeText(JSON.stringify(entry, null, 2))
