@@ -571,7 +571,25 @@ def load_sheet(path: Path) -> dict:
         return default_sheet()
     try:
         data = json.loads(path.read_text())
-    except (json.JSONDecodeError, OSError):
+    except (json.JSONDecodeError, OSError) as e:
+        # No-hide quarantine (full-code-audit S5.1, 2026-08-03): a corrupt
+        # sheet must never be silently replaced by a blank — the next
+        # save_sheet would overwrite the only evidence of the learner's
+        # state. Rename the corrupt file aside, shout, start from default.
+        import sys as _sys
+
+        stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+        quarantine = path.with_name(f"{path.name}.corrupt-{stamp}")
+        try:
+            path.rename(quarantine)
+            q_msg = f"quarantined to {quarantine}"
+        except OSError as qe:
+            q_msg = f"quarantine rename FAILED ({type(qe).__name__}: {qe})"
+        print(
+            f"[no-hide] load_sheet: corrupt/unreadable sheet {path} "
+            f"({type(e).__name__}: {e}) — {q_msg}; starting from default "
+            f"sheet", file=_sys.stderr, flush=True,
+        )
         return default_sheet()
     # numbers_0_20 → numbers_0_100 migration MUST run on the RAW data:
     # after _deep_merge the default block has already seeded
@@ -2295,7 +2313,10 @@ def process_turn(
             # Learner-visible grade feed (Phase 3): one log row per ability field
             # that actually moved under this tool call.
             try:
-                from .grade_log import record_grades_from_diff
+                from .grade_log import (
+                    ability_grade_diffs,
+                    record_grades_from_diff,
+                )
 
                 why_txt = (
                     (td.get("reason") or td.get("why") or td.get("notes") or "")
@@ -2313,8 +2334,24 @@ def process_turn(
                         session_id=session_id or "",
                         ledger_path=grade_log_path,
                     )
-            except Exception:
-                pass  # grade feed must never break the teaching turn
+                elif ability_grade_diffs(before, s):
+                    # Ability moved but the delta carried no reason — the
+                    # grade feed records nothing. Say so as a typed note
+                    # instead of skipping silently (full-code-audit S5.2).
+                    events.append(
+                        (_EVK.SHEET_WHY, "grade_unrecorded:no_reason", {})
+                    )
+            except Exception as e:
+                # Grade feed must never break the teaching turn — but a
+                # broken side-channel is VISIBLE, never silent (no-hide,
+                # full-code-audit S5.2, 2026-08-03).
+                import sys as _sys
+
+                print(
+                    f"[no-hide] grade_log write failed (teaching turn "
+                    f"continues; grade feed row LOST): "
+                    f"{type(e).__name__}: {e}", file=_sys.stderr, flush=True,
+                )
     elif revised_sheet is not None:
         s = normalize_sheet(revised_sheet)
         s = _preserve_identity(sheet, s)

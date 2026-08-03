@@ -640,3 +640,75 @@ Out of scope, noted: evals/run_referee.py (RETIRED, chunk 3) still counts
 ZERO-FLOOD SEVERITY / STORM RESIDUAL cite gate-severity remedies that S11
 makes unconstitutional — flagged for the next debt-registry pass, not
 edited here (chunk brief scoped ENGINEERING changes to §6 + §9).
+
+## EXECUTION — S5 no-hide + S7 grades path/harness (chunk 5, 2026-08-03)
+
+Suite 701 passed; `scripts/check_teacher_truncation.py` ok.  NOT COMMITTED.
+Visibility only — no behavior hidden, no teaching turn made killable.
+
+**S5.1** load_sheet corrupt branch: QUARANTINE (rename to
+`<name>.corrupt-<stamp>` before the next save can overwrite the evidence)
++ `[no-hide]` stderr + default_sheet(); regression tests incl.
+save-after-quarantine leaves the evidence untouched.
+**S5.2** grade-feed swallow: never-break kept, `[no-hide] grade_log write
+failed` stderr; ability-move-without-reason now mints typed note
+`why=grade_unrecorded:no_reason` (SHEET_WHY kind — no new event kind;
+tripwire, unreachable via well-formed deltas today).
+**S5.3** grade_log CWD fallback + unreadable-ledger→[] shout on stderr.
+GRADE_LOG_PATH env honor pre-existed (line 26) — verified + test-pinned,
+not re-added.
+**S5.4** web_app three close swallows (_close_meta / session_start fresh
+branch / reset path): `[no-hide] session close failed (sheet may be
+unpersisted)` + traceback.  (The session_start sheet-re-read swallow is
+NOT in the slate — untouched.)
+**S5.5** costs record_event append swallow shouts (spend UNTRACKED);
+COST_PRICING_JSON parse failure shouts ONCE per process (_pricing runs
+per priced call — a once-flag, still never silent).
+**S5.6** progress_ledger crash sites report UNCHECKED per §3.4: due_soon
+→ None (not 0), score → None (not {}), + stderr.  Verified consumer-safe:
+/api/progress serves grade_log.build_grades_payload; app.js reads only
+counts/grades/empty — build_progress_payload has zero production readers
+(tests only), so None renders as absent, no "unchecked" sibling needed.
+**S5.7** teach_assets: sidecar load failure no longer caches the
+permanent module-global empty — degrade-to-{} per call, retry next call,
+stderr each failed attempt (test updated to pin overlay stays None);
+generator crash no longer reads as "declined" (stderr with exception);
+import-time seed swallow + cache-index corrupt/save swallows shout.
+**S5.8** conv_session association-table load → _oops("association_
+table.load", e), None fallback kept.
+**S5.9** image_gen: "generate_on_miss=on" logged ONLY when the flag set
+succeeded; failure path prints `[no-hide]` and returns False.
+**S5.10** config._prompt_cap ValueError shouts (names env var + which
+fallback engaged).  providers tool-call args dropping to {} shout via
+_warn_tool_args_dropped (both tool_calls + legacy function_call arms,
+JSON-fail and non-object cases — a malformed grade is now visible).
+scenes.py sites confirmed GONE; session_log._jsonable left (accepted).
+
+**S7.11** run_student_smoke: SHEET_TOOLS→"true" (setdefault — operator
+override preserved), use_tools=True (stale "rules-based" comment
+corrected; that path died 2026-07-31 — the smoke can now actually
+grade); _pin_ledgers pins GRADE_LOG_PATH to `<stamp>/sheet_grades.jsonl`
+(honored by default_grade_log_path env read — zero ConvSession
+plumbing); isolation doc/summary rows updated.
+**S7.12** tutor_turn tool_result: `{"ok": true, "applied": …}` →
+`{"received": true, "tool": …}` + harness text "received for review"
+(grade_why_ok validation runs later in process_turn; a to-be-rejected
+delta is no longer told ok).  Break-out-of-loop kept, test-pinned.
+**S7.13** _finish double gate: session.use_tools stays the discard
+authority, but a non-None delta discarded by mismatch now raises→_oops
+("tool_delta_gate_mismatch") → INTERNAL_ERROR event + turn note, and
+TurnResult.tool_delta reports the DISCARD (None), not the phantom delta.
+**S7.14** ai_student max_tokens 768→2048 (state JSON stopped fitting
+~turn 7 → silent true_ability freeze); parse-failure notes de-triple-
+counted (merge_learner_state mints the single `state_parse_failed`;
+respond() duplicate + sim-loop `parse_miss` alias deleted);
+`true_ability_frozen` minted once per freeze episode (reset on the next
+successful parse); run_simulation docstring un-stale'd ("use_tools=False
+FREEZES ability"); conv_session logger meta "rules"→"frozen".
+
+**Tests** (+19): tests/test_ai_student.py NEW (single-note pins, freeze
+episodes, max_tokens=2048 behavioral pin, smoke-clamp source pins);
+test_character_sheet quarantine ×3 + grade-feed visibility ×3;
+test_grade_log GRADE_LOG_PATH env ×3; test_progress_ledger UNCHECKED ×3;
+test_providers_tools honest-tool_result; test_inventory_coverage sidecar
+test extended to pin no-cache-failure + [no-hide].

@@ -621,6 +621,9 @@ class AIStudentAgent:
         self._leave_streak = 0
         self.last_state_notes: list[str] = []
         self.last_state_parse_ok: bool = False
+        # True while a parse-failure freeze episode is already noted
+        # (`true_ability_frozen` is minted once per episode, not per turn).
+        self._frozen_noted: bool = False
 
     def _leave_looping(self) -> bool:
         """True if last few student lines were only leave-taking."""
@@ -750,7 +753,11 @@ class AIStudentAgent:
 
         final = self.client.messages.create(
             model=self.caps.model,
-            max_tokens=768,  # room for utterance + learner_state JSON
+            # 2048, not 768 (full-code-audit S7.14): the learner_state JSON
+            # grows with the session — at 768 it stopped fitting around
+            # turn 7, the state stopped parsing, and true_ability silently
+            # froze for the rest of the sim.
+            max_tokens=2048,
             system=system,
             messages=msgs,
         )
@@ -777,14 +784,25 @@ class AIStudentAgent:
             topic = interests[int(self.learner_state.get("turns") or 0) % len(interests)]
             utterance = f"Um… wait — about {topic}, it is nice today."
 
-        # Merge structured learning memory
+        # Merge structured learning memory. One `state_parse_failed` note
+        # per failure (minted by merge_learner_state) — the historical
+        # respond()/sim-loop re-appends triple-counted every failure
+        # (full-code-audit S7.14). On failure the state (and turns counter)
+        # does not advance: note `true_ability_frozen` ONCE per freeze
+        # episode so the flatline is visible in the transcript.
         self.learner_state, state_notes = merge_learner_state(
             self.learner_state, state_in
         )
         self.true.sync_from_state(self.learner_state, self.persona)
         self.last_state_notes = list(state_notes)
         if not parse_ok:
-            self.last_state_notes = list(state_notes) + ["state_parse_failed"]
+            if not self._frozen_noted:
+                self._frozen_noted = True
+                self.last_state_notes = self.last_state_notes + [
+                    "true_ability_frozen"
+                ]
+        else:
+            self._frozen_noted = False
 
         # History stores only what the tutor hears (no state tags)
         self.history.append({"role": "assistant", "content": utterance})
@@ -1072,9 +1090,11 @@ def run_simulation(
 ) -> dict[str, Any]:
     """Run student↔tutor exchanges for N turns and/or wall-clock minutes.
 
-    use_tools=False / session_log=False mirror the eval-harness defaults
-    (run_conv_smoke: rules-based sheet update, no logs/sessions writes);
-    the SimLogger transcript (md+jsonl) is always written.
+    use_tools=False FREEZES ability (the rules-based sheet update was
+    deleted 2026-07-31 — without tools nothing grades); the grading smoke
+    (evals/run_student_smoke.py) passes use_tools=True. session_log=False
+    keeps eval traffic out of logs/sessions; the SimLogger transcript
+    (md+jsonl) is always written.
     """
     config.load_env()
     persona = get_persona(persona_id)
@@ -1179,11 +1199,11 @@ def run_simulation(
         if tr.error:
             raise RuntimeError(f"teacher turn {i} failed: {tr.error}")
         _live(f"tutor> {tr.reply}", "tutor_label")
-        # Tutor modeling signals (logging) + student's own state merge notes
+        # Tutor modeling signals (logging) + student's own state merge notes.
+        # last_state_notes already carries `state_parse_failed` (once) on a
+        # parse miss — no second `parse_miss` alias (full-code-audit S7.14).
         model_notes = student.true.on_tutor_reply(tr.reply, persona)
         state_notes = list(student.last_state_notes or [])
-        if su.get("state_parse_ok") is False:
-            state_notes = list(state_notes) + ["parse_miss"]
         ln = state_notes + model_notes
         sheet_after = copy.deepcopy(load_sheet(sheet_path))
         diff = _sheet_diff(sheet_before, sheet_after)

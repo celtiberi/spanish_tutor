@@ -1239,5 +1239,50 @@ class TestProjectionContract(LedgerBase):
             )
 
 
+class TestUncheckedNeverZero(LedgerBase):
+    """ENGINEERING §3.4 (full-code-audit S5.6): a crashed check reports
+    UNCHECKED (None), never a legitimate-looking 0 / {}."""
+
+    def test_due_soon_none_when_scheduler_crashes(self):
+        import contextlib
+        import io
+        from unittest import mock
+
+        err = io.StringIO()
+        with mock.patch(
+            "tutor.retrieval_scheduler.due_items",
+            side_effect=RuntimeError("boom"),
+        ), contextlib.redirect_stderr(err):
+            payload = pl.build_progress_payload(
+                default_sheet(), ledger_path=self.path,
+            )
+        self.assertIsNone(payload["due_soon"])
+        self.assertIn("[no-hide]", err.getvalue())
+        self.assertIn("UNCHECKED", err.getvalue())
+
+    def test_score_none_when_score_crashes(self):
+        import contextlib
+        import io
+        from unittest import mock
+
+        err = io.StringIO()
+        with mock.patch(
+            "tutor.character_sheet.compute_progress_score",
+            side_effect=RuntimeError("boom"),
+        ), contextlib.redirect_stderr(err):
+            payload = pl.build_progress_payload(
+                default_sheet(), ledger_path=self.path,
+            )
+        self.assertIsNone(payload["score"])
+        self.assertIn("[no-hide]", err.getvalue())
+
+    def test_healthy_path_keeps_real_values(self):
+        payload = pl.build_progress_payload(
+            default_sheet(), ledger_path=self.path,
+        )
+        self.assertIsInstance(payload["due_soon"], int)
+        self.assertIsInstance(payload["score"], dict)
+
+
 if __name__ == "__main__":
     unittest.main()

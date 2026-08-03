@@ -192,15 +192,25 @@ def _lexicon() -> dict[str, dict[str, Any]]:
     missing/invalid sidecar degrades to {} — never a crash (association-
     table posture): images lose curated metadata and fall back to
     is_image_worthy's bare-token heuristic + _default_prompt, while cached
-    files keep resolving through the manifest / cache index."""
+    files keep resolving through the manifest / cache index.  A load
+    FAILURE is not cached (full-code-audit S5.7): each call retries and
+    each failed attempt shouts on stderr — no permanent silent empty."""
     global _sidecar_overlay
     if _sidecar_overlay is None:
         try:
             from .config import DEFAULT_PACK_DIR
 
             _sidecar_overlay = sidecar_lexicon(DEFAULT_PACK_DIR)
-        except Exception:
-            _sidecar_overlay = {}
+        except Exception as e:
+            import sys as _sys
+
+            print(
+                f"[no-hide] teach_assets: sidecar lexicon load failed — "
+                f"asset metadata degrades to bare heuristics this call "
+                f"(will retry next call): {type(e).__name__}: {e}",
+                file=_sys.stderr, flush=True,
+            )
+            return {}
     return dict(_sidecar_overlay)
 
 
@@ -524,8 +534,14 @@ def _load_index() -> dict[str, Any]:
                 raw = json.loads(INDEX_PATH.read_text(encoding="utf-8"))
                 if isinstance(raw, dict) and isinstance(raw.get("entries"), dict):
                     data = raw
-            except (json.JSONDecodeError, OSError):
-                pass
+            except (json.JSONDecodeError, OSError) as e:
+                import sys as _sys
+
+                print(
+                    f"[no-hide] teach_assets: cache index {INDEX_PATH} "
+                    f"corrupt/unreadable — starting from an empty index: "
+                    f"{type(e).__name__}: {e}", file=_sys.stderr, flush=True,
+                )
         _index = data
         return _index
 
@@ -677,8 +693,14 @@ def _record_hit(
         }
         try:
             _save_index()
-        except OSError:
-            pass
+        except OSError as e:
+            import sys as _sys
+
+            print(
+                f"[no-hide] teach_assets: cache index save failed "
+                f"({INDEX_PATH}) — hit for {key!r} not persisted: "
+                f"{type(e).__name__}: {e}", file=_sys.stderr, flush=True,
+            )
 
 
 def cache_put(
@@ -761,7 +783,15 @@ def ensure_asset(
     dest = CACHE_DIR / f"{key}.png"
     try:
         ok = bool(_generator(key, prompt, dest))
-    except Exception:
+    except Exception as e:
+        # No-hide (full-code-audit S5.7): a crashed generator used to read
+        # exactly like "declined to generate" — say what actually happened.
+        import sys as _sys
+
+        print(
+            f"[no-hide] teach image generator CRASHED concept={key!r}: "
+            f"{type(e).__name__}: {e}", file=_sys.stderr, flush=True,
+        )
         ok = False
     if not ok:
         return None
@@ -1022,5 +1052,12 @@ def seed_index_from_disk() -> int:
 
 try:
     seed_index_from_disk()
-except Exception:
-    pass
+except Exception as _seed_exc:
+    import sys as _sys
+
+    print(
+        f"[no-hide] teach_assets: seed_index_from_disk failed at import — "
+        f"pre-existing asset files may not resolve until regenerated: "
+        f"{type(_seed_exc).__name__}: {_seed_exc}",
+        file=_sys.stderr, flush=True,
+    )

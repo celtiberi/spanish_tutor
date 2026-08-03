@@ -142,5 +142,51 @@ class TestGradeLog(unittest.TestCase):
             self.assertEqual(payload["groups"], [])
 
 
+class TestGradeLogPathEnv(unittest.TestCase):
+    """GRADE_LOG_PATH env honor (full-code-audit S7.11): the smoke pins a
+    per-run grade ledger through the env var with no ConvSession plumbing."""
+
+    def test_env_var_wins_default_path(self):
+        from unittest import mock
+
+        from tutor.grade_log import default_grade_log_path
+
+        with tempfile.TemporaryDirectory() as d:
+            pinned = Path(d) / "run-grades.jsonl"
+            with mock.patch.dict(
+                "os.environ", {"GRADE_LOG_PATH": str(pinned)}
+            ):
+                self.assertEqual(default_grade_log_path(), pinned)
+
+    def test_record_grade_writes_to_env_path(self):
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as d:
+            pinned = Path(d) / "run-grades.jsonl"
+            with mock.patch.dict(
+                "os.environ", {"GRADE_LOG_PATH": str(pinned)}
+            ):
+                record_grade(
+                    field_id="IP-01",
+                    section="skills",
+                    direction="up",
+                    why="Greeted with Hola unprompted",
+                )
+                rows = grades_since_epoch()
+            self.assertTrue(pinned.is_file())
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["field_id"], "IP-01")
+
+    def test_blank_env_falls_back_to_config_root(self):
+        from unittest import mock
+
+        from tutor import config
+        from tutor.grade_log import default_grade_log_path
+
+        with mock.patch.dict("os.environ", {"GRADE_LOG_PATH": "  "}):
+            expect = Path(config.LOG_DIR).parent / "sheet_grades.jsonl"
+            self.assertEqual(default_grade_log_path(), expect)
+
+
 if __name__ == "__main__":
     unittest.main()

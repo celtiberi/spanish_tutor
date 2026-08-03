@@ -31,7 +31,16 @@ def default_grade_log_path() -> Path:
         from . import config
 
         return Path(config.LOG_DIR).parent / "sheet_grades.jsonl"
-    except Exception:
+    except Exception as e:
+        # No-hide (full-code-audit S5.3): the CWD-relative fallback FORKS
+        # the ledger whenever the process cwd differs — never silently.
+        import sys as _sys
+
+        print(
+            f"[no-hide] grade_log: config import failed — falling back to "
+            f"CWD-relative logs/sheet_grades.jsonl (ledger may fork): "
+            f"{type(e).__name__}: {e}", file=_sys.stderr, flush=True,
+        )
         return Path("logs") / "sheet_grades.jsonl"
 
 
@@ -107,7 +116,16 @@ def _iter_rows(path: Path) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     try:
         text = path.read_text(encoding="utf-8")
-    except OSError:
+    except OSError as e:
+        # No-hide (full-code-audit S5.3): an unreadable ledger renders as an
+        # empty grade feed — say why on stderr instead of feigning "no
+        # grades yet".
+        import sys as _sys
+
+        print(
+            f"[no-hide] grade_log: cannot read {path} — grade feed renders "
+            f"empty: {type(e).__name__}: {e}", file=_sys.stderr, flush=True,
+        )
         return []
     for line in text.splitlines():
         line = line.strip()

@@ -17,6 +17,7 @@ from __future__ import annotations
 import datetime
 import json
 import os
+import sys
 import threading
 from pathlib import Path
 from typing import Any
@@ -34,7 +35,8 @@ _LEDGER_LOCK = threading.Lock()
 
 
 def record_event(event: dict[str, Any]) -> None:
-    """Append one priced event to the ledger (best-effort, never raises)."""
+    """Append one priced event to the ledger (best-effort, never raises —
+    but a lost row is VISIBLE on stderr: no-hide, full-code-audit S5.5)."""
     try:
         e = {"ts": datetime.datetime.now(datetime.timezone.utc).isoformat(), **event}
         line = json.dumps(e, ensure_ascii=False)
@@ -42,8 +44,12 @@ def record_event(event: dict[str, Any]) -> None:
             LEDGER_PATH.parent.mkdir(parents=True, exist_ok=True)
             with open(LEDGER_PATH, "a", encoding="utf-8") as f:
                 f.write(line + "\n")
-    except Exception:
-        pass
+    except Exception as exc:
+        print(
+            f"[no-hide] cost ledger append failed ({LEDGER_PATH}) — this "
+            f"spend is UNTRACKED: {type(exc).__name__}: {exc}",
+            file=sys.stderr, flush=True,
+        )
 
 # model-name prefix → USD per 1M tokens. Longest prefix wins.
 # input_cached: rate for implicit-cache hits (None = provider has no cache tier).
@@ -79,7 +85,13 @@ IMAGE_FLAT_USD: dict[str, float] = {
 DEFAULT_IMAGE_FLAT_USD = 0.039
 
 
+# One-shot flag: _pricing() runs on every priced call — a malformed
+# COST_PRICING_JSON is announced once, not per call (still never silent).
+_pricing_override_warned = False
+
+
 def _pricing() -> dict[str, dict[str, float | None]]:
+    global _pricing_override_warned
     table = {k: dict(v) for k, v in PRICING.items()}
     raw = (os.environ.get("COST_PRICING_JSON") or "").strip()
     if raw:
@@ -88,8 +100,15 @@ def _pricing() -> dict[str, dict[str, float | None]]:
             for model, rates in override.items():
                 if isinstance(rates, dict):
                     table.setdefault(model, {}).update(rates)
-        except (json.JSONDecodeError, AttributeError):
-            pass
+        except (json.JSONDecodeError, AttributeError) as exc:
+            if not _pricing_override_warned:
+                _pricing_override_warned = True
+                print(
+                    f"[no-hide] COST_PRICING_JSON ignored (parse failed) — "
+                    f"built-in PRICING table in effect: "
+                    f"{type(exc).__name__}: {exc}",
+                    file=sys.stderr, flush=True,
+                )
     return table
 
 

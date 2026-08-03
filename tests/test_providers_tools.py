@@ -78,6 +78,58 @@ class TestProviderTools(unittest.TestCase):
         self.assertEqual(oai[-1]["role"], "user")
         self.assertIn("learner", oai[-1]["content"])
 
+    def test_tool_result_is_neutral_acknowledgment(self):
+        """Honest harness result (full-code-audit S7.12): grade_why_ok
+        validation runs later in process_turn — the tool_result must say
+        `received`, never claim `ok`/applied before validation."""
+        from tutor.conv_session import tutor_turn
+
+        calls: list[dict] = []
+
+        class _FakeMessages:
+            def create(self, **kwargs):
+                calls.append(kwargs)
+                if len(calls) == 1:
+                    return SimpleNamespace(
+                        content=[SimpleNamespace(
+                            type="tool_use",
+                            id="c1",
+                            name="update_character_sheet",
+                            input={"skills": {"IP-01": {"confidence": 0.4}}},
+                        )],
+                        usage=None,
+                        stop_reason="tool_use",
+                    )
+                return SimpleNamespace(
+                    content=[SimpleNamespace(type="text", text="¡Hola!")],
+                    usage=None,
+                    stop_reason="end_turn",
+                )
+
+        client = SimpleNamespace(messages=_FakeMessages())
+        caps = SimpleNamespace(model="fake-model")
+        final, text, delta, usage, blocks = tutor_turn(
+            client, caps, [], [{"role": "user", "content": "hola"}],
+            tools=[UPDATE_CHARACTER_SHEET_TOOL], max_tool_rounds=1,
+        )
+        # Loop behavior kept: second round produced the learner text
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(text, "¡Hola!")
+        self.assertEqual(delta["skills"]["IP-01"]["confidence"], 0.4)
+        # The harness tool_result in round 2's messages: neutral receipt
+        results = [
+            b for m in calls[1]["messages"]
+            if isinstance(m.get("content"), list)
+            for b in m["content"]
+            if isinstance(b, dict) and b.get("type") == "tool_result"
+        ]
+        self.assertEqual(len(results), 1)
+        payload = json.loads(results[0]["content"])
+        self.assertEqual(payload["received"], True)
+        self.assertEqual(payload["tool"], "update_character_sheet")
+        self.assertNotIn("ok", payload)
+        self.assertNotIn("applied", payload)
+
     def test_split_and_merge_tool_delta(self):
         final = SimpleNamespace(content=[
             SimpleNamespace(type="text", text="Mucho gusto."),

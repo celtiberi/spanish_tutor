@@ -16,11 +16,11 @@ Results: evals/results/<stamp>-student/ with per-session report JSON
 
 Isolation (operator-pollution incident 2026-07-28 — tutor/progress_ledger.py
 docstring, tests/test_progress_ledger.py): per-run sheets under the results
-stamp, so logs/character_sheet.json is NEVER touched; PROGRESS_LEDGER_PATH
-and COST_LEDGER_PATH point at per-run files; session logging off; focus rail
-off; image generation off. The tutor package is imported INSIDE main(),
-after the ledger env is pinned — tutor/costs.py binds COST_LEDGER_PATH at
-import time, so import order here is load-bearing.
+stamp, so logs/character_sheet.json is NEVER touched; PROGRESS_LEDGER_PATH,
+COST_LEDGER_PATH and GRADE_LOG_PATH point at per-run files; session logging
+off; focus rail off; image generation off. The tutor package is imported
+INSIDE main(), after the ledger env is pinned — tutor/costs.py binds
+COST_LEDGER_PATH at import time, so import order here is load-bearing.
 """
 
 from __future__ import annotations
@@ -35,7 +35,10 @@ from pathlib import Path
 # --- env clamps BEFORE any tutor import (run_conv_smoke pattern) ---
 os.environ.setdefault("TEACHER_MODE", "planned")
 os.environ.setdefault("TEACH_IMAGE_GENERATE", "0")
-os.environ.setdefault("SHEET_TOOLS", "false")
+# Tools ON (full-code-audit S7.11): update_character_sheet is the ONLY
+# grading path since the rules-based sheet update was deleted 2026-07-31 —
+# with tools off this smoke structurally cannot exercise grading.
+os.environ.setdefault("SHEET_TOOLS", "true")
 # Voice is browser-triggered on the web path and never fires in this
 # headless harness (verified: zero `tts` rows in run ledgers) — clamped
 # anyway so no future change can silently bill audio for a text sim.
@@ -52,9 +55,14 @@ RESULTS_ROOT = Path(__file__).resolve().parent / "results"
 def _pin_ledgers(outdir: Path) -> None:
     """Per-run ledger files. Hard assignment, not setdefault: an ambient
     ledger path pointing at the real files is exactly the pollution the
-    2026-07-28 incident wrote up."""
+    2026-07-28 incident wrote up. GRADE_LOG_PATH rides the same pin
+    (full-code-audit S7.11): with SHEET_TOOLS on, tool grades would
+    otherwise land in the learner's live logs/sheet_grades.jsonl —
+    grade_log.default_grade_log_path honors the env var, so no plumbing
+    through ConvSession is needed."""
     os.environ["PROGRESS_LEDGER_PATH"] = str(outdir / "progress.jsonl")
     os.environ["COST_LEDGER_PATH"] = str(outdir / "costs.jsonl")
+    os.environ["GRADE_LOG_PATH"] = str(outdir / "sheet_grades.jsonl")
 
 
 def _patch_runtime_for_smoke(config) -> None:
@@ -119,7 +127,7 @@ def main() -> None:
     print(
         f"[student-smoke] isolation sheets={outdir / 'sheets'} "
         f"(not {config.CHARACTER_SHEET_PATH}); "
-        f"ledgers={outdir}/progress.jsonl,costs.jsonl"
+        f"ledgers={outdir}/progress.jsonl,costs.jsonl,sheet_grades.jsonl"
     )
 
     summary: list[dict] = []
@@ -138,7 +146,7 @@ def main() -> None:
                 sheet_path=sheet_path,
                 reset_sheet=True,
                 live_print=not args.quiet,
-                use_tools=False,     # rules-based sheet update (smoke clamp)
+                use_tools=True,      # tool grading is the ONLY grades path
                 session_log=False,   # no logs/sessions writes from eval traffic
                 sim_log_dir=outdir / "sessions",
             )
@@ -192,6 +200,7 @@ def main() -> None:
             "default_character_sheet_untouched": str(config.CHARACTER_SHEET_PATH),
             "progress_ledger": os.environ.get("PROGRESS_LEDGER_PATH"),
             "cost_ledger": os.environ.get("COST_LEDGER_PATH"),
+            "grade_log": os.environ.get("GRADE_LOG_PATH"),
             "session_log": False,
             "teach_image_generate": False,
         },

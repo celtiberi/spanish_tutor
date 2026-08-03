@@ -122,8 +122,18 @@ def install_teach_image_generator() -> bool:
         from . import teach_assets as ta
 
         ta.GENERATE_ON_MISS = True
-    except Exception:
-        pass
+    except Exception as e:
+        # No-hide (full-code-audit S5.9): this used to log
+        # "generate_on_miss=on" unconditionally after the swallow — lying
+        # telemetry. Only claim ON when the flag actually flipped.
+        import sys
+
+        print(
+            f"[no-hide] image_gen: generator registered but generate-on-"
+            f"miss could NOT be enabled (misses will not generate): "
+            f"{type(e).__name__}: {e}", file=sys.stderr, flush=True,
+        )
+        return False
     log.info(
         "image_gen: registered generator model=%s generate_on_miss=on",
         image_model(),

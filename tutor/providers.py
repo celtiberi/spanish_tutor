@@ -163,6 +163,20 @@ def messages_to_openai(
     return oai
 
 
+def _warn_tool_args_dropped(tool_name: Any, why: str, raw_args: Any) -> None:
+    """No-hide (full-code-audit S5.10): tool-call arguments silently
+    dropping to {} turns a malformed grade into "the model sent an empty
+    update" — the drop must be visible."""
+    import sys
+
+    raw = raw_args if isinstance(raw_args, str) else repr(raw_args)
+    print(
+        f"[no-hide] provider tool-call args DROPPED to {{}} "
+        f"tool={tool_name!r}: {why}; raw={raw[:200]!r}",
+        file=sys.stderr, flush=True,
+    )
+
+
 def parse_openai_message_to_anthropic(choice_msg: dict, finish_reason: str | None):
     """Map an OpenAI chat completion message into Anthropic-like content blocks."""
     blocks: list[SimpleNamespace] = []
@@ -175,9 +189,14 @@ def parse_openai_message_to_anthropic(choice_msg: dict, finish_reason: str | Non
         raw_args = fn.get("arguments") or "{}"
         try:
             args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            _warn_tool_args_dropped(fn.get("name"), f"{type(e).__name__}: {e}",
+                                    raw_args)
             args = {}
         if not isinstance(args, dict):
+            _warn_tool_args_dropped(fn.get("name"),
+                                    f"non-object args ({type(args).__name__})",
+                                    raw_args)
             args = {}
         blocks.append(SimpleNamespace(
             type="tool_use",
@@ -192,13 +211,20 @@ def parse_openai_message_to_anthropic(choice_msg: dict, finish_reason: str | Non
         raw_args = fc.get("arguments") or "{}"
         try:
             args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            _warn_tool_args_dropped(fc.get("name"), f"{type(e).__name__}: {e}",
+                                    raw_args)
+            args = {}
+        if not isinstance(args, dict):
+            _warn_tool_args_dropped(fc.get("name"),
+                                    f"non-object args ({type(args).__name__})",
+                                    raw_args)
             args = {}
         blocks.append(SimpleNamespace(
             type="tool_use",
             id="call_0",
             name=fc.get("name") or "",
-            input=args if isinstance(args, dict) else {},
+            input=args,
         ))
 
     if not blocks:

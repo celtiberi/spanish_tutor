@@ -802,3 +802,123 @@ class TestNumbersMigration(unittest.TestCase):
         entry = loaded["grammar"]["numbers_0_100"]
         self.assertEqual(entry["status"], "known")
         self.assertAlmostEqual(float(entry["confidence"]), 0.9)
+
+
+class TestCorruptSheetQuarantine(unittest.TestCase):
+    """load_sheet corrupt-file branch (no-hide, full-code-audit S5.1):
+    quarantine the evidence, shout, return default — never raise."""
+
+    def test_corrupt_file_quarantined_and_default_returned(self):
+        import contextlib
+        import io
+
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "sheet.json"
+            p.write_text("{not valid json", encoding="utf-8")
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                loaded = load_sheet(p)
+            # Default sheet returned, nothing raised
+            self.assertIn("IP-01", loaded["skills"])
+            # Corrupt original renamed aside so the next save cannot
+            # overwrite the evidence
+            self.assertFalse(p.exists())
+            quarantined = list(Path(d).glob("sheet.json.corrupt-*"))
+            self.assertEqual(len(quarantined), 1)
+            self.assertEqual(
+                quarantined[0].read_text(encoding="utf-8"), "{not valid json"
+            )
+            # Visible, prefixed error
+            self.assertIn("[no-hide]", err.getvalue())
+            self.assertIn("corrupt", err.getvalue())
+
+    def test_quarantine_then_save_does_not_touch_evidence(self):
+        with tempfile.TemporaryDirectory() as d:
+            import contextlib
+            import io
+
+            p = Path(d) / "sheet.json"
+            p.write_text("garbage", encoding="utf-8")
+            with contextlib.redirect_stderr(io.StringIO()):
+                loaded = load_sheet(p)
+            save_sheet(p, loaded)
+            quarantined = list(Path(d).glob("sheet.json.corrupt-*"))
+            self.assertEqual(len(quarantined), 1)
+            self.assertEqual(
+                quarantined[0].read_text(encoding="utf-8"), "garbage"
+            )
+            # The fresh save parses fine now
+            self.assertIn("skills", json.loads(p.read_text()))
+
+    def test_valid_sheet_not_quarantined(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "sheet.json"
+            save_sheet(p, default_sheet())
+            load_sheet(p)
+            self.assertTrue(p.exists())
+            self.assertEqual(list(Path(d).glob("*.corrupt-*")), [])
+
+
+class TestGradeFeedVisibility(unittest.TestCase):
+    """Grade-feed swallow (no-hide, full-code-audit S5.2): a broken grade
+    log never breaks the teaching turn but is VISIBLE; an ability move the
+    feed skipped for lack of reason mints a typed note."""
+
+    def test_grade_log_failure_shouts_but_turn_survives(self):
+        import contextlib
+        import io
+        from unittest import mock
+
+        err = io.StringIO()
+        with mock.patch(
+            "tutor.grade_log.record_grades_from_diff",
+            side_effect=OSError("disk full"),
+        ), contextlib.redirect_stderr(err):
+            s, _, notes = process_turn(
+                default_sheet(),
+                "Hola, estoy bien",
+                "¡Qué bien!",
+                tool_delta={
+                    "reason": "Learner produced Estoy bien unprompted",
+                    "skills": {
+                        "IP-04": {"status": "emerging", "confidence": 0.4},
+                    },
+                },
+            )
+        # Teaching turn survived; the sheet still moved
+        self.assertEqual(s["skills"]["IP-04"]["status"], "emerging")
+        self.assertIn("[no-hide] grade_log write failed", err.getvalue())
+        self.assertIn("disk full", err.getvalue())
+
+    def test_ability_move_without_reason_mints_typed_note(self):
+        # Tripwire wiring: if ability sections ever move under a tool call
+        # whose reason is empty, the skip is a typed note, not silence.
+        from unittest import mock
+
+        with mock.patch(
+            "tutor.grade_log.ability_grade_diffs",
+            return_value=[{"field_id": "IP-04", "section": "skills"}],
+        ):
+            _, _, notes = process_turn(
+                default_sheet(),
+                "Hola",
+                "¡Hola!",
+                tool_delta={"affect": {"energy": "good"}},
+            )
+        self.assertIn("why=grade_unrecorded:no_reason", notes)
+
+    def test_reasoned_grade_mints_no_unrecorded_note(self):
+        with tempfile.TemporaryDirectory() as d:
+            _, _, notes = process_turn(
+                default_sheet(),
+                "Hola, estoy bien",
+                "¡Qué bien!",
+                tool_delta={
+                    "reason": "Learner produced Estoy bien unprompted",
+                    "skills": {
+                        "IP-04": {"status": "emerging", "confidence": 0.4},
+                    },
+                },
+                grade_log_path=str(Path(d) / "grades.jsonl"),
+            )
+        self.assertNotIn("why=grade_unrecorded:no_reason", notes)

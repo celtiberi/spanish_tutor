@@ -1020,18 +1020,39 @@ def build_progress_payload(
         elif band == "emerging":
             emerging += 1
 
+    # ENGINEERING §3.4 (full-code-audit S5.6): a crashed check reports
+    # UNCHECKED (None), never a legitimate-looking 0/{} — and shouts on
+    # stderr. No web consumer reads these fields (the /api/progress route
+    # serves grade_log.build_grades_payload; app.js reads counts/grades/
+    # empty only), so None renders as absent, not as "nothing due".
+    due_soon: int | None
     try:
         from .retrieval_scheduler import due_items
 
         due_soon = len(due_items(sheet, today=today, max_due=10))
-    except Exception:
-        due_soon = 0
+    except Exception as e:
+        import sys as _sys
+
+        print(
+            f"[no-hide] progress payload: due_items crashed — due_soon is "
+            f"UNCHECKED (None), not 0: {type(e).__name__}: {e}",
+            file=_sys.stderr, flush=True,
+        )
+        due_soon = None
+    score: dict | None
     try:
         from .character_sheet import compute_progress_score
 
         score = compute_progress_score(sheet)
-    except Exception:
-        score = {}
+    except Exception as e:
+        import sys as _sys
+
+        print(
+            f"[no-hide] progress payload: compute_progress_score crashed — "
+            f"score is UNCHECKED (None), not empty: {type(e).__name__}: {e}",
+            file=_sys.stderr, flush=True,
+        )
+        score = None
 
     return {
         "groups": groups,

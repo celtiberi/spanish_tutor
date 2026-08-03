@@ -180,7 +180,19 @@ def _prompt_cap(env_name: str, default_when_truncate: int) -> int:
         try:
             return max(0, int(raw))
         except ValueError:
-            pass
+            # No-hide (full-code-audit S5.10): a typo'd cap silently
+            # becoming the truncate-mode default (or unlimited) forks
+            # teacher context without a trace.
+            import sys as _sys
+
+            fallback = (
+                f"truncate default {default_when_truncate}"
+                if TEACHER_CONTEXT_TRUNCATE else "unlimited (0)"
+            )
+            print(
+                f"[no-hide] {env_name}={raw!r} is not an integer — ignored; "
+                f"using {fallback}", file=_sys.stderr, flush=True,
+            )
     if TEACHER_CONTEXT_TRUNCATE:
         return default_when_truncate
     return 0  # unlimited

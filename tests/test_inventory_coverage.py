@@ -288,6 +288,11 @@ class SidecarSoleSource(unittest.TestCase):
             self.assertTrue(0.0 <= float(meta.get("visual")) <= 1.0, key)
 
     def test_missing_sidecar_degrades_to_empty_never_crashes(self) -> None:
+        """Degrade to {} per call, LOUDLY, and never cache the failure
+        (no-hide, full-code-audit S5.7): a later fixed sidecar loads."""
+        import contextlib
+        import io
+
         import tutor.teach_assets as ta
 
         saved = ta._sidecar_overlay
@@ -296,7 +301,12 @@ class SidecarSoleSource(unittest.TestCase):
                 "tutor.config.DEFAULT_PACK_DIR", Path(tmp)
             ):
                 ta._sidecar_overlay = None
-                self.assertEqual(ta._lexicon(), {})
+                err = io.StringIO()
+                with contextlib.redirect_stderr(err):
+                    self.assertEqual(ta._lexicon(), {})
+                # Visible failure; overlay NOT cached as permanently empty
+                self.assertIn("[no-hide]", err.getvalue())
+                self.assertIsNone(ta._sidecar_overlay)
         finally:
             ta._sidecar_overlay = saved
 

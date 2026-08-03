@@ -108,13 +108,22 @@ class SpeakIn(BaseModel):
 
 
 def _close_meta(meta: dict, *, persist_sheet: bool = True) -> None:
-    """Close one session meta record (session_end written; never raises)."""
+    """Close one session meta record (session_end written; never raises —
+    but a failed close is VISIBLE: no-hide, full-code-audit S5.4)."""
     sess: ConversationalSession | None = (meta or {}).get("session")
     if sess:
         try:
             sess.close(persist_sheet=persist_sheet)
-        except Exception:
-            pass
+        except Exception as e:
+            import sys
+            import traceback
+
+            print(
+                f"[no-hide] session close failed (sheet may be "
+                f"unpersisted): {type(e).__name__}: {e}",
+                file=sys.stderr, flush=True,
+            )
+            traceback.print_exc()
 
 
 def _purge_stale() -> None:
@@ -448,8 +457,16 @@ def create_app() -> FastAPI:
                     try:
                         # Keep character sheet; only drop chat memory
                         old["session"].close(persist_sheet=True)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        import sys
+                        import traceback
+
+                        print(
+                            f"[no-hide] session close failed (sheet may be "
+                            f"unpersisted): {type(e).__name__}: {e}",
+                            file=sys.stderr, flush=True,
+                        )
+                        traceback.print_exc()
             sid = None
 
         sid, session = _get_or_create(sid)
@@ -580,8 +597,16 @@ def create_app() -> FastAPI:
                 # the single learner-epoch mark (Phase 1 batch 2 — calling
                 # the old session's reset_sheet here would double-mark).
                 old["session"].close(persist_sheet=not body.reset_sheet)
-            except Exception:
-                pass
+            except Exception as e:
+                import sys
+                import traceback
+
+                print(
+                    f"[no-hide] session close failed (sheet may be "
+                    f"unpersisted): {type(e).__name__}: {e}",
+                    file=sys.stderr, flush=True,
+                )
+                traceback.print_exc()
         for meta in orphans:
             _close_meta(meta, persist_sheet=True)
         # Nuclear wipe even if no live session (stale cookie / cold start)

@@ -484,9 +484,12 @@ def tutor_turn(
             result_blocks.append({
                 "type": "tool_result",
                 "tool_use_id": getattr(b, "id", "call_0"),
+                # Honest acknowledgment only (full-code-audit S7): the
+                # grade_why_ok validation runs LATER in process_turn — a
+                # delta that will be rejected must not be told "ok".
                 "content": json.dumps({
-                    "ok": True,
-                    "applied": getattr(b, "name", ""),
+                    "received": True,
+                    "tool": getattr(b, "name", ""),
                 }),
             })
         work_messages = work_messages + [
@@ -494,8 +497,8 @@ def tutor_turn(
             {"role": "user", "content": result_blocks + [{
                 "type": "text",
                 "text": (
-                    "(harness) Sheet update recorded. Now send the "
-                    "learner-facing reply only — no JSON, no tool talk."
+                    "(harness) Sheet update received for review. Now send "
+                    "the learner-facing reply only — no JSON, no tool talk."
                 ),
             }]},
         ]
@@ -638,8 +641,13 @@ class ConversationalSession:
             self.association_table: dict | None = load_association_table(
                 self.pack_dir
             )
-        except (FileNotFoundError, ValueError, OSError):
+        except (FileNotFoundError, ValueError, OSError) as e:
             self.association_table = None
+            # No-hide (full-code-audit S5.8): the introduce router silently
+            # disabling for a whole session is a visible event, not a
+            # comment. None fallback stays — a broken table must not kill
+            # the session.
+            self._oops("association_table.load", e)
         if log:
             self.logger = SessionLogger(
                 arch="conversational",
@@ -650,7 +658,9 @@ class ConversationalSession:
                     "model": self.model,
                     "pack": str(self.pack_dir),
                     "sheet": str(self.sheet_path),
-                    "sheet_update": "tool" if use_tools else "rules",
+                    # "frozen", not "rules": the rules-based sheet update
+                    # was deleted 2026-07-31 — without tools ability freezes.
+                    "sheet_update": "tool" if use_tools else "frozen",
                     "surface": label,
                 },
             )
@@ -1165,6 +1175,23 @@ class ConversationalSession:
                 cached_input_tokens=(usage or {}).get("cached_input_tokens", 0),
             )
 
+        # use_tools is the SINGLE authority on the tool path (it decides
+        # whether tools are ever sent to the model). A non-None delta
+        # arriving while tools are off is an internal wiring error — the
+        # delta is still discarded, but VISIBLY (full-code-audit S7.13),
+        # and the TurnResult below reports the discard (tool_delta=None),
+        # not the phantom delta.
+        gate_mismatch_notes: list[str] = []
+        if tool_delta is not None and not self.use_tools:
+            try:
+                raise RuntimeError(
+                    "non-None tool_delta discarded: use_tools=False but a "
+                    "tool delta reached _finish"
+                )
+            except RuntimeError as e:
+                gate_mismatch_notes = self._oops("tool_delta_gate_mismatch", e)
+            tool_delta = None
+
         # Progress rail: band snapshot BEFORE sheet maintenance so error /
         # can-do crossings this turn are change-gated (no seeded-sheet floods).
         _prog_prev = {
@@ -1178,7 +1205,7 @@ class ConversationalSession:
             self.sheet,
             learner,
             composed,
-            tool_delta=tool_delta if self.use_tools else None,
+            tool_delta=tool_delta,
             event_sink=sheet_events,
             session_id=getattr(self, "progress_session_id", "") or "",
         )
@@ -1200,6 +1227,10 @@ class ConversationalSession:
             ]
         else:  # safety net: strings without triples — classify at the bus
             notes = [ev.absorb(n, stage="sheet") for n in notes]
+        if gate_mismatch_notes:
+            # already emitted as INTERNAL_ERROR events by _oops above —
+            # surface the render in the turn notes too.
+            notes = list(notes) + gate_mismatch_notes
         notes = list(notes) + self._progress_sheet_crossings(_prog_prev)
         if refresh_focus:
             # Static rail repaint (synchronous, cheap — the model enricher
