@@ -49,7 +49,10 @@ class TestTruncationGate(unittest.TestCase):
             truncated=True,
         )
         self.assertIn("gate:truncated", g.faults)
-        self.assertIn("cut off", g.repair_instruction.lower())
+        # No-hide policy (2026-08-01): the auto-rewrite copy is gone; the
+        # field now carries a visible diagnosis, never a rewrite prompt.
+        self.assertIn("gate fail", g.repair_instruction.lower())
+        self.assertIn("gate:truncated", g.repair_instruction)
 
     def test_untruncated_reply_has_no_truncation_fault(self):
         g = check_output_gate(
