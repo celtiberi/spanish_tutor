@@ -915,8 +915,10 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
 .debug-hint { font-size: 0.72rem; }
 .debug-body {
   padding: 0 0.9rem 0.8rem;
-  max-height: 26rem;
-  overflow-y: auto;
+  /* One scroll surface: the inner .dbg-view scrolls; the body grows
+     to ~full viewport (USER 2026-08-03: "much taller"). */
+  max-height: none;
+  overflow-y: visible;
 }
 .dbg-entry {
   border: 1px solid var(--border);
@@ -993,4 +995,4 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
   background: color-mix(in srgb, currentColor 12%, transparent);
 }
 .dbg-tabbar .dbg-model { margin-left: auto; font-size: 0.7rem; }
-.dbg-view { max-height: 60vh; overflow-y: auto; }
+.dbg-view { max-height: calc(100vh - 14rem); overflow-y: auto; }
