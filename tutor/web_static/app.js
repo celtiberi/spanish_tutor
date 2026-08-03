@@ -172,7 +172,7 @@ function renderTutorParts(parts, fallbackContent) {
   return blocks.length ? blocks.join("") : esc(fallbackContent || "");
 }
 
-function addBubble(role, content, { inputMode, parts } = {}) {
+function addBubble(role, content, { inputMode, parts, timing } = {}) {
   const div = document.createElement("div");
   div.className = `bubble ${role}`;
   const who =
@@ -185,9 +185,18 @@ function addBubble(role, content, { inputMode, parts } = {}) {
   } else {
     body = esc(content || "");
   }
+  let timeLine = "";
+  if (role === "tutor") {
+    const at = new Date().toLocaleTimeString();
+    const bits = [at];
+    if (timing?.model_ms != null) bits.push(`model ${(timing.model_ms / 1000).toFixed(1)}s`);
+    if (timing?.server_ms != null) bits.push(`server ${(timing.server_ms / 1000).toFixed(1)}s`);
+    if (timing?.total_ms != null) bits.push(`round-trip ${(timing.total_ms / 1000).toFixed(1)}s`);
+    timeLine = `<span class="bubble-time">${esc(bits.join(" · "))}</span>`;
+  }
   div.innerHTML = who
-    ? `<span class="who">${who}${mode}</span>${body}`
-    : body;
+    ? `<span class="who">${who}${mode}</span>${body}${timeLine}`
+    : body + timeLine;
   els.messages.appendChild(div);
   els.messages.scrollTop = els.messages.scrollHeight;
   return div;
@@ -1386,11 +1395,13 @@ async function sendMessage(text, inputMode = "text", opts = {}) {
   setMicStatus("working", "Tutor is thinking…");
   const typing = addBubble("system", "Tutor is thinking…");
   typing.classList.add("typing");
+  const _sentAt = performance.now();
   try {
     const data = await api("/api/chat", {
       method: "POST",
       body: JSON.stringify({ message: text, input_mode: inputMode }),
     });
+    const _totalMs = Math.round(performance.now() - _sentAt);
     typing.remove();
     // No-hide (2026-08-03): a turn that carries an error must SHOW it —
     // an empty tutor bubble with the error invisible was the silent-
@@ -1404,7 +1415,14 @@ async function sendMessage(text, inputMode = "text", opts = {}) {
     for (const n of internalErrs) {
       addBubble("system", `⚠ ${n}`);
     }
-    addBubble("tutor", data.reply, { parts: data.parts });
+    addBubble("tutor", data.reply, {
+      parts: data.parts,
+      timing: {
+        model_ms: data.model_ms,
+        server_ms: data.server_ms,
+        total_ms: _totalMs,
+      },
+    });
     setNotes(data.notes);
     renderSheet(data.sheet); // score + static rail immediately
     lastFocusVersion = data.sheet?.focus_version ?? lastFocusVersion;

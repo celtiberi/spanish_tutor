@@ -521,7 +521,9 @@ def create_app() -> FastAPI:
                 raise HTTPException(status_code=502, detail=open_turn.error)
             with _lock:
                 meta["opened"] = True
+        _t0 = time.perf_counter()
         turn = session.user_turn(body.message, input_mode=body.input_mode)
+        _server_ms = int((time.perf_counter() - _t0) * 1000)
         if turn.error:
             raise HTTPException(status_code=502, detail=turn.error)
         response.set_cookie(
@@ -529,6 +531,7 @@ def create_app() -> FastAPI:
         )
         return {
             **turn.to_dict(),
+            "server_ms": _server_ms,
             "messages": session.messages_for_ui,
             "sheet": session.sheet_public(),
         }

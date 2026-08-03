@@ -333,6 +333,7 @@ class TurnResult:
     tool_delta: dict | None = None
     input_mode: str = "text"  # text | speech (for future audio pipeline)
     stop_reason: str = ""
+    model_ms: int | None = None  # wall time of the tutor model call
     error: str | None = None
     focus_meta: dict = field(default_factory=dict)
     # Structured multi-part reply (recast / explain / continue / …)
@@ -347,6 +348,7 @@ class TurnResult:
     def to_dict(self) -> dict:
         return {
             "reply": self.reply,
+            "model_ms": self.model_ms,
             "notes": self.notes,
             "next_best": self.next_best,
             "skills": self.skills,

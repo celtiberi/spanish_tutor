@@ -1008,3 +1008,9 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
   margin-top: 0.15rem;
 }
 .j-chip.grade-past { opacity: 0.62; }
+
+/* Tutor bubble timing stamp (2026-08-03: model vs server vs round-trip) */
+.bubble-time {
+  display: block; font-size: 0.66rem; color: var(--muted);
+  margin-top: 0.35rem; user-select: none;
+}

@@ -161,6 +161,7 @@ class TurnContext:
     model_raw: str = ""                             # untouched provider text
     #   (pre <plan>-strip — what was RECEIVED, for the traffic log)
     plan_turn: bool = False                         # this call was a PLAN turn
+    model_ms: int | None = None                     # tutor-call wall time
     tool_delta: Any = None                          # sheet tool blocks
     usage: dict | None = None                       # token usage (merged)
     error_result: Any = None                        # TurnResult on call error
@@ -573,6 +574,9 @@ def stage_model_call(session, ctx: TurnContext) -> None:
     from . import config
     from .conv_session import TurnResult, tutor_turn
 
+    import time as _time
+
+    _t0 = _time.perf_counter()
     try:
         # Ability grades via update_character_sheet when SHEET_TOOLS
         # (default on). No regex hard-observer ability path (2026-07-31).
@@ -601,6 +605,7 @@ def stage_model_call(session, ctx: TurnContext) -> None:
         )
         return
     ctx.final = final
+    ctx.model_ms = int((_time.perf_counter() - _t0) * 1000)
     # Two-phase context (2026-08-03): harvest the model's OWN <plan> /
     # <replan/> from the raw reply BEFORE anything parses it, so plan
     # text can never leak into the learner-visible message. Code stores
@@ -836,6 +841,7 @@ def stage_finish(session, ctx: TurnContext) -> None:
         is_open=ctx.is_open,
         skip_log=True,  # log after mode/plan/images attached
     )
+    ctx.result.model_ms = ctx.model_ms
 
 
 def stage_introduce_ledger(session, ctx: TurnContext) -> None:
