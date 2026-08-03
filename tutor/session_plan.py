@@ -77,14 +77,24 @@ _PLAN_RE = re.compile(r"<plan>\s*(.*?)\s*</plan>", re.S | re.I)
 _REPLAN_RE = re.compile(r"<replan\s*/?>", re.I)
 
 
+_INTERNAL_RE = re.compile(
+    r"<!--\s*INTERNAL:BEGIN\b.*?INTERNAL:END\s*-->", re.S
+)
+
+
 def load_pedagogy() -> str:
-    """PEDAGOGY.md verbatim — it is the teaching guide, written for the
-    teacher. Missing file → "" (visible: the plan prompt then simply
-    lacks the guide; no silent substitute)."""
+    """PEDAGOGY.md for the teacher, with INTERNAL blocks cut (USER
+    2026-08-03: bookkeeping stays in the file for us, marked so we know
+    where to cut; the AI model gets only the teaching content).
+    Missing file → "" (visible: the plan prompt then simply lacks the
+    guide; no silent substitute)."""
     try:
-        return PEDAGOGY_PATH.read_text(encoding="utf-8").strip()
+        raw = PEDAGOGY_PATH.read_text(encoding="utf-8")
     except OSError:
         return ""
+    cut = _INTERNAL_RE.sub("", raw)
+    # Collapse the blank runs the cuts leave behind.
+    return re.sub(r"\n{3,}", "\n\n", cut).strip()
 
 
 def extract_plan(raw: str) -> tuple[str | None, bool, str]:

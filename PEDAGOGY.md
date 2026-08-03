@@ -1,5 +1,10 @@
 # PEDAGOGY.md — how to teach
 
+<!-- INTERNAL:BEGIN — everything to INTERNAL:END is project bookkeeping.
+     load_pedagogy() (tutor/session_plan.py) cuts INTERNAL blocks before
+     the file is sent to the AI teacher; the teacher gets only teaching
+     content. Add more blocks with the same markers anywhere in the file. -->
+
 **Scope (USER-corrected 2026-08-03: "Pedagogy is how to teach. That
 [architecture] is a coding decision"):** this file contains ONLY teaching
 knowledge — the theory of how adults acquire a second language (§0) and
@@ -20,6 +25,8 @@ architecture decision ("code owns every teaching decision") lived here
 wearing teaching's authority, which is how a hard-coded curriculum came
 to feel like settled science. Teaching claims and engineering choices
 argue in different courts; this file is the teaching court only.
+
+<!-- INTERNAL:END -->
 
 ---
 

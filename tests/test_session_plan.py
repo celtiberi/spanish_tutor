@@ -81,12 +81,30 @@ class TestExtractPlan:
         assert extract_plan(None) == (None, False, "")
 
 
-def test_pedagogy_loads_verbatim():
+def test_pedagogy_loads_teaching_content():
     text = load_pedagogy()
     assert text, "PEDAGOGY.md missing or unreadable"
     # The split (2026-08-03) left ONLY teaching law here; the plan turn
     # must hand the teacher the real guide, not the engineering file.
     assert "§0" in text or "theory" in text.lower()
+    assert "§2" in text
+
+
+def test_pedagogy_internal_blocks_cut():
+    # USER 2026-08-03: bookkeeping stays in the FILE (marked), never in
+    # what the AI teacher receives.
+    from tutor.session_plan import PEDAGOGY_PATH
+
+    raw = PEDAGOGY_PATH.read_text(encoding="utf-8")
+    assert "INTERNAL:BEGIN" in raw and "INTERNAL:END" in raw, (
+        "PEDAGOGY.md lost its internal-block markers"
+    )
+    sent = load_pedagogy()
+    assert "INTERNAL" not in sent
+    assert "How this file got confused" not in sent
+    assert "ENGINEERING.md" not in sent.split("§0")[0], (
+        "bookkeeping preamble leaked into the teacher copy"
+    )
 
 
 # ---------------------------------------------------------------------------
