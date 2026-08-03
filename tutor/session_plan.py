@@ -54,15 +54,21 @@ Before your normal `<tutor>` reply, write a session plan the future you
 can teach from:
 
 <plan>
-(Your words, as long as it needs to be — this is the ONE turn with
-everything in front of you; later turns get only this plan, so invest
-here. A strong plan usually covers: where this learner is and the
-evidence for it; the arc and goals for THIS session; which due items to
-weave in and how; new items with the anchor/gloss you'll introduce them
-with; topics that fit this learner; contingencies — if X confuses them,
-fall back to Y; what evidence would earn a sheet grade; what to avoid —
-already-answered questions, known-material quizzes.)
+LEARNER — where they are, with the evidence you're reading it from.
+GOALS — what THIS session should accomplish.
+ARC — how you expect the session to flow, beat by beat.
+TARGETS — due items to weave in and how; new items with the exact
+anchor/gloss you'll introduce each with.
+CONTINGENCIES — if X stalls or confuses them, you'll do Y (write
+several; sessions rarely follow the happy path).
+EVIDENCE — which productions would earn a sheet grade, and for what.
+AVOID — already-answered questions, known-material quizzes,
+out-of-scope items.
 </plan>
+
+Write real content under every heading, as long as it needs to be —
+this is the ONE turn with everything in front of you; later turns get
+only this plan, so invest here.
 
 The learner NEVER sees the plan. On any later turn you may revise it by
 emitting a new <plan> block, and if you need the full teaching guide

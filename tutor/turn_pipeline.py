@@ -512,6 +512,10 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
         sheet_summary=format_sheet_for_prompt(
             session.sheet,
             association_table=getattr(session, "association_table", None),
+            # The itemized word inventory is plan-turn material; rounds
+            # run on the model's plan + learner state (full path keeps
+            # the historical everything-every-turn shape).
+            include_domain_targets=(not plan_mode) or needs_plan,
         ),
         teaching_data={"due_for_review": due_facts},
         session_plan=(

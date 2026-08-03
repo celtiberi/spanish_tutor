@@ -516,6 +516,7 @@ def format_sheet_for_prompt(
     *,
     max_lex: int | None = None,
     association_table: dict | None = None,
+    include_domain_targets: bool = True,
 ) -> str:
     """Full character sheet for the tutor model (testing: no silent slimming).
 
@@ -556,14 +557,20 @@ def format_sheet_for_prompt(
     payload = {
         "now": now_iso(),
         # Personal-data capture disabled 2026-07-28: identity is omitted.
-        # The sheet carries the full target inventory (domain model) plus
+        # The sheet carries the target inventory (domain model) plus
         # learner state, so the model can write its session plan from one
-        # artifact (USER 2026-08-03). Untouched targets ride compactly by
-        # theme; touched ones already appear in lexicon/grammar with
-        # learner state. Selection lives here; SEQUENCE never does.
+        # artifact (USER 2026-08-03). The itemized untouched-targets list
+        # is PLANNING material: it rides PLAN turns only (USER 2026-08-03:
+        # "Why are we sending this… a list of words?" — rounds get the
+        # plan + learner state; domain_scope stays every turn, it is the
+        # live decline-briefly law). Selection lives here; SEQUENCE never.
         "domain_scope": DOMAIN_SCOPE,
-        "domain_targets_not_yet_touched": _untouched_targets(
-            lex, association_table
+        **(
+            {"domain_targets_not_yet_touched": _untouched_targets(
+                lex, association_table
+            )}
+            if include_domain_targets
+            else {}
         ),
         "active_error_focus": active_focus,
         "error_patterns": errors,
