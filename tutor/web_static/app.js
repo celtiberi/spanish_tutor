@@ -88,7 +88,6 @@ function renderTeachImages(parts) {
 
 function renderTutorParts(parts, fallbackContent) {
   if (!parts || !parts.structured) {
-    // Still show teach images if present on unstructured reply
     const img = renderTeachImages(parts);
     return img + esc(fallbackContent || "");
   }
@@ -97,58 +96,27 @@ function renderTutorParts(parts, fallbackContent) {
   const imgBlock = renderTeachImages(parts);
   if (imgBlock) blocks.push(imgBlock);
 
-  if (parts.acknowledge) {
-    const plan = parts.plan || {};
-    const isDiag =
-      plan.phase === "diagnostic" || parts.open_phase === "diagnostic";
-    const ackLabel = isDiag ? "Welcome" : "Got it";
-    blocks.push(
-      `<div class="part part-ack"><span class="part-label">${ackLabel}</span>${esc(
-        parts.acknowledge
-      )}</div>`
-    );
-  }
-  if (parts.recast) {
-    blocks.push(
-      `<div class="part part-recast"><span class="part-label">Natural Spanish</span>${esc(
-        parts.recast
-      )}</div>`
-    );
-  }
-  if (parts.model) {
-    blocks.push(
-      `<div class="part part-model"><span class="part-label">Model</span>${esc(
-        parts.model
-      )}</div>`
-    );
-  }
-  // Why AFTER Model (2026-07-29 encantado incident): the anchor/why of a
-  // new word must never precede the word itself.
-  if (parts.explain) {
-    const depth = parts.explain_depth === "deep" ? "Why (more)" : "Why";
-    blocks.push(
-      `<div class="part part-explain"><span class="part-label">${depth}</span>${esc(
-        parts.explain
-      )}</div>`
-    );
-  }
-  if (parts.try) {
-    const tryLabel = "Your turn";
-    blocks.push(
-      `<div class="part part-try"><span class="part-label">${tryLabel}</span>${esc(
-        parts.try
-      )}</div>`
-    );
-  }
-  if (parts.continue) {
-    blocks.push(
-      `<div class="part part-continue"><span class="part-label">Next</span>${esc(
-        parts.continue
-      )}</div>`
-    );
+  // One flowing message, no worksheet labels (USER 2026-08-03: "am I
+  // supposed to respond to 'Your turn' or 'Next'?" — a tutor is a person
+  // talking, not a labeled form). Part order preserved: acknowledge →
+  // recast → model → explain (why never precedes the word, 2026-07-29) →
+  // try → continue. The recast keeps a subtle style so the corrected
+  // form still catches the eye.
+  const flow = [
+    ["acknowledge", ""],
+    ["recast", "part-recast"],
+    ["model", ""],
+    ["explain", ""],
+    ["try", "part-try"],
+    ["continue", "part-continue"],
+  ];
+  for (const [key, cls] of flow) {
+    const text = parts[key];
+    if (text) {
+      blocks.push(`<p class="part-flow ${cls}">${esc(text)}</p>`);
+    }
   }
   // Gate failure (2026-08-01): never hide — show faults + the raw attempt.
-  // Blank "held" was a presentation bug that covered prompt/format failures.
   if (parts.gate_fail || parts.gate_hold) {
     const faults = (parts.gate_faults || parts.output_gate?.faults || [])
       .map((f) => esc(String(f)))
@@ -163,7 +131,6 @@ function renderTutorParts(parts, fallbackContent) {
     );
   }
   if (parts.gate_hold && !blocks.some((b) => b.includes("part-"))) {
-    // Legacy empty hold: still never silent
     blocks.push(
       `<div class="part part-gate-fail"><span class="part-label">GATE FAIL</span>` +
         `<span class="gate-fail-body">Reply was held empty — investigate gate notes.</span></div>`

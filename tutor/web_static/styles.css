@@ -1014,3 +1014,8 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
   display: block; font-size: 0.66rem; color: var(--muted);
   margin-top: 0.35rem; user-select: none;
 }
+
+/* Flowing tutor reply (labels removed 2026-08-03) */
+.part-flow { margin: 0.35rem 0; }
+.part-flow.part-recast { font-style: italic; opacity: 0.92; }
+.part-flow.part-continue { color: var(--muted); font-size: 0.92em; }
