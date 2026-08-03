@@ -448,3 +448,27 @@ resolve-enqueue).  Goldens regenerated (CHAR_GOLDEN_UPDATE=1);
 golden_english_streak deleted with its class; declared behavior deltas:
 introduce may now plan/mark on ANY turn incl. blank opens, uptake budget
 gone, gate scan runs on open turns (no placement exemption).
+
+---
+
+## S11 (USER-ruled 2026-08-03, post-chunk-2): the gate shrinks to plumbing
+
+USER: "We create a really awesome character sheet. That with prompts
+creates a good AI teacher… [the cluster rule] goes into the pedagogy.
+It is something we can have test cases for to see if our pedagogy +
+prompts seems to be working. Why are you making gates for this?"
+
+**Ruling:** runtime teaching-judgment is a relic of the code-is-teacher
+era — deleted, not demoted (§4.6). The output gate keeps ONLY plumbing
+checks code can actually judge: gate:truncated (provider cut the reply)
+and gate:sheet_leak (internal JSON/tool talk in learner text). Every
+teaching-opinion check — cluster_veto, probe_loop, english_wall,
+pedagogy:no_teach_move / open_needs_model_try, unscaffolded_new_item,
+regloss — leaves the runtime entirely and lives ONLY as eval test
+cases over AI-student transcripts (student_checks + blind rubric),
+judging whether pedagogy + prompts are working. The teaching rules
+themselves stay in PEDAGOGY §2 unchanged (the model still receives
+them). first_seen exposure bookkeeping survives (it is record-keeping,
+not judgment). ENGINEERING §6 gate contract + §9 rows amended with the
+execution chunk. Supersedes the S4 retune's remaining teaching-opinion
+criticals (the retune was the right direction; this is the destination).
