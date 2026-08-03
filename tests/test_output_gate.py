@@ -216,7 +216,7 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
         from tutor.association_table import load_association_table
 
         root = Path(__file__).resolve().parents[1]
-        cls.table = load_association_table(root / "course_packs" / "spanish_a1")
+        cls.table = load_association_table(root / "curriculum" / "spanish_a1")
 
     def _gate(self, parts, visible, *, sheet=None, table="real", **kw):
         from tutor.character_sheet import default_sheet
@@ -903,7 +903,7 @@ class TestGateContextParity(unittest.TestCase):
         from tutor.association_table import load_association_table
 
         root = Path(__file__).resolve().parents[1]
-        table = load_association_table(root / "course_packs" / "spanish_a1")
+        table = load_association_table(root / "curriculum" / "spanish_a1")
         parts = {
             "acknowledge": "Good job you nailed it, that was really great!",
             "model": "Hasta luego.",

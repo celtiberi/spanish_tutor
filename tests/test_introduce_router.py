@@ -1,6 +1,6 @@
 """r7 S2 IntroducePlan router: budget, cluster ban, rule routing, wiring.
 
-Runs against the REAL pack association table (course_packs/spanish_a1) so
+Runs against the REAL pack association table (curriculum/spanish_a1) so
 rule routing is tested on shipped data, not fixtures. Laws under test
 (docs/pedagogy-research-r7-association-intro.md §5 + build plan Phase 3):
 R-G budget → None; R-F cluster ban lists only UNintroduced same-theme keys;
@@ -23,7 +23,7 @@ from tutor.introduce_router import (
 from tutor.retrieval_scheduler import mark_introduced
 
 ROOT = Path(__file__).resolve().parents[1]
-PACK_DIR = ROOT / "course_packs" / "spanish_a1"
+PACK_DIR = ROOT / "curriculum" / "spanish_a1"
 
 
 def _fresh_snap() -> dict:

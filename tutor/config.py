@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 def _find_repo_root() -> Path:
-    """Locate course_packs + prompts (dev tree, installed wheel, or Vercel)."""
+    """Locate curriculum + prompts (dev tree, installed wheel, or Vercel)."""
     here = Path(__file__).resolve().parent
     candidates = [
         here.parent,  # normal: repo_root/tutor/config.py
@@ -16,19 +16,23 @@ def _find_repo_root() -> Path:
     for c in candidates:
         if not c or str(c) == ".":
             continue
-        if (c / "course_packs").is_dir() and (c / "prompts").is_dir():
+        if (c / "curriculum").is_dir() and (c / "prompts").is_dir():
             return c
-        if (c / "tutor").is_dir() and (c / "course_packs").is_dir():
+        if (c / "tutor").is_dir() and (c / "curriculum").is_dir():
             return c
     return here.parent
 
 
 REPO_ROOT = _find_repo_root()
 POLICY_PATH = REPO_ROOT / "prompts" / "teaching_policy.md"
-DEFAULT_PACK_DIR = REPO_ROOT / "course_packs" / "spanish_a1"
+# Curriculum DATA only (association table = target inventory, teach-asset
+# sidecar, scenes). The prose course pack was DELETED 2026-08-03 (USER:
+# "the character sheet IS the course pack") — the sheet carries the
+# curriculum targets; the model plans from sheet + PEDAGOGY.md alone.
+DEFAULT_PACK_DIR = REPO_ROOT / "curriculum" / "spanish_a1"
 # Tutor persona (voice/character layer, e.g. Marisol). File is the persona
 # spec; TUTOR_PERSONA=off disables without deleting the file. Persona is HOW
-# the tutor talks — modes/gate/pack always outrank it.
+# the tutor talks — the gate always outranks it.
 PERSONA_PATH = REPO_ROOT / "prompts" / "tutor_persona.md"
 
 # On Vercel (and similar serverless), repo is read-only; use /tmp for runtime data.
@@ -99,21 +103,11 @@ TEACHER_PROMPT_ORDER = (
     os.environ.get("TEACHER_PROMPT_ORDER", "legacy") or "legacy"
 ).strip().lower()
 
-# B0 dual-path realization context (PEDAGOGY SS3.3 AMENDED 2026-07-30,
-# USER-ratified "ratify, run P1/P2, build B0 in parallel";
-# docs/design-planner-rounds.md round-2 CONVERGED):
-#   full  (default) — today's teacher path, byte-identical (build_ai_tutor_*)
-#   brief           — B0 floor: law core + persona + LessonBrief + same-turn
-#                     slice + negative projection + budgets + manifest +
-#                     last-K exchange window + pack index + fallback
-#                     (tutor/realization_context.py; completeness_v1 lint:
-#                     scripts/check_completeness.py)
-# Non-default until the pre-registered referee (arms A/P1/P2/B0/B1) passes.
-# Orthogonal to TEACHER_PROMPT_ORDER (the P1/P2 falsifier knob above).
 # "plan" (default, USER-directed 2026-08-03): teacher writes its own
 # session plan with full context at open; rounds run small (plan + sheet
 # + facts + recent window). "full": historical every-turn full context.
-# "brief": retired B0 code-brief (dormant).
+# "brief" DELETED 2026-08-03 (B0 lost the blind grade, then its course
+# pack was deleted): unknown values fall back to "plan".
 TEACHER_CONTEXT = (
     os.environ.get("TEACHER_CONTEXT", "plan") or "plan"
 ).strip().lower()

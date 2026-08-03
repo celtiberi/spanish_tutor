@@ -57,3 +57,4 @@
 |--|-------:|-----------------:|
 | reviews-* files | ~15.7k lines | ~35 stubs × ~20 lines ≈ **0.7k lines** |
 | Full transcripts | (same) | `docs/archive/reviews/` (~15.7k lines, load on demand) |
+- [Sheet as curriculum](reviews-sheet-as-curriculum.md) — 2026-08-03: course pack deleted; sheet carries targets/scope/misconceptions; B0 arm deleted

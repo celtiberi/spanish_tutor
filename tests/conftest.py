@@ -183,20 +183,8 @@ class FakeModelClient:
 # Truncation-law guard (docs/teacher-context-no-truncate.md)
 # ---------------------------------------------------------------------------
 
-_FULL_PACK_CACHE: dict[str, str] = {}
-
-
-def _full_pack_text(pack_dir: Path) -> str:
-    key = str(pack_dir)
-    if key not in _FULL_PACK_CACHE:
-        from tutor.corpus import load_pack
-
-        _FULL_PACK_CACHE[key] = load_pack(Path(pack_dir))
-    return _FULL_PACK_CACHE[key]
-
-
 def assert_full_teacher_context(ctx) -> None:
-    """Every captured request carried FULL history / sheet / pack.
+    """Every captured request carried FULL history / sheet.
 
     Enforces the no-silent-truncation law on the characterization harness
     itself: if anyone reintroduces [:N] slices or history[-N:] drops on the
@@ -225,13 +213,12 @@ def assert_full_teacher_context(ctx) -> None:
         # asserted below, not an exemption from this guard.
         return "## Working from your plan" in _blob(req)
 
-    pack_text = _full_pack_text(session.pack_dir)
+    # Course pack DELETED 2026-08-03 (USER: "the character sheet IS the
+    # course pack") — no pack assertions; the sheet completeness checks
+    # below are the curriculum guarantee.
     for i, req in enumerate(fake.requests):
         blob = _blob(req)
         if _is_round(req):
-            assert pack_text not in blob, (
-                f"request {i}: ROUND turn must not carry the pack palette"
-            )
             content_i = req["messages"][-1]["content"]
             assert (
                 isinstance(content_i, str)
@@ -240,15 +227,10 @@ def assert_full_teacher_context(ctx) -> None:
                 f"request {i}: ROUND turn task lacks your_session_plan — "
                 "small context without the model's plan is a B0 regression"
             )
-        else:
-            assert pack_text in blob, (
-                f"request {i}: course pack was truncated/absent in "
-                "system blocks"
+        elif "## Your session plan (required on this turn)" in blob:
+            assert "# The teaching guide (yours)" in blob, (
+                f"request {i}: PLAN turn missing the pedagogy guide"
             )
-            if "## Your session plan (required on this turn)" in blob:
-                assert "# The teaching guide (yours)" in blob, (
-                    f"request {i}: PLAN turn missing the pedagogy guide"
-                )
         # The per-turn task embeds the sheet as a complete JSON dump; a
         # [:N] slice would break the parse or drop trailing fields.
         content = req["messages"][-1]["content"]

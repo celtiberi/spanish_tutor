@@ -8,13 +8,14 @@ context that is fed for the future rounds unless something changes and
 we need a new plan."
 
 PLAN turns (session open, or whenever a re-plan is needed) get the FULL
-picture: PEDAGOGY.md verbatim (it is written for the teacher), the whole
-course pack, the character sheet, and history. The model writes its own
-session plan in a private <plan> block before its normal <tutor> reply.
+picture: PEDAGOGY.md verbatim (it is written for the teacher), the
+character sheet — which IS the curriculum (USER 2026-08-03): targets,
+scope, learner state — and history. The model writes its own session
+plan in a private <plan> block before its normal <tutor> reply.
 
 ROUND turns get the small context: the model's OWN plan + the character
-sheet + session facts + due data + a recent history window. No pack
-palette, no pedagogy file — the plan already digested them.
+sheet + session facts + due data + a recent history window. No pedagogy
+file — the plan already digested it.
 
 The model revises its plan any turn by emitting a new <plan> block, and
 requests a full-context re-plan with <replan/> when it needs the pack or
@@ -42,10 +43,13 @@ ROUND_HISTORY_MESSAGES = 12
 
 PLAN_INSTRUCTIONS = """## Your session plan (required on this turn)
 
-You have the full teaching guide and course pack in this request — later
-turns will NOT include them, only the plan you write now. Before your
-normal `<tutor>` reply, write a session plan the future you can teach
-from:
+You have the full teaching guide in this request — later turns will NOT
+include it, only the plan you write now. The character sheet is the
+curriculum: `curriculum_targets_not_yet_touched` + `grammar` +
+`skills` are everything this learner is meant to learn, `curriculum_scope`
+is what to defer or decline, and the per-item state shows where they are.
+Before your normal `<tutor>` reply, write a session plan the future you
+can teach from:
 
 <plan>
 (5–15 lines, your words. Typically: where this learner is; goals for
@@ -56,9 +60,9 @@ quizzes.)
 </plan>
 
 The learner NEVER sees the plan. On any later turn you may revise it by
-emitting a new <plan> block, and if you need the full pack/teaching
-guide again (the conversation left your plan behind), emit <replan/> and
-the next turn will include everything.
+emitting a new <plan> block, and if you need the full teaching guide
+again (the conversation left your plan behind), emit <replan/> and the
+next turn will include everything.
 """
 
 ROUND_NOTE = """## Working from your plan
@@ -66,7 +70,7 @@ Your session plan (you wrote it, learner never sees it) is in the turn
 task as `your_session_plan`. Teach from it and from what the learner just
 said — the plan serves the learner, never the reverse. Revise it with a
 new <plan> block whenever you want; emit <replan/> if you need the full
-course pack / teaching guide again."""
+teaching guide again."""
 
 _PLAN_RE = re.compile(r"<plan>\s*(.*?)\s*</plan>", re.S | re.I)
 _REPLAN_RE = re.compile(r"<replan\s*/?>", re.I)

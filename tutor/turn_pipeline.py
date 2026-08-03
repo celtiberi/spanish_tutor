@@ -966,31 +966,16 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
     (gate, settlement, recorders) runs unchanged on both paths."""
     from . import config
     from .character_sheet import format_sheet_for_prompt
-    from .corpus import load_pack
     from .executor import build_ai_tutor_system, build_ai_tutor_user_message
     from .scenes import scene_hints_for_prompt
     from .turn_events import TurnEventKind as EV
 
-    if getattr(config, "TEACHER_CONTEXT", "full") == "brief":
-        from .lesson_brief import assemble_lesson_brief
-        from .realization_context import build_realization_context
-
-        brief = assemble_lesson_brief(session, ctx)
-        rc = build_realization_context(session, ctx, brief)
-        ctx.system = rc.system_blocks
-        ctx.task = rc.task
-        if ctx.is_open:
-            ctx.messages = [{"role": "user", "content": ctx.task}]
-        else:
-            ctx.messages = list(rc.window_messages) + [
-                {"role": "user", "content": ctx.task}
-            ]
-        ctx.realization_artifact = rc.artifact
-        return
-
-    ctx.system = build_ai_tutor_system(
-        pack_palette=load_pack(session.pack_dir),
-    )
+    # B0 "brief" arm DELETED 2026-08-03 with the course pack it fed on
+    # (referee: N=19 power FAIL; blind grade responsiveness −0.93; then
+    # USER: "the character sheet IS the course pack").
+    # Course pack DELETED 2026-08-03 (USER: "the character sheet IS the
+    # course pack") — the sheet carries the target inventory; no palette.
+    ctx.system = build_ai_tutor_system()
     # §1.1 REWRITE (USER 2026-08-03): the model gets FACTS, never the
     # routers' scripted opinions. Due items ride as data (key + gloss +
     # frames already used) so the model can schedule review by judgment;
@@ -1058,11 +1043,11 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
             ctx.ev.emit(EV.SESSION_PLAN, key="requested", stage="plan")
             history = session.history
         else:
-            # ROUND turn: drop the 50k pack palette + pedagogy from the
-            # system; the model's plan already digested them.
+            # ROUND turn: drop the pedagogy guide from the system; the
+            # model's plan already digested it.
             from .executor import build_ai_tutor_system
 
-            ctx.system = build_ai_tutor_system(pack_palette=None)
+            ctx.system = build_ai_tutor_system()
             ctx.system = list(ctx.system) + [
                 {"type": "text", "text": ROUND_NOTE}
             ]

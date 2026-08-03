@@ -52,7 +52,8 @@ DEFAULT_COVERAGE = {
     "never_touched": [
         "greetings_time_of_day", "register_tu_usted", "introduce_self",
         "ser_basic", "estar_basic", "food", "numbers", "family", "leave_taking",
-        "preferences", "roleplay_tasks",
+        "preferences", "roleplay_tasks", "nouns_articles_plurals",
+        "question_words",
     ],
 }
 
@@ -61,9 +62,17 @@ _GRAMMAR_COVERAGE = {
     "present_estar_person": ["estar_basic"],
     "register_tu_usted": ["register_tu_usted"],
     "present_ser": ["ser_basic"],
-    "numbers_0_20": ["numbers"],
+    "numbers_0_100": ["numbers"],
     "tener_age_possession": ["family"],
     "present_regular_ar_er_ir": ["preferences"],
+    "ser_estar_contrast": ["ser_basic", "estar_basic"],
+    "gender_articles": ["nouns_articles_plurals"],
+    "plural_formation": ["nouns_articles_plurals"],
+    "gender_exception_nouns": ["nouns_articles_plurals"],
+    "subject_pronouns_prodrop": ["introduce_self"],
+    "profession_no_article": ["introduce_self"],
+    "negation_questions_no_auxiliary": ["question_words"],
+    "question_words_inventory": ["question_words"],
 }
 
 _SHEET_DELTA_RE = re.compile(
@@ -276,6 +285,131 @@ ERROR_PATTERN_CATALOG: dict[str, dict] = {
     },
 }
 
+# Misconception vocabulary absorbed from the deleted course pack
+# (2026-08-03, USER: "the character sheet IS the course pack").  These are
+# DIAGNOSIS ids for the model — the teacher identifies the pattern and
+# records it via the sheet tool; detect/resolve stay EMPTY by design
+# (regex judgment of Spanish was retired 2026-08-03).  "source" = the
+# pack's original M-ID, for provenance.
+def _mined(label, form_id, hint, source, can_dos=()):
+    return {
+        "label": label, "form_id": form_id, "can_dos": list(can_dos),
+        "teach_hint": hint, "detect": [], "resolve": [], "source": source,
+    }
+
+
+ERROR_PATTERN_CATALOG.update({
+    "greeting_agreement_buenos_buenas": _mined(
+        "buenos/buenas agreement in greetings", "gender_articles",
+        "Fixed phrases agree: buenos días (m) but buenas tardes/noches (f). "
+        "Recast *buenos tardes → buenas tardes.", "M-1.1", ["IP-01"]),
+    "register_tu_with_usted_person": _mined(
+        "tú forms with an usted person", "register_tu_usted",
+        "estás/te llamas directed at a boss, elder, or stranger — switch to "
+        "está usted / se llama.", "M-1.2", ["IP-02"]),
+    "mucho_gusto_literal": _mined(
+        "mucho gusto read literally", None,
+        "It is a fixed pleased-to-meet-you formula, not about taste; reply "
+        "igualmente.", "M-1.4", ["IP-03"]),
+    "gender_exception_rule": _mined(
+        "-o/-a rule applied to exception nouns", "gender_exception_nouns",
+        "el día/mapa/problema, la mano/foto/moto — drill as a closed set; "
+        "learner produces el problema / los problemas + one original.",
+        "M-2.1"),
+    "greek_ma_feminine": _mined(
+        "-ma (Greek) nouns made feminine", "gender_exception_nouns",
+        "problema/idioma/programa/sistema are masculine: el problema.",
+        "M-2.2"),
+    "gender_from_meaning": _mined(
+        "gender justified by real-world meaning", "gender_articles",
+        "Gender belongs to the WORD, not the object (*la vestido from 'a "
+        "dress is feminine'). Teach: learn noun with its article.", "M-2.3"),
+    "plural_s_only": _mined(
+        "plural always just adds -s", "plural_formation",
+        "vowel+s, consonant+es, z→ces: *papels → papeles, *lápizs → "
+        "lápices.", "M-2.4"),
+    "el_vs_el_accent": _mined(
+        "el (the) vs él (he) accent", "gender_articles",
+        "Accent distinguishes words: él es… vs el libro. Contrast in "
+        "writing.", "M-2.5"),
+    "pronoun_every_sentence": _mined(
+        "subject pronoun in every clause", "subject_pronouns_prodrop",
+        "Spanish drops pronouns unless contrasting: Soy de México, not Yo "
+        "soy… Yo no soy… every line.", "M-3.1"),
+    "usted_second_person_verb": _mined(
+        "usted with 2nd-person verb", "subject_pronouns_prodrop",
+        "usted/ustedes take THIRD-person forms: usted es, not *usted eres.",
+        "M-3.2"),
+    "profession_article": _mined(
+        "article before unmodified profession", "profession_no_article",
+        "Soy estudiante, not *soy un estudiante (article returns with an "
+        "adjective: es un profesor excelente).", "M-3.3"),
+    "vosotros_in_latam": _mined(
+        "vosotros hunted in a Latin American context", "subject_pronouns_prodrop",
+        "ustedes is BOTH formal and informal plural in Latin America; "
+        "vosotros is Spain.", "M-3.4"),
+    "ser_for_location": _mined(
+        "ser for physical location", "ser_estar_contrast",
+        "Where → estar: Madrid está en España (the strongest evidence "
+        "against the permanent/temporary shortcut).", "M-4.1"),
+    "permanent_temporary_shortcut": _mined(
+        "ser=permanent / estar=temporary shortcut", "ser_estar_contrast",
+        "The shortcut misfires (está muerto; Madrid está…). Teach "
+        "what/how/where instead.", "M-4.2"),
+    "ser_estar_interchangeable": _mined(
+        "ser/estar treated as interchangeable", "ser_estar_contrast",
+        "Don't correct item-by-item: teach the decision rule, then have the "
+        "learner SAY the reason (what/how/where) before answering.",
+        "M-4.5"),
+    "accent_esta_vs_esta": _mined(
+        "está written without its accent", "present_estar_person",
+        "esta (this) vs está (is) — the accent is part of the verb's "
+        "spelling, never optional.", "M-4.4"),
+    "infinitive_unconjugated": _mined(
+        "bare infinitive as the verb", "present_regular_ar_er_ir",
+        "*Yo hablar español → hablo. The infinitive is the dictionary form, "
+        "not a usable present.", "M-5.1"),
+    "wrong_ending_family": _mined(
+        "one ending set for all families", "present_regular_ar_er_ir",
+        "-ar endings on -er/-ir verbs (*comas for comes): theme vowel "
+        "follows the family.", "M-5.2"),
+    "er_ir_overdistinguish": _mined(
+        "-er/-ir imagined to differ everywhere", "present_regular_ar_er_ir",
+        "They differ ONLY in nosotros/vosotros: comemos vs vivimos.",
+        "M-5.3"),
+    "estar_plus_infinitive": _mined(
+        "estar + infinitive for progressive", "present_regular_ar_er_ir",
+        "*Estoy comer → como. Simple present covers 'am eating' at A1 (no "
+        "progressive yet).", "M-5.4"),
+    "question_do_auxiliary": _mined(
+        "do-auxiliary inserted in questions", "negation_questions_no_auxiliary",
+        "*¿Haces tú hablar inglés? → ¿Hablas inglés? Intonation or "
+        "inversion, never an auxiliary.", "M-5.5"),
+    "age_with_ser": _mined(
+        "age with ser/estar", "tener_age_possession",
+        "*Soy veinte años → Tengo veinte años (always include años).",
+        "M-6.1"),
+    "tener_regularized": _mined(
+        "tener conjugated as regular -er", "tener_age_possession",
+        "*teno/*tenes → tengo, tienes (memorize the six as a unit).",
+        "M-6.2"),
+    "compound_number_split": _mined(
+        "compound numbers mis-split", "numbers_0_100",
+        "21–29 ONE word (veintidós); 31–99 three words (treinta y dos). "
+        "Probe: veintidós ↔ treinta y dos.", "M-6.3"),
+    "age_question_calque": _mined(
+        "how-old question calqued from English", "tener_age_possession",
+        "*¿Cómo viejo eres? → ¿Cuántos años tienes/tiene usted?", "M-6.4"),
+    "cuanto_agreement": _mined(
+        "cuánto not agreeing with its noun", "question_words_inventory",
+        "cuánto/a/os/as agrees in gender AND number: ¿Cuántas sillas hay?",
+        "M-6.5"),
+    "porque_vs_por_que": _mined(
+        "porque (because) vs ¿por qué? (why)", "question_words_inventory",
+        "Question form is two words with an accent: ¿Por qué…? Answer: "
+        "porque…", "M-6.6"),
+})
+
 ERROR_PATTERN_PRIORITY_THRESHOLD = 2  # count at/above → force teaching focus
 # Consecutive correct uses before we drop form focus from next_best
 ERROR_PATTERN_HEALTHY_STREAK = 3
@@ -446,8 +580,15 @@ def load_sheet(path: Path) -> dict:
     # Ensure all can-dos / forms exist
     for cid, entry in default_skills_block().items():
         merged["skills"].setdefault(cid, entry)
+    # numbers_0_20 → numbers_0_100 (2026-08-03 curriculum absorb: the
+    # deleted pack's law was 0–100; carry the learner's state across).
+    gr = merged.setdefault("grammar", {})
+    if "numbers_0_20" in gr and "numbers_0_100" not in gr:
+        gr["numbers_0_100"] = gr.pop("numbers_0_20")
+    else:
+        gr.pop("numbers_0_20", None)
     for fid, entry in default_grammar_block().items():
-        merged.setdefault("grammar", {}).setdefault(fid, entry)
+        gr.setdefault(fid, entry)
     merged.setdefault("error_patterns", {})
     if not isinstance(merged.get("error_patterns"), dict):
         merged["error_patterns"] = {}
@@ -541,6 +682,68 @@ def compute_progress_score(sheet: dict | None) -> dict:
     }
 
 
+# Curriculum scope absorbed from the deleted course pack (2026-08-03,
+# USER: "the character sheet IS the course pack").  Rides in the sheet
+# payload so the model can plan the course from the sheet alone —
+# without it, nothing stops out-of-scope drift (past tense etc.).
+CURRICULUM_SCOPE: dict = {
+    "level": (
+        "CEFR A1 grammar-core slice (absolute beginner). Latin American "
+        "Spanish default; note European forms only where they differ. "
+        "Default register with adult strangers: usted."
+    ),
+    "deferred_do_not_introduce": [
+        "alphabet/spelling", "possessives as a system (mi/tu/su…)",
+        "family vocab set (EXCEPT hermano(s)/hermana(s) with tener)",
+        "days/dates/clock time", "hay (recognition only)", "ir",
+        "food/drink nouns beyond the closed set", "colors",
+        "demonstratives", "cuál", "money/costar", "numbers above 100",
+        "tener que + infinitive", "tener hambre/sed/frío",
+        "neuter lo", "al/del contractions",
+        "stem-changing verbs (querer, poder)",
+        "irregular yo-forms (hago…)",
+    ],
+    "out_of_scope_decline_briefly": [
+        "any past tense", "future", "conditional", "compound tenses",
+        "subjunctive", "imperative",
+        "irregular verbs other than ser/estar/tener",
+        "reflexives beyond me llamo / te llamas / se llama",
+        "object pronouns (lo, la, le…)", "gustar-type constructions",
+        "voseo (acknowledge, then defer)", "regional slang",
+        "present progressive (estar + -ando/-iendo)",
+    ],
+    "recognition_only": [
+        "hay", "event-location ser (La fiesta es en mi casa)",
+        "meaning-changing pairs (es/está aburrido, es/está listo)",
+        "courtesy set beyond light practice (por favor, de nada, perdón, "
+        "disculpe/disculpa)",
+        "incidental input words (days, places, mi/su, también)",
+    ],
+}
+
+
+def _untouched_targets(lex: dict) -> dict:
+    """Target inventory the learner has NOT touched yet, by theme —
+    "key — gloss" lines from the association table (the curriculum's
+    closed vocabulary).  Unavailability is VISIBLE, never silent."""
+    try:
+        from .association_table import cached_default_table
+
+        table = cached_default_table() or {}
+    except Exception as e:  # no-hide: the model should see the gap
+        return {"unavailable": f"{type(e).__name__}: {e}"}
+    out: dict[str, list[str]] = {}
+    for key, ent in table.items():
+        if key in lex:
+            continue
+        theme = str(ent.get("theme") or "misc")
+        gloss = str(ent.get("gloss_en") or "").strip()
+        out.setdefault(theme, []).append(
+            f"{key} — {gloss}" if gloss else key
+        )
+    return {t: sorted(v) for t, v in sorted(out.items())}
+
+
 def format_sheet_for_prompt(sheet: dict, *, max_lex: int | None = None) -> str:
     """Full character sheet for the tutor model (testing: no silent slimming).
 
@@ -564,6 +767,13 @@ def format_sheet_for_prompt(sheet: dict, *, max_lex: int | None = None) -> str:
     payload = {
         "now": now_iso(),
         # Personal-data capture disabled 2026-07-28: identity is omitted.
+        # USER 2026-08-03 ("the character sheet IS the course pack"): the
+        # sheet carries the full target inventory — what we want the
+        # learner to learn — so the model can plan the course from the
+        # sheet alone. Untouched targets ride compactly by theme; touched
+        # ones already appear in lexicon/grammar with learner state.
+        "curriculum_scope": CURRICULUM_SCOPE,
+        "curriculum_targets_not_yet_touched": _untouched_targets(lex),
         "next_best": sheet.get("next_best"),
         "active_error_focus": active_error_patterns(sheet),
         "error_patterns": errors,

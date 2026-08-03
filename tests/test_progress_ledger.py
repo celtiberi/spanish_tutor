@@ -965,7 +965,7 @@ class TestCanDoThemeRouting(LedgerBase):
 
         table_path = (
             Path(__file__).resolve().parent.parent
-            / "course_packs" / "spanish_a1" / "association_table.json"
+            / "curriculum" / "spanish_a1" / "association_table.json"
         )
         table = json.loads(table_path.read_text(encoding="utf-8"))
         real_themes = {

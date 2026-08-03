@@ -625,15 +625,15 @@ class TestSignalClassifier(unittest.TestCase):
 
 
 class TestPackTopics(unittest.TestCase):
-    def test_pack_topic_titles_parsed(self):
+    def test_pack_topic_titles_empty_without_pack(self):
+        # Prose course pack DELETED 2026-08-03: shadow phase topics are
+        # empty by construction (the sheet is the curriculum now).
         from pathlib import Path
 
         from tutor.config import DEFAULT_PACK_DIR
         from tutor.corpus import pack_topic_titles
 
-        topics = pack_topic_titles(Path(DEFAULT_PACK_DIR))
-        self.assertGreaterEqual(len(topics), 4)
-        self.assertTrue(any("Greetings" in t for t in topics))
+        self.assertEqual(pack_topic_titles(Path(DEFAULT_PACK_DIR)), [])
 
 
 class TestModeImageAttachVisibility(unittest.TestCase):

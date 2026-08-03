@@ -173,11 +173,12 @@ def load_persona() -> str:
 def build_ai_tutor_system(
     *,
     sheet_summary: str = "",
-    pack_palette: str = "",
     personal_context: str = "",
 ) -> list[dict]:
-    """System blocks in cache-friendly order: stance → persona → pack →
-    personal_context → ability sheet (sheet last; it changes every turn)."""
+    """System blocks in cache-friendly order: stance → persona →
+    personal_context → ability sheet (sheet last; it changes every turn).
+    The course-pack palette block was DELETED 2026-08-03 (USER: "the
+    character sheet IS the course pack")."""
     stance = ""
     if CONV_PROMPT.exists():
         try:
@@ -187,26 +188,20 @@ def build_ai_tutor_system(
     text = AI_TUTOR_SYSTEM
     # Testing default: no truncation (config.clip_prompt with cap=0 is a no-op).
     stance_cap = getattr(config, "STANCE_PROMPT_CHARS", 0)
-    pack_cap = getattr(config, "PACK_PROMPT_CHARS", 0)
     sheet_cap = getattr(config, "SHEET_PROMPT_CHARS", 0)
     if stance:
         text += "\n\n# Teaching methods (detail)\n" + config.clip_prompt(stance, stance_cap)
     # Block ORDER is a cost decision: providers cache by longest common
-    # PREFIX, so static content (stance, persona, the big course pack) must
+    # PREFIX, so static content (stance, persona) must
     # come before anything that changes per turn. The sheet changes every
     # turn — it goes LAST. Putting it before the pack silently disabled
     # prompt caching and billed the full ~20k-token prefix fresh each turn.
     blocks: list[dict] = [{"type": "text", "text": text}]
     persona = load_persona()
     if persona:
-        blocks.append({"type": "text", "text": persona})
-    if pack_palette:
         blocks.append({
             "type": "text",
-            "text": (
-                "# Course pack palette (stay in scope)\n"
-                + config.clip_prompt(pack_palette, pack_cap)
-            ),
+            "text": persona,
             # Anthropic explicit caching: marks the end of the stable prefix
             "cache_control": {"type": "ephemeral"},
         })

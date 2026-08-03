@@ -58,7 +58,7 @@ from tutor.teach_assets import (
 from tutor.textnorm import fold_asset_key
 
 ROOT = Path(__file__).resolve().parents[1]
-PACK_DIR = ROOT / "course_packs" / "spanish_a1"
+PACK_DIR = ROOT / "curriculum" / "spanish_a1"
 
 # The 10 legacy asset ids (the deleted CONCEPT_LEXICON's keys) — cached
 # image filenames derive from them, so the sidecar must keep resolving them.

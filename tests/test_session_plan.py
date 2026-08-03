@@ -107,7 +107,7 @@ def _blob(req) -> str:
 
 
 class TestPlanTurn:
-    def test_open_is_plan_turn_with_pedagogy_and_pack(
+    def test_open_is_plan_turn_with_pedagogy(
         self, plan_mode, tutor_session_factory
     ):
         ctx = tutor_session_factory(replies=[BODY_WITH_PLAN])
@@ -115,7 +115,7 @@ class TestPlanTurn:
         blob = _blob(ctx.fake.requests[-1])
         assert "## Your session plan (required on this turn)" in blob
         assert "# The teaching guide (yours)" in blob
-        # Guard teardown asserts the pack rides too (plan turn = full).
+        # Guard teardown asserts plan-turn completeness.
 
     def test_plan_stored_and_never_learner_visible(
         self, plan_mode, tutor_session_factory
@@ -145,8 +145,8 @@ class TestRoundTurn:
         assert "# The teaching guide (yours)" not in blob
         payload = ctx.fake.task_payload(-1)
         assert payload["your_session_plan"] == PLAN_TEXT
-        # Guard teardown asserts: no pack in system, tail-aligned
-        # ROUND_HISTORY_MESSAGES window, full sheet still present.
+        # Guard teardown asserts: tail-aligned ROUND_HISTORY_MESSAGES
+        # window, full sheet still present.
 
     def test_round_revised_plan_updates_without_replan(
         self, plan_mode, tutor_session_factory

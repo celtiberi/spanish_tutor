@@ -164,15 +164,53 @@ FORM_INVENTORY: dict[str, dict] = {
         "priority": "medium",
         "error_example": "wrong person ending",
     },
-    "numbers_0_20": {
+    "numbers_0_100": {
         "supports": ["IP-07"],
         "priority": "low",
-        "error_example": "",
+        "error_example": "veinte y dos / cuarenta cinco (wrong split; 21-29 one word, 31-99 tens y units)",
     },
     "tener_age_possession": {
         "supports": ["IP-07"],
         "priority": "medium",
-        "error_example": "age with ser",
+        "error_example": "age with ser (*soy veinte años)",
+    },
+    # Absorbed from the deleted course pack's frozen form inventories
+    # (2026-08-03, USER: "the character sheet IS the course pack") — the
+    # target forms the sheet must measure to carry the curriculum.
+    "ser_estar_contrast": {
+        "supports": ["IP-04", "IP-07"],
+        "priority": "high",
+        "error_example": "*Madrid es en España / *soy cansado (what/how/where rule)",
+    },
+    "plural_formation": {
+        "supports": ["IP-07"],
+        "priority": "low",
+        "error_example": "*papels, *lápizs (vowel+s, consonant+es, z→ces)",
+    },
+    "gender_exception_nouns": {
+        "supports": ["IP-07"],
+        "priority": "low",
+        "error_example": "*la problema, *el mano (el día/mapa/problema, la mano/foto/moto; -ma masc)",
+    },
+    "subject_pronouns_prodrop": {
+        "supports": ["IP-03", "IP-07"],
+        "priority": "medium",
+        "error_example": "Yo soy… Yo no soy… (pronoun every clause; usted with 2nd-person verb)",
+    },
+    "negation_questions_no_auxiliary": {
+        "supports": ["IP-07"],
+        "priority": "medium",
+        "error_example": "*¿Haces tú hablar inglés? (no before verb; no do-auxiliary)",
+    },
+    "question_words_inventory": {
+        "supports": ["IP-07"],
+        "priority": "medium",
+        "error_example": "*¿Cuánto sillas? (qué/quién/dónde/cómo/cuándo/cuánto-agree/por qué; ¿ + accents)",
+    },
+    "profession_no_article": {
+        "supports": ["IP-03"],
+        "priority": "low",
+        "error_example": "*Soy un estudiante (no article before unmodified profession)",
     },
 }
 
@@ -282,8 +320,9 @@ MORPHOLOGY_BY_FORM: dict[str, dict] = {
             {"form": "estás", "person": "tú", "gloss": "you are"},
             {"form": "está", "person": "usted/él/ella", "gloss": "you(formal)/he/she is"},
             {"form": "estamos", "person": "nosotros", "gloss": "we are"},
+            {"form": "están", "person": "ustedes/ellos", "gloss": "you all/they are"},
         ],
-        "note": "Feelings & place. Not identity (use ser).",
+        "note": "Feelings & place. Not identity (use ser). Accents are part of the spelling (está, estás).",
         "watch": "estoy ≠ esta / está",
     },
     "present_ser": {
@@ -295,8 +334,9 @@ MORPHOLOGY_BY_FORM: dict[str, dict] = {
             {"form": "eres", "person": "tú", "gloss": "you are"},
             {"form": "es", "person": "usted/él/ella", "gloss": "you(formal)/he/she is"},
             {"form": "somos", "person": "nosotros", "gloss": "we are"},
+            {"form": "son", "person": "ustedes/ellos", "gloss": "you all/they are"},
         ],
-        "note": "Who/what you are; origin with de.",
+        "note": "Who/what you are; origin with de. No article before unmodified profession (Soy profesor).",
         "watch": "Soy de… (not soy Estados Unidos)",
     },
     "register_tu_usted": {
@@ -313,17 +353,17 @@ MORPHOLOGY_BY_FORM: dict[str, dict] = {
         "watch": "Don't mix tú endings with usted",
     },
     "present_regular_ar_er_ir": {
-        "label": "present regular endings (taste)",
+        "label": "present regular endings (hablar / comer / vivir)",
         "lemma": "—ar / —er / —ir",
         "pos": "verb",
         "paradigm": [
-            {"form": "prefiero", "person": "yo", "gloss": "I prefer (preferir)"},
-            {"form": "me gusta", "person": "—", "gloss": "I like (sg thing)"},
-            {"form": "me gustan", "person": "—", "gloss": "I like (pl things)"},
-            {"form": "tiene", "person": "usted/él", "gloss": "you/he has (tener)"},
+            {"form": "hablo", "person": "yo", "gloss": "I speak (all families: yo → -o)"},
+            {"form": "comes", "person": "tú", "gloss": "you eat"},
+            {"form": "vive", "person": "usted/él/ella", "gloss": "you(formal)/he/she lives"},
+            {"form": "hablamos / comemos / vivimos", "person": "nosotros", "gloss": "we speak/eat/live"},
         ],
-        "note": "Person endings carry meaning; gustar agrees with the thing liked.",
-        "watch": "me gusta el café / me gustan los tacos",
+        "note": "-er and -ir differ ONLY in nosotros/vosotros (comemos vs vivimos).",
+        "watch": "*yo hablar (no bare infinitive); *¿haces tú hablar…? (no do-auxiliary)",
     },
     "tener_age_possession": {
         "label": "tener — have / age",
@@ -351,18 +391,19 @@ MORPHOLOGY_BY_FORM: dict[str, dict] = {
         "note": "Adjective often matches the noun (la pizza es rica).",
         "watch": "la pizza es rica (not rico)",
     },
-    "numbers_0_20": {
-        "label": "numbers 0–20",
+    "numbers_0_100": {
+        "label": "numbers 0–100",
         "lemma": "números",
         "pos": "numeral",
         "paradigm": [
-            {"form": "uno / una", "person": "1", "gloss": "one"},
-            {"form": "dos, tres", "person": "2–3", "gloss": "two, three"},
-            {"form": "cinco, diez", "person": "5–10", "gloss": "five, ten"},
-            {"form": "quince, veinte", "person": "15–20", "gloss": "fifteen, twenty"},
+            {"form": "uno / una", "person": "1", "gloss": "one (un before masc noun)"},
+            {"form": "dieciséis … diecinueve", "person": "16–19", "gloss": "one word, accented"},
+            {"form": "veintidós … veintinueve", "person": "21–29", "gloss": "ONE word (veintidós)"},
+            {"form": "treinta y dos … noventa y nueve", "person": "31–99", "gloss": "THREE words (tens y units)"},
+            {"form": "cien", "person": "100", "gloss": "exactly 100"},
         ],
-        "note": "Useful for days, prices, age, counts.",
-        "watch": "",
+        "note": "Age, counts, prices. 21–29 one word; 31–99 tens y units.",
+        "watch": "*veinte y dos, *cuarentaycinco",
     },
 }
 

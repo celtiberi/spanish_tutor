@@ -150,7 +150,7 @@ Detailed break policy: `docs/teaching-system.md`.
 
 ### 4.5 Scenes (open goals)
 
-JSON under `course_packs/spanish_a1/scenes/`. A scene is an **open goal with an exit predicate**, not a cutscene. Conversation can satisfy whichever goal the utterance touches.
+JSON under `curriculum/spanish_a1/scenes/`. A scene is an **open goal with an exit predicate**, not a cutscene. Conversation can satisfy whichever goal the utterance touches.
 
 ---
 
@@ -334,7 +334,7 @@ Clients: `tutor/providers.py` (OpenAI-compatible / Anthropic / Gemini adapters).
 
 ## 13. Course pack
 
-`course_packs/spanish_a1/`
+`curriculum/spanish_a1/` (DATA only — association table, asset sidecar, scenes; the prose course pack was DELETED 2026-08-03: the character sheet carries the curriculum)
 
 - `pack.md` + `unit*.md` — legal language palette (full pack in system context; A1 fits)  
 - `scenes/*.json` — open goals  

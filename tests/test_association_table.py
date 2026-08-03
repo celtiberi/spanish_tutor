@@ -20,7 +20,7 @@ from tutor.association_table import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-PACK_DIR = ROOT / "course_packs" / "spanish_a1"
+PACK_DIR = ROOT / "curriculum" / "spanish_a1"
 
 # tutor/corpus.py has no MWU parser (only topic titles / planner index), so
 # the unit01 greeting/farewell/courtesy multiword formulas are hand-listed
@@ -169,15 +169,9 @@ class PackMWUCoverage(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.table = load_association_table(PACK_DIR)
-        cls.pack_text = "\n".join(
-            p.read_text() for p in sorted(PACK_DIR.glob("*.md"))
-        ).lower()
 
-    def test_hand_list_matches_pack(self) -> None:
-        # Honesty check: every hand-listed MWU actually appears in the pack.
-        for mwu in PACK_MWUS:
-            self.assertIn(mwu, self.pack_text, f"{mwu!r} not found in pack text")
-
+    # (test_hand_list_matches_pack deleted with the prose course pack
+    # 2026-08-03 — the table itself is the target inventory now.)
     def test_every_pack_mwu_has_table_entry(self) -> None:
         missing = [m for m in PACK_MWUS if m not in self.table]
         self.assertEqual(missing, [])
