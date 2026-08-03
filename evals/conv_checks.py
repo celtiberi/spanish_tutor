@@ -54,20 +54,10 @@ def _events_of(turn: dict, *kinds: str) -> list[dict] | None:
     return [e for e in evs if str(e.get("kind")) in want]
 
 
-# The five gate event kinds (tutor/turn_events.py OUTPUT_GATE_*;
-# output_gate_repaired DELETED 2026-08-03, full-code-audit S2).
-_GATE_EVENT_KINDS = (
-    "output_gate_ok",
-    "output_gate_soft_fail",
-    "output_gate_fail",
-    "output_gate_still_fail",
-    "output_gate_error",
-)
-_GATE_FAIL_EVENT_KINDS = (
-    "output_gate_soft_fail",
-    "output_gate_fail",
-    "output_gate_still_fail",
-)
+# (_GATE_EVENT_KINDS / _GATE_FAIL_EVENT_KINDS DELETED 2026-08-03, S11:
+# their only consumer, recast_or_gate_attempt, died with the mode router
+# (S4) and the tuples were zero-ref; output_gate_soft_fail itself was
+# deleted from the kind vocabulary with the plumbing-only gate.)
 
 
 def _parts(turn: dict) -> dict:
@@ -145,7 +135,8 @@ def open_english_orientation(traj: dict, result: dict) -> list[str]:
     if not turns:
         return ["no open turn recorded"]
     visible = str(turns[0].get("visible") or turns[0].get("reply") or "")
-    from tutor.output_gate import spanish_token_ratio
+    # S11 (2026-08-03): the wall lexicon lives eval-side now.
+    from evals.student_checks import spanish_token_ratio
 
     has_en_lexicon = spanish_token_ratio(visible) < 1.0
     has_gloss_paren = bool(re.search(r"\([^)]*[A-Za-z]{2,}[^)]*\)", visible))

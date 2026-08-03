@@ -648,25 +648,15 @@ REALIZE_STAGES: tuple = (
 # OUTPUT_GATE_ERROR, the turn proceeds ungated — historical semantics).
 # ---------------------------------------------------------------------------
 
-# CRITICAL faults (gate retune 2026-08-03, full-code-audit S4): the
-# mode-keyed contracts (missing_recast / form_focus_needs_model /
-# comprehension_needs_check) died with the shadow router;
-# unscaffolded_new_item is a SOFT advisory now (bare first exposures) —
-# the same-theme cluster veto (gate:cluster_veto) is the surviving
-# critical of that family.  Criticals surface as gate_fail + raw reply
-# (no-hide, 2026-08-01); soft faults ride OUTPUT_GATE_SOFT_FAIL.
+# CRITICAL faults (S11, USER-ruled 2026-08-03): the gate is a PLUMBING
+# auditor — the two faults below are its ENTIRE vocabulary.  Every
+# teaching-opinion fault (cluster_veto / probe_loop / english_wall /
+# pedagogy:* / unscaffolded / regloss) was DELETED from the runtime and
+# lives only as eval checks (evals/student_checks.py).  Both plumbing
+# faults surface as gate_fail + raw reply (no-hide, 2026-08-01).
 GATE_CRITICAL_FAULTS = frozenset({
-    "pedagogy:no_teach_move",
-    "pedagogy:open_needs_model_try",
-    "gate:english_wall",
     "gate:sheet_leak",  # model dumped sheet/tool JSON into chat
     "gate:truncated",  # reply hit max_tokens mid-sentence
-    # r7 R-F as code: same-theme cluster extras (near-synonym interference)
-    "gate:cluster_veto",
-    # System review 2026-07-30 (docs/reviews-system-review-20260730.md,
-    # Grok-countersigned): a repeated probe is user-visible harm — the
-    # 20260729-210545 incident shipped the same A/B check twice.
-    "gate:probe_loop",
 })
 
 # The still_fail floor: faults in this set mark the shipped turn
@@ -676,22 +666,19 @@ GATE_SHIP_BAN_FAULTS = GATE_CRITICAL_FAULTS
 
 def stage_gate_context(session, ctx: TurnContext) -> None:
     """Build the turn-constant GateContext from the TurnContext — the
-    historical 18-argument call-site seam dies here (E3).  Phase 4 gate
-    context (r7 S3): the table + live sheet + this turn's IntroducePlan
-    key + retrieval failures this turn (a failed re-encounter legalizes a
-    re-gloss).  Phase 3 batch 1: reads the typed DUE_OUTCOME_FAIL events —
-    no note-string re-parsing.  parts/visible/raw ride per attempt via
-    ``dataclasses.replace`` in check/repair."""
+    historical 18-argument call-site seam dies here (E3).  S11
+    (2026-08-03): the fields only teaching checks read are GONE
+    (already_asked / asked_topics / topic_nouns / introduce_key /
+    retrieval_failed_keys / blank_zero / is_open) — what remains feeds the
+    two plumbing checks and the first-exposure scan.  parts/visible ride
+    per attempt via ``dataclasses.replace`` in stage_gate_check."""
     from .output_gate import GateContext
-    from .turn_events import TurnEventKind as EV
 
     ctx.gate_ctx = GateContext(
         raw=ctx.raw or "",
         truncated=(
             (getattr(ctx.final, "stop_reason", "") or "") == "max_tokens"
         ),
-        is_open=ctx.is_open,
-        already_asked=set(session.pedagogy_memory.asked),
         # AMEND 2b (gate retune): a same-turn teach image for a key counts
         # as its scaffold — thread the attached concepts.
         image_concepts={
@@ -701,22 +688,7 @@ def stage_gate_context(session, ctx: TurnContext) -> None:
         },
         association_table=session.association_table,
         sheet=session.sheet,
-        introduce_key=(
-            ctx.intro_plan.key if ctx.intro_plan is not None else None
-        ),
-        retrieval_failed_keys={
-            e.key for e in ctx.ev.find(EV.DUE_OUTCOME_FAIL)
-        },
         learner_text=ctx.learner if not ctx.is_open else "",
-        # True-zero register (2026-07-28 zero-English incident): the
-        # overlay turns run as conversation/repair modes where the
-        # placement english_wall exemption cannot reach — thread the same
-        # condition the ZERO_REGISTER_NOTE overlay uses.
-        blank_zero=bool(ctx.blank and "spanish_ok" not in ctx.sigs),
-        # Asked-topic registry (repetition forensics): keys from PRIOR
-        # turns — this turn's try is noted post-gate.
-        asked_topics=set(session.pedagogy_memory.asked_topics),
-        topic_nouns=session._topic_nouns(),
     )
 
 
@@ -751,7 +723,7 @@ def stage_settle_pixels(session, ctx: TurnContext) -> None:
     """settle_pixels₀ — the commit phase for pre-call image candidates
     (mode/scene attach, fallback, R-B introduce). Runs BEFORE the gate
     context is built (design-exchange-settlement.md, Grok OQ3: a doomed
-    image must not license a scaffold or exempt a probe)."""
+    image must not license a scaffold in the exposure map)."""
     _settle_pixels(session, ctx)
 
 
@@ -794,14 +766,15 @@ def _surface_gate_fail(session, ctx: TurnContext, faults: list | set) -> None:
 def stage_gate_verdict(session, ctx: TurnContext) -> None:
     """Audit-only gate: log faults, never rewrite or hide the model reply.
 
-    Soft faults → soft_fail telemetry (reply still ships).
-    Critical/ship-ban → gate_fail banner + raw reply ships as-is.
+    S11 (2026-08-03): every remaining gate fault is a critical plumbing
+    fault (truncated / sheet_leak) — the soft-fault branch and its
+    OUTPUT_GATE_SOFT_FAIL event died with the teaching-opinion checks.
+    Any fault → gate_fail banner + raw reply ships as-is.
     """
     from .turn_events import TurnEventKind as EV
 
     gate_result = ctx.gate_result
     faults = list(gate_result.faults or [])
-    critical = any(f in GATE_CRITICAL_FAULTS for f in faults)
 
     if gate_result.ok:
         ctx.ev.emit(EV.OUTPUT_GATE_OK, stage="gate")
@@ -812,14 +785,6 @@ def stage_gate_verdict(session, ctx: TurnContext) -> None:
         payload={"faults": faults},
         stage="gate",
     )
-
-    if faults and not critical:
-        ctx.ev.emit(
-            EV.OUTPUT_GATE_SOFT_FAIL,
-            payload={"faults": faults},
-            stage="gate",
-        )
-        return
 
     # Critical: surface raw + loud fail. No second model call, no surgery.
     residual = set(faults) & GATE_SHIP_BAN_FAULTS
@@ -876,8 +841,7 @@ def stage_introduce_ledger(session, ctx: TurnContext) -> None:
     false-planted incident: key presence alone is natural use, not a
     teaching move — no ledger write, no milestone, budget unconsumed).
     R-I: an already-introduced table key appearing in the reply needs
-    no action (no re-gloss machinery this ship — the gate owns regloss
-    in Phase 4)."""
+    no action (re-gloss judgment lives in evals — S11 2026-08-03)."""
     from .conv_session import introduce_outcome
     from .turn_events import TurnEventKind as EV
 

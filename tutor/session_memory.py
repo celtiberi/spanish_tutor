@@ -178,8 +178,9 @@ _CONCEPT_CLASS: dict[str, str] = {
 def compose_topic_key(frame: str, concept: str = "") -> str:
     """Canonical registry key: "<frame>:<concept>" or the bare frame.
 
-    ONE definition for memory + gate (probe_loop reads keys through the
-    same compose) — the R3 fold lives here and nowhere else."""
+    ONE definition for memory + evals (the ported probe-repetition check
+    reads keys through the same compose; the runtime gate:probe_loop died
+    2026-08-03, S11) — the R3 fold lives here and nowhere else."""
     f = fold_lexical((frame or "").strip())
     if not f:
         return ""
@@ -228,7 +229,8 @@ class SessionMemory:
     shown: set[str] = field(default_factory=set)  # skills learner demonstrated
     asked: set[str] = field(default_factory=set)  # probe keys we already tried
     # Semantic asked-topic registry ("size:ciudad", "location:casa", …) —
-    # 2026-07-28 repetition forensics; feeds do_not_re_ask + gate:probe_loop.
+    # 2026-07-28 repetition forensics; feeds the model's do_not_re_ask
+    # facts (executor payload; the runtime gate read died 2026-08-03, S11).
     asked_topics: set[str] = field(default_factory=set)
     # Concepts guard 6 (new_noun) already fired on THIS session — recorded
     # even when no image/lexicon write happened, so the same concept cannot

@@ -1,20 +1,16 @@
 {
   "error": null,
   "gate": {
-    "faults": [
-      "gate:unscaffolded_new_item"
-    ],
-    "ok": false,
+    "faults": [],
+    "ok": true,
     "scaffold_saved": {
       "hola": "bare",
       "mucho gusto": "bare"
     }
   },
   "gate_surface": {
-    "faults": [
-      "gate:unscaffolded_new_item"
-    ],
-    "gate_fail": true,
+    "faults": [],
+    "gate_fail": false,
     "no_repair": true,
     "requests_this_turn": 1
   },
@@ -34,12 +30,10 @@
   "model_requests": 2,
   "notes": [
     "introduce_planned:me llamo:R-D",
-    "output_gate_fail:gate:unscaffolded_new_item",
-    "output_gate_soft_fail:gate:unscaffolded_new_item",
+    "output_gate_ok",
     "rules_backup",
     "scaffold=ES-forward+EN-rescue",
     "structured_reply",
-    "pedagogy:ok",
     "first_seen:hola",
     "first_seen:mucho gusto",
     "pedagogy:known_learner_open",
@@ -51,12 +45,9 @@
   ],
   "parts_keys": [
     "acknowledge",
-    "gate_fail",
-    "gate_faults",
     "model",
     "open_phase",
     "output_gate",
-    "pedagogy",
     "plan",
     "structured",
     "teach_images",

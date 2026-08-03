@@ -54,9 +54,10 @@ def _make_entry(turn=0):
             "cached_input_tokens": 900,
         },
         gate_result=SimpleNamespace(
-            faults=["gate:probe_loop"], notes=["tl_ratio=0.80"]
+            faults=["gate:sheet_leak"],
+            notes=["gate:sheet_leak active_error_focus"],
         ),
-        notes=["output_gate_soft_fail:gate:probe_loop", "mode=conversation"],
+        notes=["output_gate_fail:gate:sheet_leak", "mode=conversation"],
         stop_reason="end_turn",
         turn=turn,
         is_open=(turn == 0),
@@ -89,8 +90,8 @@ class TestDebugEntryShape(unittest.TestCase):
         self.assertEqual(r["usage"]["input_tokens"], 1001)
         self.assertEqual(r["usage"]["thinking_tokens"], 30)
         self.assertEqual(r["usage"]["cached_input_tokens"], 900)
-        self.assertEqual(r["gate_faults"], ["gate:probe_loop"])
-        self.assertIn("tl_ratio=0.80", r["gate_notes"])
+        self.assertEqual(r["gate_faults"], ["gate:sheet_leak"])
+        self.assertIn("gate:sheet_leak active_error_focus", r["gate_notes"])
         self.assertIn("mode=conversation", r["notes"])
         self.assertEqual(r["stop_reason"], "end_turn")
 

@@ -9,9 +9,10 @@ typed event vocabulary and the dual-emit machinery.
 THE MEASURED INVENTORY (2026-07-28, this batch; re-measured 2026-08-03
 after the S9 deletions removed activity/phase_consumed/open_scenes/
 task_*/close_phase_offered/focus_async, the S4 router teardown removed
-mode/mode_reason/hard_break, and the S2 sweep removed
-output_gate_repaired): the ``result.notes`` bus carries
-**59 catalogued prefix families** — the review's "~40" undercounted.
+mode/mode_reason/hard_break, the S2 sweep removed output_gate_repaired,
+and S11 removed output_gate_soft_fail — the plumbing-only gate has no
+soft class): the ``result.notes`` bus carries
+**58 catalogued prefix families** — the review's "~40" undercounted.
 Every family is a
 ``TurnEventKind`` member with a ``NoteSpec`` row in ``NOTE_CATALOG`` below:
 emitter site(s), consumers, payload shape (the part after the separator),
@@ -34,31 +35,32 @@ THE EVENT CONTRACT (batch 2 — events are THE truth, strings the projection):
   - Leaf emitters are TYPED NATIVELY (batch 2 push-down):
     ``character_sheet.process_turn``/``summarize_sheet_change_events`` mint
     (kind, key, payload) triples (strings = this module's render),
-    ``pedagogy_contract`` carries bare ``note_keys`` on PedagogyCheck plus
-    the KEY_* constants for the phase note, and ``stage_uptake_flag`` emits
-    the raw flagged token.  ``TurnEventLog.absorb`` remains ONLY as the
-    safety net for un-typed strays (e.g. a test fake replacing
-    process_turn); golden runs mint ZERO absorbed events (contract-tested).
+    ``pedagogy_contract`` carries the KEY_* constants for the tail phase
+    note (the per-turn contract judgment DELETED 2026-08-03, S11), and
+    ``stage_uptake_flag`` emits the raw flagged token.
+    ``TurnEventLog.absorb`` remains ONLY as the safety net for un-typed
+    strays (e.g. a test fake replacing process_turn); golden runs mint
+    ZERO absorbed events (contract-tested).
   - The in-module re-parse sites conv_session carried read typed events:
-    the gate-context ``retrieval_failed_keys`` set reads
-    ``DUE_OUTCOME_FAIL`` events and the introduce-ledger branch reads the
-    structured ``introduce_outcome`` status.  No note-string derivation
-    remains in conv_session (source- and behavior-pinned by
-    tests/test_turn_events.py).  (MODE / MODE_REASON / HARD_BREAK kinds
-    DELETED 2026-08-03 with the mode router — full-code-audit S4.)
+    the introduce-ledger branch reads the structured ``introduce_outcome``
+    status.  No note-string derivation remains in conv_session (source-
+    and behavior-pinned by tests/test_turn_events.py).  (MODE /
+    MODE_REASON / HARD_BREAK kinds DELETED 2026-08-03 with the mode
+    router — full-code-audit S4.  The gate-context DUE_OUTCOME_FAIL read
+    died with the regloss check — S11.)
 
 STABILITY CLASSES (measured, not assumed):
-  - ``eval-pinned`` (9 kinds): consumed by evals/conv_checks.py — since
-    Phase 3 batch 2 every checker reads the TYPED events first (recorded per
-    turn by run_conv_smoke) and falls back to the note strings only for
+  - ``eval-pinned`` (8 kinds): consumed by evals — since Phase 3 batch 2
+    every checker reads the TYPED events first (recorded per turn by
+    run_conv_smoke) and falls back to the note strings only for
     historical result artifacts recorded before events existed:
     ``uptake_flagged`` (``uptake_flag_honored``), ``due_elicit_offered``
     (``due_elicit_fired``), ``progress_milestone``
     (``progress_milestones_fired``), ``introduce_planned``
-    (``introduce_scaffolded``), and the five ``output_gate*`` kinds
-    (``recast_or_gate_attempt``: precise event-kind + fault-payload checks
-    on the event path; the legacy fallback keeps the historical
-    "output_gate"/"missing_recast" joined-notes substring scan).
+    (``introduce_scaffolded``), and the four ``output_gate*`` kinds
+    (evals/student_checks.check_still_fail scans still_fail notes;
+    conv_trajectories expect.gate reads fault payloads via
+    parts["output_gate"]).
   - ``ui-pinned`` (2 kinds): web_static/app.js ``setNotes`` warns on
     ``rules_backup``-without-``tool_update`` membership.
   - ``log-only`` (48 kinds): session .jsonl logs (``state.notes`` +
@@ -108,11 +110,13 @@ class TurnEventKind(str, Enum):
     INTRODUCE_DOWNGRADED = "introduce_downgraded"
     # -- output gate (stage "gate") -----------------------------------------
     OUTPUT_GATE_OK = "output_gate_ok"
-    OUTPUT_GATE_SOFT_FAIL = "output_gate_soft_fail"
     OUTPUT_GATE_FAIL = "output_gate_fail"
     # OUTPUT_GATE_REPAIRED DELETED 2026-08-03 (full-code-audit S2): the
     # repair path died 2026-08-01; the kind's emission site was already
     # gone and only absence tests kept the name alive.
+    # OUTPUT_GATE_SOFT_FAIL DELETED 2026-08-03 (S11): the plumbing-only
+    # gate has no soft fault class — its emission site died with the
+    # teaching-opinion checks.
     OUTPUT_GATE_STILL_FAIL = "output_gate_still_fail"
     OUTPUT_GATE_ERROR = "output_gate_error"
     INTERNAL_ERROR = "internal_error"
@@ -202,8 +206,8 @@ NOTE_CATALOG: dict[TurnEventKind, NoteSpec] = {s.kind: s for s in [
           [], "log-only", True),
     _spec(TurnEventKind.DUE_OUTCOME_FAIL, "due_outcome_fail:", False,
           "<sheet key>", ["conv_session._record_due_outcomes"],
-          ["conv_session gate-ctx retrieval_failed_keys (typed events since "
-           "Phase 3 batch 1; was a startswith/split re-parse)"],
+          ["(gate-ctx retrieval_failed_keys read DELETED 2026-08-03, S11 — "
+           "regloss judgment moved to evals)"],
           "log-only", False),
     _spec(TurnEventKind.PROGRESS_MILESTONE, "progress_milestone:", False,
           "<milestone kind>:<key>", ["conv_session.emit_progress_events"],
@@ -250,26 +254,20 @@ NOTE_CATALOG: dict[TurnEventKind, NoteSpec] = {s.kind: s for s in [
           ["conv_session._execute_ai_tutor (gate)"],
           ["evals/conv_checks.recast_or_gate_attempt (substring "
            "'output_gate')"], "eval-pinned", True),
-    _spec(TurnEventKind.OUTPUT_GATE_SOFT_FAIL, "output_gate_soft_fail:",
-          False, "<fault id>,<fault id>,…",
-          ["conv_session._execute_ai_tutor (gate)"],
-          ["evals/conv_checks.recast_or_gate_attempt (substrings "
-           "'output_gate' + 'missing_recast' scan fault payloads too)"],
-          "eval-pinned", False),
     _spec(TurnEventKind.OUTPUT_GATE_FAIL, "output_gate_fail:", False,
-          "<fault id>,<fault id>,…",
-          ["conv_session._execute_ai_tutor (gate)"],
-          ["evals/conv_checks.recast_or_gate_attempt (substrings)"],
+          "<fault id>,<fault id>,… (S11: gate:truncated | gate:sheet_leak "
+          "only; historical notes carry the deleted teaching-fault ids)",
+          ["turn_pipeline.stage_gate_verdict"],
+          ["evals student/conv checks (fault payloads)"],
           "eval-pinned", True),
     _spec(TurnEventKind.OUTPUT_GATE_STILL_FAIL, "output_gate_still_fail:",
           False, "<fault id>,…",
-          ["conv_session._execute_ai_tutor (gate repair)"],
-          ["evals/conv_checks.recast_or_gate_attempt (substrings)"],
+          ["turn_pipeline._surface_gate_fail"],
+          ["evals/student_checks.check_still_fail (note scan)"],
           "eval-pinned", False),
     _spec(TurnEventKind.OUTPUT_GATE_ERROR, "output_gate_error:", False,
           "<exception type name>", ["conv_session._execute_ai_tutor (gate)"],
-          ["evals/conv_checks.recast_or_gate_attempt (substrings)"],
-          "eval-pinned", False),
+          [], "eval-pinned", False),
     _spec(TurnEventKind.INTRODUCED, "introduced:", False, "<key>",
           ["conv_session introduce_outcome → _execute_ai_tutor (legacy "
            "string also via mark_introduced_if_visible wrapper)"],
@@ -396,13 +394,11 @@ NOTE_CATALOG: dict[TurnEventKind, NoteSpec] = {s.kind: s for s in [
           ["character_sheet.summarize_sheet_change_events (typed; emitted at _finish)"],
           [], "log-only", True),
     _spec(TurnEventKind.PEDAGOGY, "pedagogy:", False,
-          "ok | no_teach_move | open_needs_model_try | recast_without_try | "
-          "unstructured | diagnostic_open | known_learner_open (closed set: "
-          "pedagogy_contract constants; first five via evaluate_turn, last "
-          "two are the phase note in the turn tail)",
-          ["pedagogy_contract.evaluate_turn note_keys (typed; emitted at "
-           "_finish)",
-           "conv_session turn tail phase note (typed KEY_* emit)"],
+          "diagnostic_open | known_learner_open (the turn-tail phase note; "
+          "historical replay also carries ok/no_teach_move/"
+          "open_needs_model_try/recast_without_try/unstructured from the "
+          "contract judgment DELETED 2026-08-03, S11)",
+          ["turn_pipeline.stage_tail_events phase note (typed KEY_* emit)"],
           [], "log-only", True),
     _spec(TurnEventKind.OPEN_PHASE, "open_phase=", False,
           "diagnostic | known",
@@ -498,8 +494,6 @@ _RENDER = {
         lambda e: f"introduce_downgraded:{e.key}:"
                   f"{e.payload.get('path', 'R-B_to_R-D')}",
     _K.OUTPUT_GATE_OK: lambda e: "output_gate_ok",
-    _K.OUTPUT_GATE_SOFT_FAIL:
-        lambda e: "output_gate_soft_fail:" + _join(e.payload.get("faults")),
     _K.OUTPUT_GATE_FAIL:
         lambda e: "output_gate_fail:" + _join(e.payload.get("faults")),
     _K.OUTPUT_GATE_STILL_FAIL:
@@ -610,7 +604,7 @@ def _parse_tail(kind: TurnEventKind, tail: str) -> tuple[str, dict]:
     if kind is _K.INTERNAL_ERROR:
         site, _, err = tail.partition(":")
         return site, {"error": err}
-    if kind in (_K.OUTPUT_GATE_SOFT_FAIL, _K.OUTPUT_GATE_FAIL,
+    if kind in (_K.OUTPUT_GATE_FAIL,
                 _K.OUTPUT_GATE_STILL_FAIL, _K.OUTPUT_GATE_HELD,
                 _K.OUTPUT_GATE_DEGRADED):
         return "", {"faults": tail.split(",") if tail else []}

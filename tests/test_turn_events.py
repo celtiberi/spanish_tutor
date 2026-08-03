@@ -13,11 +13,11 @@ docs/reviews-architecture-refactor.md (adjudicated Phase 3; batch 2 landed):
   - the catalog is COMPLETE: every note emitted on the golden scenarios
     classifies to a catalogued kind.  Adding a new note without a
     NOTE_CATALOG entry fails here;
-  - batch-2 push-down: the leaf emitters (character_sheet ×10 families,
-    pedagogy_contract ×1) mint typed events natively — ``absorb`` is only
-    the safety net and sees ZERO events on golden runs (spy-tested);
-  - gate context is event-sourced (retrieval_failed_keys from
-    DUE_OUTCOME_FAIL events; behavioral spy + source scan below);
+  - batch-2 push-down: the leaf emitters (character_sheet ×10 families)
+    mint typed events natively — ``absorb`` is only the safety net and
+    sees ZERO events on golden runs (spy-tested).  (The pedagogy_contract
+    leaf emitter and the gate-context DUE_OUTCOME_FAIL sourcing died
+    2026-08-03 with the S11 judgment deletion — absence pins below.);
   - the two ui-pinned note families' rendered strings are frozen
     (web_static/app.js parses them by membership).
 """
@@ -78,8 +78,11 @@ def test_catalog_count_published_number():
     # −3 = MODE/MODE_REASON/HARD_BREAK, 2026-08-03 mode-router teardown
     #      (full-code-audit S4);
     # −1 = OUTPUT_GATE_REPAIRED, 2026-08-03 full-code-audit S2 (the repair
-    #      path died 2026-08-01; the kind had no emission site left)).
-    assert len(NOTE_CATALOG) == 59
+    #      path died 2026-08-01; the kind had no emission site left);
+    # −1 = OUTPUT_GATE_SOFT_FAIL, 2026-08-03 S11 (the plumbing-only gate
+    #      has no soft class — its emission site died with the
+    #      teaching-opinion checks)).
+    assert len(NOTE_CATALOG) == 58
 
 
 def test_output_gate_repaired_kind_stays_deleted():
@@ -92,6 +95,16 @@ def test_output_gate_repaired_kind_stays_deleted():
     assert classify_note("output_gate_repaired") is None
 
 
+def test_output_gate_soft_fail_kind_stays_deleted():
+    # Absence pin (S11, 2026-08-03): the plumbing-only gate has no soft
+    # fault class — no member, no catalog row, no render row.
+    assert not hasattr(TurnEventKind, "OUTPUT_GATE_SOFT_FAIL")
+    assert "output_gate_soft_fail" not in {
+        k.value for k in TurnEventKind
+    }
+    assert classify_note("output_gate_soft_fail:gate:regloss") is None
+
+
 def test_stability_classes_are_the_measured_vocabulary():
     classes = {s.stability for s in NOTE_CATALOG.values()}
     assert classes == {"eval-pinned", "ui-pinned", "log-only"}
@@ -100,8 +113,7 @@ def test_stability_classes_are_the_measured_vocabulary():
     assert eval_pinned == {
         EV.UPTAKE_FLAGGED, EV.DUE_ELICIT_OFFERED,
         EV.PROGRESS_MILESTONE, EV.INTRODUCE_PLANNED,
-        EV.OUTPUT_GATE_OK, EV.OUTPUT_GATE_SOFT_FAIL,
-        EV.OUTPUT_GATE_FAIL,
+        EV.OUTPUT_GATE_OK, EV.OUTPUT_GATE_FAIL,
         EV.OUTPUT_GATE_STILL_FAIL, EV.OUTPUT_GATE_ERROR,
     }
     ui_pinned = {s.kind for s in NOTE_CATALOG.values()
@@ -140,10 +152,11 @@ ROUND_TRIP = [
     (EV.INTRODUCE_PLANNED, "introduce_planned:buenos días:R-D"),
     (EV.INTRODUCE_DOWNGRADED, "introduce_downgraded:hola:R-B_to_R-D"),
     (EV.OUTPUT_GATE_OK, "output_gate_ok"),
-    (EV.OUTPUT_GATE_SOFT_FAIL, "output_gate_soft_fail:gate:regloss"),
+    # Historical fault ids inside payloads still classify/replay; the live
+    # vocabulary is gate:truncated | gate:sheet_leak (S11).
     (EV.OUTPUT_GATE_FAIL,
-     "output_gate_fail:gate:unscaffolded_new_item,gate:english_wall"),
-    (EV.OUTPUT_GATE_STILL_FAIL, "output_gate_still_fail:gate:cluster_veto"),
+     "output_gate_fail:gate:truncated,gate:sheet_leak"),
+    (EV.OUTPUT_GATE_STILL_FAIL, "output_gate_still_fail:gate:sheet_leak"),
     (EV.OUTPUT_GATE_ERROR, "output_gate_error:ValueError"),
     (EV.INTERNAL_ERROR, "internal_error:progress_note:KeyError: 'x'"),
     (EV.SESSION_PLAN, "session_plan:updated"),
@@ -448,38 +461,27 @@ def test_absorb_safety_net_for_untyped_emitter(
     assert any(e.kind is EV.LEGACY_UNCATALOGUED for e in open_res.events)
 
 
-def test_gate_context_event_sourced(tutor_session_factory, monkeypatch):
-    """Gate context is entirely event/structured (batch-2 pin): the
-    retrieval_failed_keys the gate receives ARE the typed DUE_OUTCOME_FAIL
-    event keys of this turn — no note-string derivation feeds the gate."""
-    import tutor.output_gate as og
+def test_gate_context_has_no_teaching_fields(tutor_session_factory):
+    """S11 pin: the GateContext carries ONLY the plumbing + exposure-scan
+    surface — the teaching-check fields (retrieval_failed_keys /
+    already_asked / asked_topics / topic_nouns / introduce_key /
+    blank_zero / is_open) died with their checks.  The DUE_OUTCOME_FAIL
+    events themselves keep flowing (retrieval bookkeeping)."""
+    from tutor.output_gate import GateContext
 
-    captured: list[set] = []
-    real = og.check_output_gate
-
-    def spy(*a, **kw):
-        # E3 (Phase 4 batch 3): the session call site passes ONE
-        # GateContext positionally; the keys ride as a context field.
-        if a and isinstance(a[0], og.GateContext):
-            captured.append(set(a[0].retrieval_failed_keys or ()))
-        else:
-            captured.append(set(kw.get("retrieval_failed_keys") or ()))
-        return real(*a, **kw)
-
-    monkeypatch.setattr(og, "check_output_gate", spy)
+    for gone in ("retrieval_failed_keys", "already_asked", "asked_topics",
+                 "topic_nouns", "introduce_key", "blank_zero", "is_open"):
+        assert gone not in GateContext.__dataclass_fields__, gone
     ctx = tutor_session_factory(
         seed_sheet=_due_seed(),
         replies=[OPEN_DUE_REPLY, TURN_DUE_REPLY],
     )
     s = ctx.session
     assert s.open_session().error is None
-    n_before = len(captured)
     turn = s.user_turn("What does agua mean?")
     assert turn.error is None
     failed = {e.key for e in turn.events if e.kind is EV.DUE_OUTCOME_FAIL}
     assert failed == {"agua"}
-    turn_calls = captured[n_before:]
-    assert turn_calls and all(c == failed for c in turn_calls)
 
 
 def test_no_note_string_derivation_in_conv_session():
@@ -536,26 +538,23 @@ def test_process_turn_event_sink_matches_notes():
     assert notes[0] == "rules_backup"  # backup path, render-sourced
 
 
-def test_pedagogy_note_keys_render_to_notes():
-    """Leaf push-down contract: PedagogyCheck.note_keys are the typed keys
-    the notes render from (notes[i] == 'pedagogy:' + note_keys[i])."""
-    from tutor.pedagogy_contract import PEDAGOGY_NOTE_PREFIX, evaluate_turn
+def test_pedagogy_contract_judgment_stays_deleted():
+    """S11 absence pin: the pedagogy-contract judgment (evaluate_turn /
+    PedagogyCheck note_keys leaf emitter) is gone from the runtime — the
+    PEDAGOGY kind survives solely as the turn-tail phase note (its
+    historical judgment payloads still classify for replay)."""
+    import tutor.pedagogy_contract as pc
 
-    cases = [
-        ({"model": "x", "try": "y", "structured": True}, {}),
-        ({"structured": True}, {}),  # no teach move
-        ({"recast": "x", "structured": True}, {}),  # recast without try
-        ({"model": "x", "structured": True}, {"is_open": True}),
-        ({}, {"structured": False, "visible": "plain prose"}),
-        ({}, {"structured": False, "visible": ""}),
-        ({}, {"structured": False, "visible": "hola", "is_open": True}),
-    ]
-    for parts, kw in cases:
-        ped = evaluate_turn(parts, **kw)
-        assert ped.notes == [
-            PEDAGOGY_NOTE_PREFIX + k for k in ped.note_keys
-        ], (parts, kw)
-        assert ped.note_keys, (parts, kw)
+    for name in ("evaluate_turn", "PedagogyCheck", "check_tutor_parts",
+                 "check_visible_fallback"):
+        assert not hasattr(pc, name), name
+    # Replay classification of historical judgment notes stays intact.
+    hit = classify_note("pedagogy:no_teach_move")
+    assert hit is not None and hit[0] is EV.PEDAGOGY
+    # And the live tail vocabulary renders unchanged.
+    assert render_note(EV.PEDAGOGY, key=pc.KEY_DIAGNOSTIC_OPEN) == (
+        "pedagogy:diagnostic_open"
+    )
 
 
 def test_ui_pinned_note_strings_frozen():

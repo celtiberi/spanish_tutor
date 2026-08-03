@@ -28,8 +28,8 @@ TABLE_FILENAME = "association_table.json"
 # describe TABLE data, so they live with the table; output_gate re-exports
 # its historical names).  Grammar infrastructure: pronouns, question words,
 # copulas, counting sequences and `hay` are paradigms, not lexical topics or
-# introductions — the gate's unscaffolded scan skips them (Round-2 AMEND 3B)
-# and the topic-concept palette excludes them (CHAR-BUG-007 fix).
+# introductions — the gate's first-exposure scan skips them (Round-2 AMEND
+# 3B) and the topic-concept palette excludes them (CHAR-BUG-007 fix).
 # ---------------------------------------------------------------------------
 STRUCTURAL_THEMES = frozenset({
     "pronouns", "question_words", "copulas", "function", "numbers",
@@ -44,7 +44,7 @@ STRUCTURAL_KEYS = frozenset({
 # things you SAY, not things you talk ABOUT — they must never bind as a
 # topic CONCEPT ("location:y tu" incident, gate retune 2026-08-03: the
 # palette tail matched «y tú» as the concept of a location try).  The gate's
-# unscaffolded scan deliberately does NOT use this set (social phrases are
+# first-exposure scan deliberately does NOT use this set (social phrases are
 # still lexical introductions there — Grok guardrail on the farewell block).
 SOCIAL_FORMULA_THEMES = frozenset({
     "greetings", "how_are_you", "farewells", "introductions", "courtesy",

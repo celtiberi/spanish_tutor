@@ -836,9 +836,12 @@ class TestCallerBindings(unittest.TestCase):
 
     def test_gate_and_memory_share_fold_lexical(self):
         # The dead private crossing (output_gate → session_memory._deaccent)
-        # stays dead: both sides now hold the PUBLIC policy.
+        # stays dead: the registry holds the PUBLIC policy.  The gate's own
+        # fold_lexical binding died with its last consumer — the probe-loop
+        # due-exemption compare (S11, 2026-08-03: teaching checks left the
+        # runtime); a resurfacing private fold would still fail here.
         from tutor import output_gate, session_memory
-        self.assertIs(output_gate.fold_lexical, textnorm.fold_lexical)
+        self.assertFalse(hasattr(output_gate, "fold_lexical"))
         self.assertIs(session_memory.fold_lexical, textnorm.fold_lexical)
         self.assertFalse(hasattr(session_memory, "_deaccent"))
         self.assertFalse(hasattr(output_gate, "_key_match"))

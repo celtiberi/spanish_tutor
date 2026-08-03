@@ -99,7 +99,7 @@ def phrase_match(needle: str, text: str) -> "re.Match[str] | None":
     matched as \\s+ (see word_present's divergence notes). Returns None
     for an empty needle.
 
-    Users: output_gate (unscaffolded-new-item scan, anchor_in_reply).
+    Users: output_gate (first-exposure scan, anchor_in_reply).
     """
     body = phrase_body(needle)
     if not body:

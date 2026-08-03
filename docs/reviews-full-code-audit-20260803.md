@@ -541,3 +541,102 @@ production callers; plan/downgrade/ledger wires untouched; tests →
 absence pin).  The S2 "stale ladder comment" (:1161-1163) was already
 rewritten by chunk 2's gate retune (the still_fail-floor text now states
 the no-hide reality) — verified, nothing to do.
+
+## EXECUTION — S11: the gate shrinks to plumbing (chunk 4, 2026-08-03)
+
+Suite 682 passed; `scripts/check_teacher_truncation.py` ok.  Zero-ref grep
+before every cut, fails closed.  NOT COMMITTED (this chunk).
+
+**tutor/output_gate.py** reduced to plumbing: gate:truncated +
+gate:sheet_leak (with chunk 2's JSON-context tool-name rule) are the
+ENTIRE fault vocabulary.  The first-exposure scan survives as bookkeeping
+only — `scan_first_exposures` (renamed from scan_unscaffolded_new_items)
+returns the scaffold_saved exposure map and nothing else; gloss_after_key /
+anchor_in_reply stay (shared with conv_session.introduce_scaffold_evidence);
+stage_first_seen verified working end-to-end.  DELETED: cluster veto,
+probe_loop machinery (_PROBE_PATTERNS, detect_tutor_probe_keys, asked/
+asked_topics/topic_nouns reads, due-exemption incl. the gate's fold_lexical
+binding), english_wall (lexicons, ratios, sandwich exempt, blank_zero
+floor), the evaluate_turn call, regloss, all unscaffolded fault emission
+(clean removal — no residual note; the exposure flow never needed one).
+OutputGateResult loses spanish_ratio; GateContext is 8 fields (is_open /
+already_asked / introduce_key / retrieval_failed_keys / blank_zero /
+asked_topics / topic_nouns GONE — zero-ref'd each: asked_topics still feeds
+executor do_not_re_ask; the registries themselves are untouched).
+
+**tutor/pedagogy_contract.py**: the judgment half DELETED — evaluate_turn,
+check_tutor_parts, check_visible_fallback, PedagogyCheck, CONTRACT_VERSION,
+the KEY_/VIOLATION_/NOTE_ judgment constants.  KEPT: is_blank_learner /
+open_phase (turn_pipeline blank detection + observe), has_teach_move
+(ai_student transcript stats), KEY_DIAGNOSTIC_OPEN / KEY_KNOWN_LEARNER_OPEN
+(tail phase note).  ZERO-REF CORRECTION (recorded, not guessed): the chunk
+brief said "evaluate_turn's only consumer was the gate" — FALSE; a second
+consumer lived in conv_session._finish ("Durable pedagogy contract
+(code-enforced)": PEDAGOGY event emission + parts["pedagogy"]).  The S11
+ruling text ("pedagogy:no_teach_move / open_needs_model_try … leaves the
+runtime ENTIRELY") covers that site unambiguously — both consumers deleted,
+along with the _log_turn_result pedagogy rows.  The PEDAGOGY event kind
+SURVIVES (the tail phase note is bookkeeping); its historical judgment
+payloads still classify for replay.
+
+**turn_pipeline**: GATE_CRITICAL_FAULTS = GATE_SHIP_BAN_FAULTS =
+{gate:truncated, gate:sheet_leak}.  stage_gate_verdict loses the soft
+branch (every remaining fault is critical) — OUTPUT_GATE_SOFT_FAIL kind
+DELETED (member, catalog row, render, parse; catalog 59→58, eval-pinned
+9→8; absence pins in test_turn_events + test_gate_floor).  The no-hide
+surface is UNCHANGED for the two plumbing faults (OUTPUT_GATE_FAIL +
+STILL_FAIL + gate_fail banner + raw ships — re-pinned live in
+test_gate_floor via a sheet-leak reply and a max_tokens stop).
+
+**evals/student_checks.py** is the teaching-opinion home now (severity
+ledger in the file header): check_cluster_intro (HARD; per PEDAGOGY §2.2;
+exempt_qa_pairs=False default — the Q&A-formula-pair question is UNRESOLVED
+policy, flagged in-code against this stamp), check_probe_repeat (WARN;
+chunk-2 retune preserved: try/continue parts only, social regexes + the
+session_memory topic-key extractor; due-exemption impossible transcript-side
+→ advisory), check_english_wall (WARN; lexicons + ratio + sandwich exempt
+MOVED here from the gate; row 0 uses the true-zero floor),
+check_teach_shape (no_teach_move + open-model/try HARD on structured rows,
+recast_without_try WARN), check_exposure_advisories (WARN bare/regloss).
+HARD_STILL_FAIL_FAULTS = {gate:truncated} (chunk-2's HARD set minus the
+deleted runtime faults).  Harness verified sufficient: ai_student transcript
+rows already carry parts per turn — no capture extension needed.
+run_student_checks gains table= (tests inject a synthetic table; smoke uses
+the real domain table).  conv_checks: zero-ref _GATE_EVENT_KINDS/
+_GATE_FAIL_EVENT_KINDS DELETED; open_english_orientation imports the ratio
+from student_checks.
+
+**ENGINEERING.md**: §6 item 6 amended in place (plumbing auditor; teaching
+checks live in evals; supersession noted, history kept); §9 rows for §2.2
+naked items, §2.3 walls/regloss, §6 no-hide gate re-pointed at the eval
+checks with dated amendment markers.
+
+**web UI**: NO changes — the GATE FAIL banner (app.js) is fault-id-agnostic
+(joins whatever fault list arrives); no deleted-fault-specific UI text
+existed; no ?v= bump needed (§4.4 not triggered).
+
+**Goldens** regenerated (CHAR_GOLDEN_UPDATE=1), deltas: every golden loses
+`pedagogy:ok` (note + "pedagogy" parts_key); golden_gate_repair_turn (file
+name kept, scenario re-pinned as "bare exposure is bookkeeping, not a
+fault") flips gate.ok true / faults [] / gate_fail false and loses
+output_gate_fail:/soft_fail:gate:unscaffolded_new_item + the gate_fail/
+gate_faults parts_keys; first_seen:hola + first_seen:mucho gusto UNCHANGED
+(exposure bookkeeping intact).  No other note families moved.
+
+**Tests**: test_output_gate rewritten (plumbing surface + exposure-scan
+suite + absence pins for every deleted fault id/helper + field censuses);
+test_gate_floor re-pinned (2-fault critical set, leak/truncation no-hide,
+soft-fail-kind absence); test_pedagogy_contract reduced to the surviving
+half + judgment absence pins (+ conv_session source pin, comment-stripped);
+test_turn_events counts/sets/round-trip updated, gate-context spy test
+replaced by a no-teaching-fields pin; test_student_checks extended for the
+five migrated checks; test_introduce_router lapse test moved to
+scan_first_exposures; test_debug_requests fixture vocabulary modernized;
+test_textnorm_contract gate-binding row updated (fold_lexical left the gate
+with its last consumer).  CLOSE_REPLY orphan fixture deleted.
+
+Out of scope, noted: evals/run_referee.py (RETIRED, chunk 3) still counts
+"english_wall" note substrings — reads 0 on new transcripts; §8 debt rows
+ZERO-FLOOD SEVERITY / STORM RESIDUAL cite gate-severity remedies that S11
+makes unconstitutional — flagged for the next debt-registry pass, not
+edited here (chunk brief scoped ENGINEERING changes to §6 + §9).

@@ -6,8 +6,10 @@ test_characterization_ai_path.py — fixtures and golden format REUSED, not
 forked) per the adjudicated Phase 0 spec and the batch-2 runbook in
 docs/reviews-architecture-refactor.md:
 
-  - gate-fault → NO repair (2026-08-01): critical fault ships raw + gate_fail;
-    second model call deleted (hiding path removed).
+  - gate golden (S11 2026-08-03): bare exposure is bookkeeping, not a
+    fault — the plumbing-only gate passes the turn, first_seen sticks; the
+    no-hide surface for the two real plumbing faults is pinned in
+    tests/test_gate_floor.py.
   - comprehension repair: meta "what does X mean" turn → repair-target
     image relevance (no irrelevant image — the incident class), await/TTL
     hold armed then cleared by the learner's own Spanish.
@@ -39,10 +41,10 @@ from test_characterization_ai_path import (
 # Canned replies
 # ---------------------------------------------------------------------------
 
-# Reply 1 for the repair golden: bare unintroduced table key «mucho gusto»
-# (never seen, no gloss/anchor, not the planned introduce key) → CRITICAL
-# gate:unscaffolded_new_item. «hola» is this turn's IntroducePlan key and is
-# exempt from the bare scan (the introduce path owns its lapse).
+# Reply 1 for the exposure golden: bare unintroduced table keys «hola» +
+# «mucho gusto» (never seen, no gloss/anchor).  S11 (2026-08-03): bare use
+# is NO fault of any kind — the gate is plumbing-only; the exposure map
+# still records both keys and first_seen sticks (bookkeeping survives).
 GATE_BAD_REPLY = (
     "<tutor>\n"
     "  <acknowledge>¡Hola!</acknowledge>\n"
@@ -102,24 +104,18 @@ ARC_PLAIN_REPLY_4 = (
     "</tutor>"
 )
 
-# Close-phase reply: the one-English-line summary + a glossed farewell (bare
-# «adiós» would be a critical first exposure; the gloss saves it → first_seen).
-CLOSE_REPLY = (
-    "<tutor>\n"
-    "  <acknowledge>¡Muy bien!</acknowledge>\n"
-    "  <model>Hoy practicaste saludos — today you practiced greetings. "
-    "**Adiós** (goodbye).</model>\n"
-    "  <try>Di: **adiós** (goodbye).</try>\n"
-    "</tutor>"
-)
+# (CLOSE_REPLY DELETED 2026-08-03 with this chunk: its golden died with the
+# close phase — full-code-audit S9 — and the fixture had zero references.)
 
 
 # ---------------------------------------------------------------------------
-# Golden (iv): gate-fault surfaces — NO repair rewrite (2026-08-01)
+# Golden (iv): bare exposure is bookkeeping, not a fault (S11 2026-08-03;
+# the gate-fault surface of this scenario died with the teaching-opinion
+# checks — the golden file keeps its historical name)
 # ---------------------------------------------------------------------------
 
 
-def test_golden_gate_fault_surfaces_no_repair(tutor_session_factory):
+def test_golden_bare_exposure_records_no_fault(tutor_session_factory):
     ctx = tutor_session_factory(
         seed_sheet=_known_seed(),
         replies=[OPEN_KNOWN_REPLY, GATE_BAD_REPLY],
@@ -131,15 +127,13 @@ def test_golden_gate_fault_surfaces_no_repair(tutor_session_factory):
     turn = s.user_turn("Muy bien, gracias.")
     assert turn.error is None
 
-    # CHAR_PIN (gate retune 2026-08-03): a bare unintroduced key is a
-    # SOFT advisory now — logged + soft-fail event, never rewritten,
-    # never a still_fail banner.
-    assert "output_gate_fail:gate:unscaffolded_new_item" in turn.notes
-    assert "output_gate_soft_fail:gate:unscaffolded_new_item" in turn.notes
+    # CHAR_PIN (S11): bare unintroduced keys are NO fault — the plumbing
+    # gate passes the turn; no soft/fail/still_fail events exist.
+    assert "output_gate_ok" in turn.notes
+    assert not any(n.startswith("output_gate_fail") for n in turn.notes)
     assert not any("output_gate_still_fail" in n for n in turn.notes)
-    assert "output_gate_recovered" not in turn.notes
-    assert "output_gate_ok" not in turn.notes
-    assert len(ctx.fake.requests) == 2  # open + turn only (no repair call)
+    assert not any("output_gate_soft_fail" in n for n in turn.notes)
+    assert len(ctx.fake.requests) == 2  # open + turn only
 
     # CHAR_PIN: single model call usage for the user turn (no second bill).
     assert turn.usage == {
@@ -147,13 +141,14 @@ def test_golden_gate_fault_surfaces_no_repair(tutor_session_factory):
         "thinking_tokens": 0, "cached_input_tokens": 0,
     }
 
-    # CHAR_PIN: raw attempt ships with visible fault labels.
+    # CHAR_PIN: the reply ships untouched and the gate dict is clean.
     assert "Mucho gusto" in turn.reply
     gate = turn.parts["output_gate"]
-    assert gate["ok"] is False
-    assert "gate:unscaffolded_new_item" in (gate.get("faults") or [])
-    # AMEND 2a: the bare exposure is recorded — «mucho gusto» stops
-    # re-faulting forever.
+    assert gate["ok"] is True
+    assert gate.get("faults") == []
+    assert turn.parts.get("gate_fail") is not True
+    # AMEND 2a (bookkeeping survives S11): the bare exposure is recorded —
+    # «mucho gusto» is never treated as unseen again.
     assert gate.get("scaffold_saved", {}).get("mucho gusto") == "bare"
     assert "first_seen:mucho gusto" in turn.notes
     assert ctx.save_calls[n_open:] == ["_commit_sheet"]
@@ -170,7 +165,7 @@ def test_golden_gate_fault_surfaces_no_repair(tutor_session_factory):
     obs["learner"] = "Muy bien, gracias."
     obs["gate_surface"] = {
         "requests_this_turn": 1,
-        "gate_fail": True,
+        "gate_fail": False,
         "faults": list(gate.get("faults") or []),
         "no_repair": True,
     }

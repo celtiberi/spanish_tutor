@@ -299,10 +299,7 @@ class TestLapsedIntroFirstSeen(TableCase):
 
     def test_encantado_lapse_writes_first_seen_next_bare_clean(self):
         from tutor.conv_session import introduce_scaffold_evidence
-        from tutor.output_gate import (
-            check_output_gate,
-            scan_unscaffolded_new_items,
-        )
+        from tutor.output_gate import scan_first_exposures
         from tutor.retrieval_scheduler import (
             has_first_seen,
             is_introduced,
@@ -322,15 +319,14 @@ class TestLapsedIntroFirstSeen(TableCase):
         updated, note = mark_introduced_if_visible(sheet, plan, reply)
         self.assertEqual(note, "introduce_lapsed:encantado:no_scaffold")
         self.assertIs(updated, sheet)  # budget unconsumed, no ledger write
-        # Gate scan WITH the planned key: no bare fault; scaffold recorded.
-        bare, _extras, _reglossed, saved = scan_unscaffolded_new_items(
+        # Exposure scan (S11: bookkeeping only): the glossed exposure of
+        # the lapsed planned key is recorded — no fault machinery exists.
+        saved = scan_first_exposures(
             {"model": reply, "try": "¿Puedes decirlo?", "structured": True},
             f"{reply} ¿Puedes decirlo?",
             table=self.table,
             sheet=sheet,
-            introduce_key="encantado",
         )
-        self.assertEqual(bare, [])
         self.assertEqual(saved.get("encantado"), "gloss")
         # conv_session's post-turn loop (intro_plan skip DROPPED): the
         # lapsed-but-glossed exposure sticks as first_seen.
@@ -342,16 +338,15 @@ class TestLapsedIntroFirstSeen(TableCase):
             sheet = mark_first_seen(sheet, fs_key, "lexicon", fs_kind)
         self.assertTrue(has_first_seen(sheet, "encantado", "lexicon"))
         self.assertFalse(is_introduced(sheet, "encantado", "lexicon"))
-        # Next turn: bare re-use is a re-encounter, not a fresh CRITICAL.
-        g = check_output_gate(
+        # Next turn: bare re-use is a re-encounter — not re-recorded.
+        saved2 = scan_first_exposures(
             {"model": "Encantado.", "try": "¿Puedes decirlo?",
              "structured": True},
             "Encantado. ¿Puedes decirlo?",
-            is_open=False,
-            association_table=self.table,
+            table=self.table,
             sheet=sheet,
         )
-        self.assertNotIn("gate:unscaffolded_new_item", g.faults)
+        self.assertNotIn("encantado", saved2)
 
     def test_first_seen_loop_no_longer_skips_plan_key(self):
         # The conv_session first_seen loop must not skip intro_plan.key

@@ -24,7 +24,6 @@ from .character_sheet import (
     save_sheet,
 )
 from .session_log import SessionLogger
-from .pedagogy_contract import evaluate_turn
 from .session_state import DEBUG_RING_SIZE, SessionState
 from .turn_events import (
     TurnEventKind as EV,
@@ -132,8 +131,8 @@ def introduce_outcome(sheet: dict, plan, reply: str, *, teach_images=None):
     scaffold absent = the tutor used the word naturally, not as a teaching
     move (2026-07-28 «buenas tardes» incident): the plan lapses — status
     "lapsed", no ledger write, budget unconsumed; the gate's
-    first_seen/flood machinery keeps owning natural bare use. Key absent
-    entirely → (sheet unchanged, None, None).
+    first-exposure scan keeps owning natural bare use (exposure map only —
+    S11 2026-08-03). Key absent entirely → (sheet unchanged, None, None).
     observe.word_present handles single words and MWUs alike (boundary-safe
     containment, same as the due-outcome recorder).
     """
@@ -1211,26 +1210,11 @@ class ConversationalSession:
         if parts_dict.get("structured"):
             notes = list(notes) + [ev.emit(EV.STRUCTURED_REPLY, stage="sheet")]
 
-        # Durable pedagogy contract (code-enforced, not prompt-only)
-        ped = evaluate_turn(
-            parts_dict,
-            is_open=is_open,
-            structured=bool(parts_dict.get("structured")),
-            visible=visible,
-        )
-        # Typed leaf emission (Phase 3 batch 2 push-down): pedagogy_contract
-        # carries the bare note_keys; the PEDAGOGY render is "pedagogy:"+key.
-        # absorb() only as the safety net for a keyless (test-built) check.
-        if len(getattr(ped, "note_keys", []) or []) == len(ped.notes):
-            notes = list(notes) + [
-                ev.emit(EV.PEDAGOGY, key=k, stage="contract")
-                for k in ped.note_keys
-            ]
-        else:  # safety net
-            notes = list(notes) + [
-                ev.absorb(n, stage="contract") for n in ped.notes
-            ]
-        parts_dict = {**parts_dict, "pedagogy": ped.as_dict()}
+        # (The per-turn pedagogy-contract judgment — evaluate_turn + the
+        # "contract"-stage PEDAGOGY emissions + parts["pedagogy"] — was
+        # DELETED 2026-08-03, S11: teaching-opinion checks live only in
+        # evals/student_checks.py.  The turn tail's PEDAGOGY phase note
+        # (diagnostic_open/known_learner_open) is bookkeeping and stays.)
 
         result = TurnResult(
             reply=visible,
@@ -1288,7 +1272,6 @@ class ConversationalSession:
                 "focus_source": (result.focus_meta or {}).get("source")
                 or (self._focus_meta or {}).get("source"),
                 "parts": parts,
-                "pedagogy": parts.get("pedagogy") or result.__dict__.get("pedagogy"),
                 "mode": parts.get("mode"),
                 "plan": parts.get("plan"),
             },
@@ -1299,7 +1282,6 @@ class ConversationalSession:
                 "tool_delta": result.tool_delta,
                 "focus_meta": result.focus_meta or self._focus_meta,
                 "parts": parts,
-                "pedagogy": parts.get("pedagogy"),
                 "mode": parts.get("mode"),
                 "mode_decision": parts.get("mode_decision"),
                 "plan": parts.get("plan"),
