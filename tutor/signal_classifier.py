@@ -26,8 +26,10 @@ from typing import Any
 
 from . import config
 
-# Routing-intent vocabulary the mode runtime consumes. The classifier may
-# ONLY emit these (anything else is dropped) — keeps select_mode testable.
+# Intent vocabulary the session consumes (memory holds/clears, blank-zero
+# derivation, session facts). The classifier may ONLY emit these (anything
+# else is dropped).  (The mode-runtime consumer died 2026-08-03 with the
+# router — full-code-audit S4.)
 INTENT_SIGNALS = frozenset({
     "help_request",       # asks how to say a word/phrase ("how do I say…", "cómo se dice…")
     "topic_request",      # asks to change topic/activity ("can we talk about…", "algo nuevo")
@@ -40,9 +42,9 @@ INTENT_SIGNALS = frozenset({
     "self_flagged_form",  # marks one of their OWN forms as uncertain («uvia (rain)», quotes)
 })
 
-# §2.1a architecture clause: these labels are measured in SHADOW only — they
-# must NOT change select_mode routing until the pre-registered promotion
-# gates pass (§4.3). conv_session strips them from blocking-path signals.
+# §2.1a architecture clause: these labels are measured in SHADOW only —
+# they stay out of the memory/observation sets until the pre-registered
+# promotion gates pass (§4.3). The blocking path strips them.
 OBSERVATIONAL_SIGNALS = frozenset({"content_offer", "self_flagged_form"})
 
 _SYSTEM = """You label ONE message from an adult A1 Spanish learner to their tutor.

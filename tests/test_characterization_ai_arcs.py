@@ -131,8 +131,12 @@ def test_golden_gate_fault_surfaces_no_repair(tutor_session_factory):
     turn = s.user_turn("Muy bien, gracias.")
     assert turn.error is None
 
-    # CHAR_PIN: critical fault logged; never rewritten or blanked.
+    # CHAR_PIN (gate retune 2026-08-03): a bare unintroduced key is a
+    # SOFT advisory now — logged + soft-fail event, never rewritten,
+    # never a still_fail banner.
     assert "output_gate_fail:gate:unscaffolded_new_item" in turn.notes
+    assert "output_gate_soft_fail:gate:unscaffolded_new_item" in turn.notes
+    assert not any("output_gate_still_fail" in n for n in turn.notes)
     assert "output_gate_repaired" not in turn.notes
     assert "output_gate_recovered" not in turn.notes
     assert "output_gate_ok" not in turn.notes
@@ -144,12 +148,15 @@ def test_golden_gate_fault_surfaces_no_repair(tutor_session_factory):
         "thinking_tokens": 0, "cached_input_tokens": 0,
     }
 
-    # CHAR_PIN: raw failing attempt ships; gate_fail banner for the client.
+    # CHAR_PIN: raw attempt ships with visible fault labels.
     assert "Mucho gusto" in turn.reply
-    assert turn.parts.get("gate_fail") is True
     gate = turn.parts["output_gate"]
     assert gate["ok"] is False
     assert "gate:unscaffolded_new_item" in (gate.get("faults") or [])
+    # AMEND 2a: the bare exposure is recorded — «mucho gusto» stops
+    # re-faulting forever.
+    assert gate.get("scaffold_saved", {}).get("mucho gusto") == "bare"
+    assert "first_seen:mucho gusto" in turn.notes
     assert ctx.save_calls[n_open:] == ["_commit_sheet"]
 
     # CHAR_PIN: planned key lapsed (absent from reply) — no introduced: write.
@@ -190,20 +197,15 @@ def test_golden_comprehension_repair(tutor_session_factory):
     turn = s.user_turn("What does contento mean?")
     assert turn.error is None
 
-    # CHAR_PIN: meta turn → comprehension_repair hard break, same-topic
-    # targets carry the remembered try/model.
-    assert turn.parts["mode"] == "comprehension_repair"
-    assert "mode_reason=meta_comprehension_stay_on_topic" in turn.notes
-    assert "hard_break=True" in turn.notes
-    targets = turn.parts["mode_decision"]["targets"]
-    assert targets["last_try"] == "¿Estás contento hoy también?"
-    assert targets["require_same_topic"] is True
-    assert targets["forbid_new_topic"] is True
+    # CHAR_PIN: the mode router is dead — the meta turn ships as facts;
+    # the memory hold still arms (comprehension repair is the MODEL's
+    # judgment now).
+    assert "mode" not in turn.parts
+    assert "mode_decision" not in turn.parts
 
-    # CHAR_PIN (incident class): the learner's meta question contains no
-    # repair-target concept — NO image is served (an absent image beats a
-    # wrong one); the decision is visible, not silent.
-    assert turn.parts["mode_decision"]["image_concept"] is None
+    # CHAR_PIN (incident class): no image machinery runs on a non-open
+    # turn — an image arrives only via introduce R-B or the model's own
+    # declaration; the meta turn serves none.
     assert not turn.parts.get("teach_images")
     assert not any(n.startswith("teach_image:") for n in turn.notes)
 
@@ -229,11 +231,7 @@ def test_golden_comprehension_repair(tutor_session_factory):
     # and the phase clock resumes consuming.
     assert s.pedagogy_memory.await_comprehension is False
     assert s.pedagogy_memory.await_comprehension_ttl == 0
-    assert turn2.parts["mode"] == "conversation"
-    # CHAR_PIN — scenes DELETED 2026-08-03 (S9): «Estoy contento» cannot
-    # topic-match a scene any more; the turn is default_conversation and
-    # the INTRODUCE plan fires on the flavorable turn.
-    assert "mode_reason=default_conversation" in turn2.notes
+    # CHAR_PIN — the INTRODUCE plan keeps firing (shadow planner).
     assert "introduce_planned:me llamo:R-D" in turn2.notes
 
     # CHAR_PIN CHAR-BUG-006 RESOLVED, then scenes deleted entirely
@@ -276,17 +274,14 @@ def _arc_view(ctx, s, result, req_index) -> dict:
     """Compact per-turn view for the multi-turn budget-arc golden."""
     payload = ctx.fake.task_payload(req_index)
     return {
-        "mode": (result.parts or {}).get("mode"),
         "notes": note_families(result.notes),
         "intro_budget_remaining":
             s.pedagogy_memory.intro_budget_remaining(),
         "introduced_this_session": list(
             s.pedagogy_memory.introduced_this_session
         ),
-        "uptake_last_turn": s.mode_state.content_uptake_last_turn,
-        "learner_turn_index": s.mode_state.learner_turn_index,
         # §1.1 rewrite (2026-08-03): router scripts no longer ship — the
-        # pin is their ABSENCE from the payload (shadow notes carry them).
+        # pin is their ABSENCE from the payload.
         "instructions": {
             "scripts_shipped": "mode" in payload,
         },
@@ -314,22 +309,24 @@ def test_golden_budget_arc(tutor_session_factory):
     assert s.pedagogy_memory.intro_budget_remaining() == 2
     views.append(_arc_view(ctx, s, open_res, 0))
 
-    # t1 — uptake FIRES (first §2.1a self-flag, budget fresh) and the
-    # realized plan consumes introduce budget 2→1.
+    # t1 — the §2.1a self-flag is a pure OBSERVATION now (router teardown
+    # 2026-08-03: the instruction path + its ModeSessionState budget are
+    # DELETED — every self-flag is a recorded fact); the realized plan
+    # consumes introduce budget 2→1.
     t1 = s.user_turn("Muy bien, gracias. El pan (bread?) es muy rico.")
     assert t1.error is None
     assert "uptake_flagged:pan" in t1.notes
     assert "introduced:me llamo" in t1.notes
     assert s.pedagogy_memory.intro_budget_remaining() == 1
-    assert s.mode_state.content_uptake_last_turn == 2
     views.append(_arc_view(ctx, s, t1, 1))
 
-    # t2 — consecutive self-flag BLOCKED (≥3-turn gap not met: 3-2=1); the
-    # second introduce plan lands and consumes the last slot 1→0.
+    # t2 — DECLARED DELTA (budget deleted): the consecutive self-flag is
+    # observed too — it paced instruction injections, and there is no
+    # instruction to pace.  The second introduce plan lands and consumes
+    # the last slot 1→0.
     t2 = s.user_turn("La leche (milk?) es buena.")
     assert t2.error is None
-    assert not any(n.startswith("uptake_flagged:") for n in t2.notes)
-    assert s.mode_state.content_uptake_last_turn == 2  # unchanged
+    assert "uptake_flagged:leche" in t2.notes
     assert "introduce_planned:soy:R-D" in t2.notes
     assert "introduced:soy" in t2.notes
     assert s.pedagogy_memory.intro_budget_remaining() == 0
@@ -346,13 +343,11 @@ def test_golden_budget_arc(tutor_session_factory):
     assert "mode" not in ctx.fake.task_payload(3)
     views.append(_arc_view(ctx, s, t3, 3))
 
-    # t4 — the ≥3-turn uptake window has passed (5-2=3) → uptake fires
-    # again on the fresh self-flag. (The task phase + scene bind died with
-    # the S9 deletions — no task notes exist any more.)
+    # t4 — the fresh self-flag is observed as always. (The task phase +
+    # scene bind died with the S9 deletions — no task notes exist.)
     t4 = s.user_turn("Quiero leche (milk?) en el desayuno.")
     assert t4.error is None
     assert "uptake_flagged:leche" in t4.notes
-    assert s.mode_state.content_uptake_last_turn == 5
     assert not any("task" in str(n) for n in t4.notes)
     views.append(_arc_view(ctx, s, t4, 4))
 
@@ -410,33 +405,26 @@ def test_char_bug_005_and_scenes_stay_deleted(tutor_session_factory):
     assert s.open_session().error is None
 
     assert importlib.util.find_spec("tutor.scenes") is None
+    # The whole mode router died 2026-08-03 (full-code-audit S4) — the
+    # module that owned the scene routing is itself gone.
+    assert importlib.util.find_spec("tutor.modes") is None
 
-    import tutor.modes as modes_mod
     import tutor.turn_pipeline as tp_mod
 
-    # The fields are gone from the dataclass and from the snapshot surfaces.
-    assert not hasattr(s.mode_state, "scene_modeled")
-    assert not hasattr(s.mode_state, "open_scene_ids")
-    assert "scene_modeled" not in s.mode_state.snapshot()
-    assert "open_scene_ids" not in s.mode_state.snapshot()
-    # The scene routing/needs-model machinery is gone entirely.
-    assert not hasattr(modes_mod, "_scene_for_topic")
-    assert not hasattr(modes_mod, "_scene_needs_model")
     assert not hasattr(tp_mod, "stage_open_scenes")
     # Deletion lint: no CODE reference to the deleted names remains in the
-    # owning modules.
+    # owning module.
     dead = {"scene_modeled", "_scene_needs_model", "_scene_for_topic",
             "open_scene_ids", "open_scenes_for_sheet",
             "scene_hints_for_prompt"}
-    for mod in (modes_mod, tp_mod):
-        tree = ast.parse(inspect.getsource(mod))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Attribute):
-                assert node.attr not in dead, (mod.__name__, node.attr)
-            elif isinstance(node, ast.Name):
-                assert node.id not in dead, (mod.__name__, node.id)
-            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                assert node.name not in dead, (mod.__name__, node.name)
-            elif isinstance(node, ast.Constant):
-                # exact-string uses (dict keys) only — prose may mention them
-                assert node.value not in dead, (mod.__name__, node.value)
+    tree = ast.parse(inspect.getsource(tp_mod))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute):
+            assert node.attr not in dead, node.attr
+        elif isinstance(node, ast.Name):
+            assert node.id not in dead, node.id
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            assert node.name not in dead, node.name
+        elif isinstance(node, ast.Constant):
+            # exact-string uses (dict keys) only — prose may mention them
+            assert node.value not in dead, node.value

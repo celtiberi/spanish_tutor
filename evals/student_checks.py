@@ -13,14 +13,17 @@ Checks:
     turns — the probe_loop failure class the gate is supposed to kill
     (2026-07-30 session chain, R4). Token-Jaccard > FIXATION_JACCARD on
     fold_prose tokens, tries >= FIXATION_MIN_TOKENS tokens.
-  - still_fail (HARD): turns whose notes carry output_gate_still_fail —
-    a reply shipped with unrepaired critical faults (gate obligation, R1).
-  - probe_on_known (WARN): comprehension-check questions (A/B «... o ...»
-    or «¿Sí o no?») re-probing a frame session memory already recorded as
-    asked/shown (mem_asked=/mem_shown= notes) — the R2 checker-budget
-    signal, advisory until R2 lands a law paragraph.
-  - english_wall (WARN): turns whose notes carry gate:english_wall — the
-    gate already repairs/escalates these; here we only count drift.
+  - still_fail (SPLIT BY RULE — gate retune 2026-08-03): turns whose notes
+    carry output_gate_still_fail.  Only the CRITICAL classes fail hard —
+    cluster veto, truncated, pedagogy-contract faults
+    (HARD_STILL_FAIL_FAULTS).  Everything else in a still_fail note is
+    counted + reported as WARN, never a session FAIL.
+  - probe_on_known (WARN): sí-o-no quiz questions re-probing a frame
+    session memory already recorded as asked/shown (mem_asked=/mem_shown=
+    notes; mode-name registry pollution filtered) — advisory.
+  - english_wall (WARN): turns whose notes carry gate:english_wall.  There
+    is NO repair path — the gate ships the raw reply with visible fault
+    labels (no-hide, 2026-08-01); this check counts the drift.
 """
 
 from __future__ import annotations
@@ -36,14 +39,35 @@ FIXATION_MIN_TOKENS = 6
 _INVERTED_Q_RE = re.compile(r"¿[^¿?]*\?")
 _TAIL_Q_RE = re.compile(r"[^.!?¿]*\?")
 
-# Comprehension-check shapes (mirrors the gate's comprehension_check
-# contract, tutor/output_gate.py: try must contain ?/¿/« o »/sí/no).
-_AB_PROBE_RE = re.compile(r"\bo\b", re.I)  # applied inside a question span
+# Meaning-quiz shape.  The old `\bo\b` = comprehension-quiz assumption was
+# DELETED (gate retune 2026-08-03): a natural alternative question («¿café
+# o té?») is conversation, not a quiz — only the explicit sí-o-no check
+# still counts as a probe shape.
 _SI_O_NO_RE = re.compile(r"\bs[ií],?\s+o\s+no\b", re.I)
 
 # mem_* registry notes (tutor/turn_events.py MEM_ASKED/MEM_SHOWN render:
 # "mem_asked=" + ",".join(keys), "—" when empty).
 _MEM_NOTE_RE = re.compile(r"^mem_(?:asked|shown)=(.*)$")
+
+# still_fail severity split (gate retune 2026-08-03): only these fault
+# classes fail a session hard — the cluster veto, a truncated reply, and
+# the pedagogy contract.  Anything else in a still_fail note (probe_loop,
+# english_wall, sheet_leak, legacy fault names) is counted as WARN.
+HARD_STILL_FAIL_FAULTS = frozenset({
+    "gate:cluster_veto",
+    "gate:truncated",
+    "pedagogy:no_teach_move",
+    "pedagogy:open_needs_model_try",
+})
+
+# Registry keys that name the historical mode router's modes, not content —
+# old transcripts' mem_asked rows carry them (note_plan_try recorded the
+# mode name); they must never count as a probeable known frame.
+_MODE_NAME_KEYS = frozenset({
+    "placement", "conversation", "cf_recast", "form_focus",
+    "comprehension_check", "comprehension_repair", "association",
+    "transfer",
+})
 
 # Topic-key tokens that name frames/control states, not probeable content
 # (session_memory key vocabulary: ask_how, cf_recast, spanish_ok, ...).
@@ -133,13 +157,24 @@ def check_fixation(transcript: list[dict]) -> list[str]:
 
 
 def check_still_fail(transcript: list[dict]) -> list[str]:
-    """output_gate_still_fail notes → HARD finding per offending turn."""
+    """output_gate_still_fail notes, split by rule (gate retune 2026-08-03).
+
+    A still_fail note whose fault list touches HARD_STILL_FAIL_FAULTS
+    (cluster veto / truncated / pedagogy contract) is a HARD finding; any
+    other still_fail note is reported as WARN — counted, never a FAIL.
+    """
     findings: list[str] = []
     for i, turn in enumerate(_turn_rows(transcript)):
         for n in turn.get("notes") or []:
             s = str(n)
-            if "output_gate_still_fail" in s:
+            if "output_gate_still_fail" not in s:
+                continue
+            tail = s.split("output_gate_still_fail", 1)[1].lstrip(":")
+            faults = {f.strip() for f in tail.split(",") if f.strip()}
+            if faults & HARD_STILL_FAIL_FAULTS:
                 findings.append(f"turn {i}: {s}")
+            else:
+                findings.append(f"WARN turn {i}: {s}")
     return findings
 
 
@@ -151,7 +186,9 @@ def _mem_keys(turn: dict) -> set[str]:
             continue
         for k in m.group(1).split(","):
             k = k.strip()
-            if k and k != "—":
+            # Mode names are router telemetry, not probeable frames
+            # (mem_asked pollution — gate retune 2026-08-03).
+            if k and k != "—" and k not in _MODE_NAME_KEYS:
                 keys.add(k)
     return keys
 
@@ -163,11 +200,12 @@ def _key_content_tokens(key: str) -> set[str]:
 
 
 def _probes(reply: str) -> list[str]:
-    """Comprehension-check questions: A/B alternatives or sí-o-no."""
+    """Explicit quiz questions: «¿Sí o no?» shapes only (the `\\bo\\b`
+    any-alternative assumption was deleted — gate retune 2026-08-03)."""
     out: list[str] = []
     for q in _question_spans(reply):
         folded = fold_lexical(q)
-        if _SI_O_NO_RE.search(folded) or _AB_PROBE_RE.search(folded):
+        if _SI_O_NO_RE.search(folded):
             out.append(q)
     return out
 
@@ -200,7 +238,10 @@ def check_probe_on_known(transcript: list[dict]) -> list[str]:
 
 
 def check_english_wall(transcript: list[dict]) -> list[str]:
-    """gate:english_wall notes → WARN finding per offending turn."""
+    """gate:english_wall notes → WARN finding per offending turn.
+
+    No repair path exists: the gate ships the raw reply with visible fault
+    labels (no-hide, 2026-08-01); this check only counts the drift."""
     findings: list[str] = []
     for i, turn in enumerate(_turn_rows(transcript)):
         for n in turn.get("notes") or []:
@@ -220,8 +261,9 @@ CHECKS = {
 
 def run_student_checks(transcript: list[dict]) -> tuple[dict, bool]:
     """(findings-by-check, passed). Fail bar: any non-WARN finding —
-    i.e. nonzero fixation or still_fail (probe_on_known / english_wall
-    are WARN-only counters)."""
+    i.e. nonzero fixation or a HARD-class still_fail (cluster veto /
+    truncated / pedagogy contract); probe_on_known, english_wall and
+    soft-class still_fail rows are WARN-only counters."""
     findings: dict[str, list[str]] = {}
     for name, fn in CHECKS.items():
         out = fn(transcript)

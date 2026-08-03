@@ -33,18 +33,17 @@ THE EVENT CONTRACT (batch 2 — events are THE truth, strings the projection):
     ``character_sheet.process_turn``/``summarize_sheet_change_events`` mint
     (kind, key, payload) triples (strings = this module's render),
     ``pedagogy_contract`` carries bare ``note_keys`` on PedagogyCheck plus
-    the KEY_* constants for the phase note, and ``self_flag_uptake_block``
-    returns the raw token.  ``TurnEventLog.absorb`` remains ONLY as the
+    the KEY_* constants for the phase note, and ``stage_uptake_flag`` emits
+    the raw flagged token.  ``TurnEventLog.absorb`` remains ONLY as the
     safety net for un-typed strays (e.g. a test fake replacing
     process_turn); golden runs mint ZERO absorbed events (contract-tested).
-  - The three in-module re-parse sites conv_session carried (the map's
-    "decision.reason string-parsed by prefix; notes re-parsed" cluster)
-    read typed events: the guard-6 covered-concept site reads
-    ``MODE_REASON.payload["guard6_concept"]``, the gate-context
-    ``retrieval_failed_keys`` set reads ``DUE_OUTCOME_FAIL`` events, and
-    the introduce-ledger branch reads the structured ``introduce_outcome``
-    status.  No note-string derivation remains in conv_session (source- and
-    behavior-pinned by tests/test_turn_events.py).
+  - The in-module re-parse sites conv_session carried read typed events:
+    the gate-context ``retrieval_failed_keys`` set reads
+    ``DUE_OUTCOME_FAIL`` events and the introduce-ledger branch reads the
+    structured ``introduce_outcome`` status.  No note-string derivation
+    remains in conv_session (source- and behavior-pinned by
+    tests/test_turn_events.py).  (MODE / MODE_REASON / HARD_BREAK kinds
+    DELETED 2026-08-03 with the mode router — full-code-audit S4.)
 
 STABILITY CLASSES (measured, not assumed):
   - ``eval-pinned`` (14 kinds): consumed by evals/conv_checks.py — since
@@ -106,9 +105,6 @@ class TurnEventKind(str, Enum):
     INTRODUCE_TABLE_MISSING = "introduce_table_missing"
     INTRODUCE_PLANNED = "introduce_planned"
     INTRODUCE_DOWNGRADED = "introduce_downgraded"
-    # -- mode selection (stage "select"; strings render in the tail) --------
-    MODE = "mode"
-    MODE_REASON = "mode_reason"
     # -- output gate (stage "gate") -----------------------------------------
     OUTPUT_GATE_OK = "output_gate_ok"
     OUTPUT_GATE_SOFT_FAIL = "output_gate_soft_fail"
@@ -154,7 +150,6 @@ class TurnEventKind(str, Enum):
     # -- turn tail summary (stage "tail") -----------------------------------
     OPEN_PHASE = "open_phase"
     PHASE = "phase"
-    HARD_BREAK = "hard_break"
     PLAN_SOURCE = "plan_source"
     TEACHER_MODE = "teacher_mode"
     MEM_SHOWN = "mem_shown"
@@ -233,8 +228,9 @@ NOTE_CATALOG: dict[TurnEventKind, NoteSpec] = {s.kind: s for s in [
           "eval-pinned", True),
     _spec(TurnEventKind.UPTAKE_FLAGGED, "uptake_flagged:", False,
           "<flagged token>",
-          ["conv_session.self_flag_uptake_block (returns the raw token; "
-           "typed emit at the _execute_ai_tutor call site)"],
+          ["turn_pipeline.stage_uptake_flag "
+           "(observe.detect_self_flagged_token — pure observation since "
+           "the 2026-08-03 router teardown)"],
           ["evals/conv_checks.uptake_flag_honored (prefix + token split)"],
           "eval-pinned", True),
     _spec(TurnEventKind.INTRODUCE_TABLE_MISSING, "introduce_table_missing",
@@ -247,18 +243,6 @@ NOTE_CATALOG: dict[TurnEventKind, NoteSpec] = {s.kind: s for s in [
     _spec(TurnEventKind.INTRODUCE_DOWNGRADED, "introduce_downgraded:", False,
           "<key>:R-B_to_R-D", ["conv_session._execute_ai_tutor (AMEND 4b)"],
           [], "log-only", False),
-    _spec(TurnEventKind.MODE, "mode=", False, "<mode value>",
-          ["conv_session._execute_ai_tutor (minted at select, string "
-           "rendered in the tail)"],
-          ["evals/conv_checks._mode (fallback parser)"],
-          "eval-pinned", True),
-    _spec(TurnEventKind.MODE_REASON, "mode_reason=", False,
-          "<reason; guard-6 reasons are new_noun:<concept> — parsed ONCE "
-          "into payload.guard6_concept at mint>",
-          ["conv_session._execute_ai_tutor (minted at select)"],
-          ["conv_session covered-concept site (typed events since Phase 3 "
-           "batch 1; was decision.reason startswith/split)"],
-          "log-only", True),
     _spec(TurnEventKind.OUTPUT_GATE_OK, "output_gate_ok", True, "",
           ["conv_session._execute_ai_tutor (gate)"],
           ["evals/conv_checks.recast_or_gate_attempt (substring "
@@ -302,8 +286,8 @@ NOTE_CATALOG: dict[TurnEventKind, NoteSpec] = {s.kind: s for s in [
           [], "log-only", True),
     _spec(TurnEventKind.MORPH_CARD, "morph_card:", False,
           "<lemma> (tutor-side introduction engaged the Morphology card)",
-          ["turn_pipeline.stage_intro_morph"],
-          ["web Morphology card (block stashed on last_mode_decision)"],
+          ["turn_pipeline.stage_settle_chrome"],
+          ["web Morphology card (TurnRender card view)"],
           "log-only", True),
     _spec(TurnEventKind.FRAME_RECORDED, "frame_recorded:", False,
           "<key>:<frame> (frames_seen exposure write — the revisit-bound "
@@ -429,10 +413,9 @@ NOTE_CATALOG: dict[TurnEventKind, NoteSpec] = {s.kind: s for s in [
           "ai_tutor (historical replay may carry rules <card.phase> values)",
           ["conv_session._execute_ai_tutor tail"],
           [], "log-only", True),
-    _spec(TurnEventKind.HARD_BREAK, "hard_break=", False, "True | False",
-          ["conv_session._execute_ai_tutor tail"], [], "log-only", True),
     _spec(TurnEventKind.PLAN_SOURCE, "plan_source=", False,
-          "mode_runtime ('rules' only in historical replay — E4 deletion)",
+          "model ('mode_runtime'/'rules' only in historical replay — "
+          "router teardown 2026-08-03 / E4 deletion)",
           ["conv_session._execute_ai_tutor tail"],
           [], "log-only", True),
     _spec(TurnEventKind.TEACHER_MODE, "teacher_mode=", False,
@@ -515,8 +498,6 @@ _RENDER = {
     _K.INTRODUCE_DOWNGRADED:
         lambda e: f"introduce_downgraded:{e.key}:"
                   f"{e.payload.get('path', 'R-B_to_R-D')}",
-    _K.MODE: lambda e: f"mode={e.key}",
-    _K.MODE_REASON: lambda e: f"mode_reason={e.key}",
     _K.OUTPUT_GATE_OK: lambda e: "output_gate_ok",
     _K.OUTPUT_GATE_SOFT_FAIL:
         lambda e: "output_gate_soft_fail:" + _join(e.payload.get("faults")),
@@ -572,7 +553,6 @@ _RENDER = {
     _K.PEDAGOGY: lambda e: f"pedagogy:{e.key}",
     _K.OPEN_PHASE: lambda e: f"open_phase={e.key}",
     _K.PHASE: lambda e: f"phase={e.key}",
-    _K.HARD_BREAK: lambda e: f"hard_break={e.key}",
     _K.PLAN_SOURCE: lambda e: f"plan_source={e.key}",
     _K.TEACHER_MODE: lambda e: f"teacher_mode={e.key}",
     _K.MEM_SHOWN: lambda e: "mem_shown=" + _join(e.payload.get("items"), "—"),
@@ -646,20 +626,7 @@ def _parse_tail(kind: TurnEventKind, tail: str) -> tuple[str, dict]:
     if kind is _K.SHEET_ERROR_PATTERN:
         count, _, pid = tail.partition(":")
         return pid, {"count": count}
-    if kind is _K.MODE_REASON:
-        return tail, {"guard6_concept": _guard6_concept(tail)}
     return tail, {}
-
-
-def _guard6_concept(reason: str) -> str | None:
-    """Guard-6 concept from a mode reason — THE one boundary parse.
-
-    Replaces the mid-pipeline ``decision.reason.startswith("new_noun:")`` +
-    split re-parse (Phase 3 batch 1); ``None`` ⇔ not a guard-6 reason.
-    """
-    if (reason or "").startswith("new_noun:"):
-        return reason.split(":", 1)[1]
-    return None
 
 
 def classify_note(note: str) -> tuple[TurnEventKind, str, dict] | None:
@@ -695,8 +662,6 @@ class TurnEventLog:
              payload: dict | None = None, stage: str = "") -> str:
         """Mint a typed event; return the legacy note string projection."""
         p = dict(payload or {})
-        if kind is _K.MODE_REASON and "guard6_concept" not in p:
-            p["guard6_concept"] = _guard6_concept(key)
         ev = TurnEvent(kind=kind, key=str(key), payload=p, seq=self._seq,
                        stage=stage)
         self._seq += 1

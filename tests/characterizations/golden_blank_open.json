@@ -3,51 +3,45 @@
   "gate": {
     "faults": [],
     "ok": true,
-    "scaffold_saved": {}
+    "scaffold_saved": {
+      "estoy bien": "gloss",
+      "hola": "gloss"
+    }
   },
   "memory": {
-    "asked": [
-      "placement"
-    ],
+    "asked": [],
     "asked_topics": [],
     "images_shown": [],
-    "intro_budget_remaining": 2,
-    "introduced_this_session": [],
+    "intro_budget_remaining": 1,
+    "introduced_this_session": [
+      "hola"
+    ],
     "shown": [],
     "turns": 0
   },
-  "mode_state": {
-    "english_only_streak": 0,
-    "form_focus_cooldown": {},
-    "hard_breaks_this_session": 1,
-    "last_mode": "placement",
-    "last_resolved_form": null,
-    "learner_turn_index": 1,
-    "turns_since_hard_break": 0
-  },
   "model_requests": 1,
   "notes": [
-    "mode=placement",
-    "mode_reason=blank_open_placement",
+    "introduce_planned:hola:R-E",
     "image_gen_disabled:hola",
     "output_gate_ok",
     "rules_backup",
     "scaffold=ES-forward+EN-rescue",
     "structured_reply",
     "pedagogy:ok",
+    "introduced:hola",
+    "progress_milestone:planted:hola",
+    "first_seen:estoy bien",
     "pedagogy:diagnostic_open",
     "open_phase=diagnostic",
-    "hard_break=True",
-    "plan_source=mode_runtime",
+    "plan_source=model",
     "teacher_mode=planned",
     "mem_shown=—",
-    "mem_asked=placement",
+    "mem_asked=—",
+    "morph_card:estar",
     "image_decision:diagnostic_open"
   ],
   "parts_keys": [
     "image_decision",
-    "mode",
-    "mode_decision",
     "model",
     "open_phase",
     "output_gate",
@@ -57,7 +51,13 @@
     "teach_images",
     "try"
   ],
-  "progress_events": [],
+  "progress_events": [
+    {
+      "key": "hola",
+      "kind": "planted",
+      "polarity": "up"
+    }
+  ],
   "reply": "**Hola** (hello). **Estoy bien** (I'm fine).\n\nSay **Hola** (hello) to me!",
   "save_calls_init_plus_open": [
     "__init__",
@@ -65,7 +65,15 @@
   ],
   "sheet": {
     "lexicon:bien": null,
-    "lexicon:hola": null
+    "lexicon:hola": {
+      "confidence": 0.0,
+      "interval_days": 1,
+      "introduced_at": "<TODAY>",
+      "next_due": "<TOMORROW>",
+      "scaffold": "keyword",
+      "status": "unknown",
+      "successive_successes": 0
+    }
   },
   "stop_reason": "end_turn",
   "usage": {

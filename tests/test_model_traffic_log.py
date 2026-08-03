@@ -23,7 +23,6 @@ def test_debug_entry_carries_raw_and_reply():
         system=[{"type": "text", "text": "stance"}],
         messages=[{"role": "user", "content": "task"}],
         task="task",
-        decision_dict=None,
         usage={"input_tokens": 10, "output_tokens": 5},
         raw="<plan>secret</plan><tutor>hola</tutor>",
         reply="hola",
@@ -41,7 +40,6 @@ def test_log_model_exchange_writes_full_entry(monkeypatch, tmp_path):
         system=[{"type": "text", "text": "S" * 5000}],  # no truncation
         messages=[],
         task="T",
-        decision_dict=None,
         usage=None,
         raw="RAW",
         reply="VISIBLE",
@@ -53,30 +51,30 @@ def test_log_model_exchange_writes_full_entry(monkeypatch, tmp_path):
     lines = path.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 2
     got = json.loads(lines[0])
-    # sent / received / router_shadow_NOT_SENT are structurally distinct
-    # (incident 2026-08-03: flat entries let shadow "instructions" read
-    # as shipped prompt text).
+    # sent / received are structurally distinct (incident 2026-08-03: flat
+    # entries let shadow "instructions" read as shipped prompt text; the
+    # router_shadow_NOT_SENT key died with the router — entries no longer
+    # carry shadow fields at all).
     assert got["sent"]["system_blocks"][0]["text"] == "S" * 5000
     assert got["received"]["raw"] == "RAW"
     assert got["received"]["reply"] == "VISIBLE"
     assert "system_blocks" not in got and "response" not in got
 
 
-def test_router_shadow_never_reads_as_sent(monkeypatch, tmp_path):
+def test_entries_carry_no_router_shadow_fields(monkeypatch, tmp_path):
+    # Router teardown 2026-08-03: debug entries carry NO mode/reason/
+    # instructions/hard_break — there is no shadow router text to leak.
     monkeypatch.setattr(config, "LOG_DIR", tmp_path)
     logger = SessionLogger(arch="conversational", label="shadowtest")
     entry = build_debug_entry(
         model="fake", system=[], messages=[], task="T",
-        decision_dict={"mode": "new_input", "reason": "r",
-                       "instructions": "SESSION PHASE: NEW INPUT — script"}, usage=None, raw="", reply="",
+        usage=None, raw="", reply="",
     )
+    for gone in ("mode", "reason", "instructions", "hard_break"):
+        assert gone not in entry
     logger.log_model_exchange(entry)
     got = json.loads(
         (tmp_path / f"{logger.session_id}.requests.jsonl").read_text()
     )
-    assert got["router_shadow_NOT_SENT"]["instructions"].startswith(
-        "SESSION PHASE"
-    )
-    # The script text appears ONLY under the not-sent key.
-    sent_blob = json.dumps(got["sent"])
-    assert "SESSION PHASE" not in sent_blob
+    assert "router_shadow_NOT_SENT" not in got
+    assert set(got["sent"]) == {"system_blocks", "history", "task_message"}

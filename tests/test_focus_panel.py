@@ -44,8 +44,14 @@ class TestFocusPanel(unittest.TestCase):
         )
         self.assertIn("Adiós", forms)
 
-    def test_live_mode_overrides_stale_can_do_title(self):
-        """Mode runtime is primary — do not show IP-03 names during transfer/estoy."""
+    def test_panel_is_pure_sheet_projection(self):
+        """Router teardown 2026-08-03 (full-code-audit S4): the live-mode
+        overlay is gone — the rail is a sheet projection; form_focus still
+        drives the morphology card."""
+        import inspect
+
+        from tutor import can_dos
+
         s = default_sheet()
         s["next_best"] = {
             "can_do": "IP-03",
@@ -55,21 +61,19 @@ class TestFocusPanel(unittest.TestCase):
             "error_pattern": "estar_yo_estoy_vs_esta",
             "reason": "form focus | weakest IP-03",
         }
-        md = {
-            "mode": "transfer",
-            "reason": "success_transfer",
-            "hard_break": False,
-            "targets": {"form_id": "estar_yo_estoy_vs_esta", "transfer": True},
-            "instructions": "Same form, NEW micro-context.",
-        }
-        panel = build_focus_panel(s, mode_decision=md)
+        panel = build_focus_panel(s)
         f = panel["focus"]
-        self.assertTrue(f["live"])
-        self.assertEqual(f["mode"], "transfer")
-        self.assertIn("transfer", f["title"].lower())
-        self.assertNotIn("name", f["title"].lower())
+        for gone in ("live", "mode", "mode_reason", "hard_break",
+                     "image_concept"):
+            self.assertNotIn(gone, f)
+        self.assertIn("name", f["title"].lower())
         morph_labels = " ".join(b.get("label", "") for b in panel["morphology"]).lower()
         self.assertIn("estar", morph_labels)
+        # Absence pins: the live-mode machinery stays deleted.
+        self.assertFalse(hasattr(can_dos, "_live_focus_from_mode"))
+        self.assertFalse(hasattr(can_dos, "_MODE_TITLES"))
+        sig = inspect.signature(build_focus_panel)
+        self.assertNotIn("mode_decision", sig.parameters)
 
     def test_sheet_public_has_focus_and_morphology(self):
         """Regression: sheet_public must not crash (broke web rail)."""

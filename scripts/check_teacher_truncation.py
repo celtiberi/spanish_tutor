@@ -33,7 +33,6 @@ TEACHER_PATHS = frozenset(
         "tutor/executor.py",
         "tutor/character_sheet.py",
         "tutor/config.py",
-        "tutor/modes.py",
         "tutor/observe.py",
         "tutor/output_gate.py",
         # tutor/scenes.py DELETED 2026-08-03 (full-code-audit S9).

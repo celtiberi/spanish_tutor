@@ -3,11 +3,9 @@
 Committed before runs. Mechanical expectations only — no LLM judge criteria.
 Legacy TRAJECTORIES in trajectories.py target tutor.cli / planner; do not mix.
 
-Seeding rules (hard-break budget arithmetic — see docs/reviews-evals-port.md):
-blank open consumes the budget via placement, so a hard mode cannot fire on
-the first learner turn after a blank open. Trajectories that need a hard break
-on turn 1 (form_focus, association) seed a known (non-blank) sheet so the open
-is conversation, leaving the budget free.
+Seeding rules: a known (non-blank) seed keeps the open conversational; a
+blank seed exercises the true-zero open register.  (The hard-break budget
+arithmetic died with the mode router, 2026-08-03.)
 """
 
 from __future__ import annotations
@@ -91,12 +89,11 @@ def _taking_root_seed() -> dict:
 
 # Each trajectory:
 #   id, description, seed_sheet (dict|None → blank),
-#   seed_mode_state (dict applied to session.mode_state after construct),
 #   turns (learner strings; open is always separate),
 #   expect: structured mechanical expectations consumed by conv_checks
 #
-# expect.mode_sets: list aligned to [open] + turns; each entry is the set of
-#   allowed mode strings for that turn.
+# (seed_mode_state + expect.mode_sets DELETED 2026-08-03 with the mode
+# router — full-code-audit S4: there is no mode to seed or assert.)
 # expect.gate: per-turn {forbid_faults, require_any_fault} on the final gate.
 # expect.teach: per-turn required / any-of part keys.
 # expect.sheet_final: predicates on the final sheet.
@@ -108,9 +105,6 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
         "seed_sheet": None,  # blank
         "turns": [],
         "expect": {
-            "mode_sets": [
-                ["placement"],
-            ],
             "teach": [
                 {"any_of": ["model", "try", "recast"], "open_prefer_model_and_try": True},
             ],
@@ -123,7 +117,6 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
             "sheet_final": {},
         },
         "mechanical": [
-            "mode_sequence",
             "teach_moves",
             "open_english_orientation",
             "gate_contract",
@@ -140,10 +133,6 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
             "Hola. Esta un poco calor hoy en Rio Dulce.",
         ],
         "expect": {
-            "mode_sets": [
-                ["placement"],
-                ["cf_recast"],
-            ],
             "teach": [
                 {"any_of": ["model", "try", "recast"]},
                 {"require": ["recast"], "any_of": ["try", "model", "recast"]},
@@ -157,24 +146,17 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
             },
         },
         "mechanical": [
-            "mode_sequence",
             "teach_moves",
             "gate_contract",
             "sheet_evolution",
             "no_empty_reply",
             "no_turn_error",
-            "recast_or_gate_attempt",
         ],
     },
     {
         "id": "c03_form_focus_streak",
         "description": "Live error → recast; recent-error streak hard-breaks after cooldown (2026-07-28 recency contract).",
         "seed_sheet": _form_focus_seed(),
-        "seed_mode_state": {
-            # Defensive: ensure budget open even if future open paths harden
-            "turns_since_hard_break": 999,
-            "hard_breaks_this_session": 0,
-        },
         "turns": [
             # Live hit this session (recency gate requires it)
             "yo está bien, gracias.",
@@ -185,13 +167,6 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
             "todo tranquilo.",
         ],
         "expect": {
-            "mode_sets": [
-                ["conversation"],  # known open
-                ["cf_recast", "form_focus"],
-                ["conversation", "transfer", "cf_recast"],
-                ["conversation", "transfer"],
-                ["form_focus", "conversation"],
-            ],
             "teach": [
                 {"any_of": ["model", "try", "recast"]},
                 {"any_of": ["model", "try", "recast"]},
@@ -211,7 +186,6 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
             },
         },
         "mechanical": [
-            "mode_sequence",
             "teach_moves",
             "gate_contract",
             "sheet_evolution",
@@ -223,19 +197,10 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
         "id": "c04_association_bote",
         "description": "Concrete noun bote → association (or conversation+image if budget).",
         "seed_sheet": _known_sheet(),
-        "seed_mode_state": {
-            "turns_since_hard_break": 999,
-            "hard_breaks_this_session": 0,
-        },
         "turns": [
             "Estoy en mi bote.",
         ],
         "expect": {
-            "mode_sets": [
-                ["conversation"],
-                # hard association if can_hard; else conversation with image_concept
-                ["association", "conversation"],
-            ],
             "teach": [
                 {"any_of": ["model", "try", "recast"]},
                 {"any_of": ["model", "try", "recast"]},
@@ -247,10 +212,8 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
             "sheet_final": {},
         },
         "mechanical": [
-            "mode_sequence",
             "teach_moves",
             "gate_contract",
-            "association_signal",
             "no_empty_reply",
             "no_turn_error",
         ],
@@ -263,10 +226,6 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
             "I don't understand what that means. No entiendo.",
         ],
         "expect": {
-            "mode_sets": [
-                ["placement"],
-                ["comprehension_repair"],
-            ],
             "teach": [
                 {"any_of": ["model", "try", "recast"]},
                 {"any_of": ["model", "try", "explain", "recast"]},
@@ -278,10 +237,8 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
             "sheet_final": {},
         },
         "mechanical": [
-            "mode_sequence",
             "teach_moves",
             "gate_contract",
-            "comprehension_repair_targets",
             "no_empty_reply",
             "no_turn_error",
         ],
@@ -290,21 +247,11 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
         "id": "c06_transfer_after_resolve",
         "description": "Correct use of focused form → transfer (or conversation).",
         "seed_sheet": _transfer_seed(),
-        "seed_mode_state": {
-            "turns_since_hard_break": 999,
-            "hard_breaks_this_session": 0,
-        },
         "turns": [
             "Estoy bien.",  # resolve estar_yo_estoy_vs_esta
             "Me gusta el café.",  # free line; expect transfer or conversation
         ],
         "expect": {
-            "mode_sets": [
-                ["conversation"],
-                # resolve turn: may still cf_recast if other hits; allow soft set
-                ["transfer", "conversation", "cf_recast", "association"],
-                ["transfer", "conversation", "association"],
-            ],
             "teach": [
                 {"any_of": ["model", "try", "recast"]},
                 {"any_of": ["model", "try", "recast"]},
@@ -322,14 +269,11 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
                     "min_resolved_streak": 1,
                 },
             },
-            "require_mode_somewhere": ["transfer"],  # WARN if never seen
         },
         "mechanical": [
-            "mode_sequence",
             "teach_moves",
             "gate_contract",
             "sheet_evolution",
-            "transfer_seen_or_warn",
             "no_empty_reply",
             "no_turn_error",
         ],
@@ -345,19 +289,6 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
             "Me llamo Sam. Estoy bien.",
         ],
         "expect": {
-            "mode_sets": [
-                ["placement"],
-                # soft: mode is not the point of this trajectory
-                [
-                    "cf_recast",
-                    "conversation",
-                    "association",
-                    "transfer",
-                    "form_focus",
-                    "comprehension_repair",
-                    "placement",
-                ],
-            ],
             "teach": [
                 {"any_of": ["model", "try", "recast"]},
                 {"any_of": ["model", "try", "recast"]},
@@ -372,7 +303,6 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
             },
         },
         "mechanical": [
-            "mode_sequence",
             "teach_moves",
             "gate_contract",
             "sheet_evolution",
@@ -390,18 +320,10 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
             "(notes: progress_milestone:taking_root:hasta luego)."
         ),
         "seed_sheet": _taking_root_seed(),
-        "seed_mode_state": {
-            "turns_since_hard_break": 999,
-            "hard_breaks_this_session": 0,
-        },
         "turns": [
             "Hola. Estoy bien hoy. ¡Hasta luego!",
         ],
         "expect": {
-            "mode_sets": [
-                ["conversation"],  # known open (due block may ride here too)
-                ["conversation", "transfer", "cf_recast", "association"],
-            ],
             "teach": [
                 {"any_of": ["model", "try", "recast"]},
                 {"any_of": ["model", "try", "recast"]},
@@ -415,7 +337,6 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
             "progress_milestones": ["taking_root:hasta luego"],
         },
         "mechanical": [
-            "mode_sequence",
             "teach_moves",
             "gate_contract",
             "due_elicit_fired",
@@ -434,22 +355,12 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
             "2026-08-03, full-code-audit S9)."
         ),
         "seed_sheet": _due_reencounter_seed(),
-        "seed_mode_state": {
-            "turns_since_hard_break": 999,
-            "hard_breaks_this_session": 0,
-        },
         "turns": [
             "Hola. Estoy bien hoy.",
             "Me gusta el café.",
             "El río es muy bonito.",
         ],
         "expect": {
-            "mode_sets": [
-                ["conversation"],  # known open (retrieval phase, due rides)
-                ["conversation", "transfer", "cf_recast", "association"],
-                ["conversation", "transfer", "cf_recast", "association"],
-                ["conversation", "transfer", "cf_recast", "association"],
-            ],
             "teach": [
                 {"any_of": ["model", "try", "recast"]},
                 {"any_of": ["model", "try", "recast"]},
@@ -466,7 +377,6 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
             "due_elicit": True,
         },
         "mechanical": [
-            "mode_sequence",
             "teach_moves",
             "gate_contract",
             "due_elicit_fired",
@@ -484,20 +394,11 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
             "(introduced:<key>) or lapses is the model's realization."
         ),
         "seed_sheet": _known_sheet(),
-        "seed_mode_state": {
-            "turns_since_hard_break": 999,
-            "hard_breaks_this_session": 0,
-        },
         "turns": [
             "Hola. Estoy bien hoy.",
             "Muy bien, gracias.",
         ],
         "expect": {
-            "mode_sets": [
-                ["conversation"],  # known open (new_input phase, plan rides)
-                ["conversation", "transfer", "cf_recast", "association"],
-                ["conversation", "transfer", "cf_recast", "association"],
-            ],
             "teach": [
                 {"any_of": ["model", "try", "recast"]},
                 {"any_of": ["model", "try", "recast"]},
@@ -512,7 +413,6 @@ CONV_TRAJECTORIES: list[dict[str, Any]] = [
             "introduce_planned": True,
         },
         "mechanical": [
-            "mode_sequence",
             "teach_moves",
             "gate_contract",
             "introduce_scaffolded",

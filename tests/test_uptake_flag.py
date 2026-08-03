@@ -1,26 +1,17 @@
-"""§2.1a content-uptake mechanism (BINDING, 2026-07-28) — shadow labels,
-self-flag surface detection, instruction path, and the anti-starvation
-budget. No live API.
+"""§2.1a content-uptake mechanism (BINDING, 2026-07-28) — shadow labels +
+self-flag surface detection. No live API.
 
-Per docs/reviews-content-uptake-law.md condition (c): detection starts
-shadow/instruction+eval — content_offer / self_flagged_form are
-OBSERVATIONAL classifier labels that must NOT change select_mode routing,
-and the regex path handles only the surface-visible self-flag shapes
-(quoted single token, "(english)?" gloss-guess).
+Router teardown 2026-08-03 (full-code-audit S4): the instruction path
+(self_flag_uptake_block), its mode/reason gates and the ModeSessionState
+budget are DELETED — the §2.1a self-flag survives as a pure OBSERVATION:
+turn_pipeline.stage_uptake_flag emits the typed UPTAKE_FLAGGED event from
+observe.detect_self_flagged_token; the uptake_flag_honored eval keeps
+measuring whether the model honored it.
 """
 
 import unittest
 
-from tutor.character_sheet import default_sheet
-from tutor.conv_session import self_flag_uptake_block
-from tutor.modes import Mode, ModeSessionState, select_mode
 from tutor.observe import detect_self_flagged_token
-
-
-def _known_sheet() -> dict:
-    s = default_sheet()
-    s["skills"]["IP-01"] = {"status": "emerging", "confidence": 0.4}
-    return s
 
 
 class TestClassifierLabels(unittest.TestCase):
@@ -44,30 +35,16 @@ class TestClassifierLabels(unittest.TestCase):
             frozenset({"content_offer", "self_flagged_form"}),
         )
 
-    def test_observational_labels_do_not_change_routing(self):
-        # §2.1a architecture clause: shadow only — the new labels riding the
-        # signal set must leave select_mode's decision untouched.
-        base = select_mode(
-            _known_sheet(),
-            learner="Estoy en mi casa hoy",
-            observations={
-                "blank_sheet": False, "signals": ["spanish_ok"],
-            },
-            mode_state=ModeSessionState(),
-        )
-        with_labels = select_mode(
-            _known_sheet(),
-            learner="Estoy en mi casa hoy",
-            observations={
-                "blank_sheet": False,
-                "signals": [
-                    "spanish_ok", "content_offer", "self_flagged_form",
-                ],
-            },
-            mode_state=ModeSessionState(),
-        )
-        self.assertEqual(base.mode, with_labels.mode)
-        self.assertEqual(base.reason, with_labels.reason)
+    def test_observational_labels_stay_out_of_memory_signals(self):
+        # §2.1a architecture clause: shadow only — the blocking classifier
+        # path strips the observational labels before they reach memory /
+        # observations (turn_pipeline.stage_classify_signals).
+        import inspect
+
+        import tutor.turn_pipeline as tp
+
+        src = inspect.getsource(tp.stage_classify_signals)
+        self.assertIn("OBSERVATIONAL_SIGNALS", src)
 
 
 class TestSelfFlagDetection(unittest.TestCase):
@@ -117,96 +94,41 @@ class TestSelfFlagDetection(unittest.TestCase):
         )
 
 
-class TestSelfFlagUptakeBlock(unittest.TestCase):
-    def test_fires_on_conversation_turn_with_note(self):
-        state = ModeSessionState()
-        state.learner_turn_index = 5
-        txt, token = self_flag_uptake_block(
-            "No uvia (rain) hoy",
-            mode="conversation",
-            reason="default_conversation",
-            mode_state=state,
-        )
-        self.assertIn("UPTAKE (§2.1a)", txt)
-        self.assertIn("«uvia»", txt)
-        self.assertIn("pack-legal", txt)
-        # Phase 3 batch 2 push-down: the RAW token returns; the caller emits
-        # the typed UPTAKE_FLAGGED event whose render is the legacy note.
-        self.assertEqual(token, "uvia")
-        from tutor.turn_events import TurnEventKind, render_note
+class TestUptakeFlagObservation(unittest.TestCase):
+    """stage_uptake_flag: pure observation — typed UPTAKE_FLAGGED event,
+    no instruction, no budget (router teardown 2026-08-03)."""
 
-        self.assertEqual(
-            render_note(TurnEventKind.UPTAKE_FLAGGED, key=token),
-            "uptake_flagged:uvia",
-        )
-        self.assertEqual(state.content_uptake_last_turn, 5)
+    def _run(self, learner, *, is_open=False):
+        from tutor.turn_events import TurnEventKind, TurnEventLog
+        from tutor.turn_pipeline import TurnContext, stage_uptake_flag
 
-    def test_budget_blocks_second_consecutive_offer(self):
-        # §2.1a anti-starvation: ≤1 per 3 teaching turns, never consecutive.
-        state = ModeSessionState()
-        state.learner_turn_index = 5
-        txt1, _ = self_flag_uptake_block(
-            "No uvia (rain) hoy",
-            mode="conversation",
-            reason="default_conversation",
-            mode_state=state,
-        )
-        self.assertTrue(txt1)
-        state.learner_turn_index = 6  # next teaching turn
-        txt2, note2 = self_flag_uptake_block(
-            "Yo hacer (I am making?) deysayunas",
-            mode="conversation",
-            reason="default_conversation",
-            mode_state=state,
-        )
-        self.assertEqual((txt2, note2), ("", ""))
-        # Budget recovers after the 3-turn rate window.
-        state.learner_turn_index = 8
-        txt3, token3 = self_flag_uptake_block(
-            "Yo hacer (I am making?) deysayunas",
-            mode="conversation",
-            reason="default_conversation",
-            mode_state=state,
-        )
-        self.assertIn("«hacer»", txt3)
-        self.assertEqual(token3, "hacer")
+        ev = TurnEventLog()
+        ctx = TurnContext(learner=learner, is_open=is_open, ev=ev)
+        stage_uptake_flag(None, ctx)
+        return [e for e in ev.events if e.kind is TurnEventKind.UPTAKE_FLAGGED]
 
-    def test_guard_turns_do_not_fire(self):
-        # Help/topic/grammar guards already perform uptake; repair keeps its
-        # single focus.
-        state = ModeSessionState()
-        for mode, reason in (
-            ("conversation", "learner_help_request"),
-            ("conversation", "learner_topic_request"),
-            ("conversation", "grammar_question_inline"),
-            ("comprehension_repair", "meta_comprehension_stay_on_topic"),
-            ("form_focus", "error_streak:me_llamo_es"),
-        ):
-            txt, note = self_flag_uptake_block(
-                'is "uvia" right?',
-                mode=mode,
-                reason=reason,
-                mode_state=state,
-            )
-            self.assertEqual((txt, note), ("", ""), (mode, reason))
+    def test_self_flag_emits_typed_event(self):
+        evs = self._run("No uvia (rain) hoy")
+        self.assertEqual(len(evs), 1)
+        self.assertEqual(evs[0].key, "uvia")
+        from tutor.turn_events import render
 
-    def test_no_flag_no_note(self):
-        state = ModeSessionState()
-        txt, note = self_flag_uptake_block(
-            "estoy bien. Me llamo Patrick",
-            mode="conversation",
-            reason="default_conversation",
-            mode_state=state,
-        )
-        self.assertEqual((txt, note), ("", ""))
-        self.assertEqual(state.content_uptake_last_turn, -999)
+        self.assertEqual(render(evs[0]), "uptake_flagged:uvia")
 
-    def test_snapshot_carries_budget_field(self):
-        state = ModeSessionState()
-        state.learner_turn_index = 4
-        state.note_content_uptake()
-        snap = state.snapshot()
-        self.assertEqual(snap["content_uptake_last_turn"], 4)
+    def test_plain_production_emits_nothing(self):
+        self.assertEqual(self._run("estoy bien. Me llamo Patrick"), [])
+
+    def test_open_turn_emits_nothing(self):
+        self.assertEqual(self._run("No uvia (rain) hoy", is_open=True), [])
+
+    def test_instruction_path_is_dead(self):
+        # Absence pin: the instruction builder + its budget died with the
+        # router; the observation path is the only survivor.
+        import tutor.conv_session as conv_session
+
+        self.assertFalse(hasattr(conv_session, "self_flag_uptake_block"))
+        self.assertFalse(hasattr(conv_session, "SELF_FLAG_MODES"))
+        self.assertFalse(hasattr(conv_session, "DUE_GUARD_REASONS"))
 
 
 class TestUptakeFlagHonoredCheck(unittest.TestCase):

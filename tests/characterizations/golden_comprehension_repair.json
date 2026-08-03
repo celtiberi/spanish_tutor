@@ -12,10 +12,7 @@
     },
     "learner": "Estoy contento.",
     "memory": {
-      "asked": [
-        "comprehension_repair",
-        "conversation"
-      ],
+      "asked": [],
       "asked_topics": [
         "location"
       ],
@@ -31,19 +28,8 @@
       ],
       "turns": 2
     },
-    "mode_state": {
-      "english_only_streak": 0,
-      "form_focus_cooldown": {},
-      "hard_breaks_this_session": 1,
-      "last_mode": "conversation",
-      "last_resolved_form": null,
-      "learner_turn_index": 3,
-      "turns_since_hard_break": 1
-    },
     "model_requests": 3,
     "notes": [
-      "mode=conversation",
-      "mode_reason=default_conversation",
       "introduce_planned:me llamo:R-D",
       "output_gate_ok",
       "rules_backup",
@@ -53,16 +39,13 @@
       "asked_topic:location",
       "pedagogy:known_learner_open",
       "phase=ai_tutor",
-      "hard_break=False",
-      "plan_source=mode_runtime",
+      "plan_source=model",
       "teacher_mode=planned",
       "mem_shown=english_only,estoy,greet,meta_comprehension,spanish_ok",
-      "mem_asked=comprehension_repair,conversation"
+      "mem_asked=—"
     ],
     "parts_keys": [
       "acknowledge",
-      "mode",
-      "mode_decision",
       "model",
       "open_phase",
       "output_gate",
@@ -99,10 +82,7 @@
     },
     "learner": "What does contento mean?",
     "memory": {
-      "asked": [
-        "comprehension_repair",
-        "conversation"
-      ],
+      "asked": [],
       "asked_topics": [],
       "images_shown": [],
       "intro_budget_remaining": 2,
@@ -114,19 +94,9 @@
       ],
       "turns": 1
     },
-    "mode_state": {
-      "english_only_streak": 1,
-      "form_focus_cooldown": {},
-      "hard_breaks_this_session": 1,
-      "last_mode": "comprehension_repair",
-      "last_resolved_form": null,
-      "learner_turn_index": 2,
-      "turns_since_hard_break": 0
-    },
     "model_requests": 2,
     "notes": [
-      "mode=comprehension_repair",
-      "mode_reason=meta_comprehension_stay_on_topic",
+      "introduce_planned:me llamo:R-D",
       "output_gate_ok",
       "rules_backup",
       "scaffold=ES-forward+EN-rescue",
@@ -134,19 +104,14 @@
       "pedagogy:ok",
       "pedagogy:known_learner_open",
       "phase=ai_tutor",
-      "hard_break=True",
-      "plan_source=mode_runtime",
+      "plan_source=model",
       "teacher_mode=planned",
       "mem_shown=english_only,greet,meta_comprehension",
-      "mem_asked=comprehension_repair,conversation",
-      "image_decision:no_image_worthy_concept"
+      "mem_asked=—"
     ],
     "parts_keys": [
       "explain",
       "explain_depth",
-      "image_decision",
-      "mode",
-      "mode_decision",
       "model",
       "open_phase",
       "output_gate",

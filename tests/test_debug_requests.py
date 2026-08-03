@@ -43,12 +43,6 @@ def _make_entry(turn=0):
             {"role": "user", "content": task},
         ],
         task=task,
-        decision_dict={
-            "mode": "conversation",
-            "reason": "default_conversation",
-            "hard_break": False,
-            "instructions": "SESSION PHASE: NEW INPUT — introduce at most ONE…",
-        },
         usage={
             "input_tokens": 1000 + turn,
             "output_tokens": 200,
@@ -66,17 +60,16 @@ def _make_entry(turn=0):
 
 
 class TestDebugEntryShape(unittest.TestCase):
-    def test_entry_has_labeled_system_blocks_and_instructions(self):
+    def test_entry_has_labeled_system_blocks(self):
         e = _make_entry(turn=3)
         labels = [b["label"] for b in e["system_blocks"]]
         self.assertEqual(labels, ["tutor_stance", "persona", "course_pack"])
         # Full text kept (local debug tool — no truncation)
         self.assertIn("stance…", e["system_blocks"][0]["text"])
         self.assertTrue(e["system_blocks"][2]["cached"])
-        # The mode-decision instruction stack is its own field
-        self.assertIn("SESSION PHASE", e["instructions"])
-        self.assertEqual(e["mode"], "conversation")
-        self.assertEqual(e["reason"], "default_conversation")
+        # Router-shadow fields DELETED with the mode router (2026-08-03).
+        for gone in ("mode", "reason", "hard_break", "instructions"):
+            self.assertNotIn(gone, e)
         self.assertEqual(e["model"], "claude-test")
 
     def test_entry_history_excludes_task_message(self):
@@ -116,7 +109,6 @@ class TestDebugRingBuffer(unittest.TestCase):
                 system=_system_blocks(),
                 messages=[{"role": "user", "content": f"task {i}"}],
                 task=f"task {i}",
-                decision_dict={"mode": "conversation", "reason": "r"},
                 usage={"input_tokens": i},
                 gate_result=None,
                 notes=[],
@@ -138,7 +130,6 @@ class TestDebugRingBuffer(unittest.TestCase):
             system=None,
             messages=None,
             task=None,
-            decision_dict=None,
             usage=None,
             gate_result=None,
             notes=None,
@@ -194,10 +185,9 @@ class TestDebugEndpoint(unittest.TestCase):
         self.assertTrue(data["session"])
         self.assertEqual(data["count"], 3)
         self.assertEqual([e["turn"] for e in data["entries"]], [3, 2, 1])
-        # Shape: system blocks + instructions ride through the endpoint
+        # Shape: system blocks ride through the endpoint
         first = data["entries"][0]
         self.assertIn("system_blocks", first)
-        self.assertIn("instructions", first)
         self.assertIn("task_message", first)
         self.assertIn("response", first)
 

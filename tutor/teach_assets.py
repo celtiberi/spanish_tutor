@@ -62,14 +62,15 @@ GENERATE_ON_MISS = _generate_on_miss_flag()
 #
 # Imageable-vs-sidecar ruling (batch 2, adjudicated): the association
 # table's `imageable` field answers "can THIS concept be dual-coded for
-# MEANING" and governs image SELECTION (guard-6 / association / R-B lists in
-# tutor/modes.py derive from imageable:true entries).  The sidecar answers
-# the different question "do we have an ASSET" — it may carry assets for
+# MEANING" and governs image SELECTION (the introduce R-B list derives
+# from imageable:true entries; the guard-6/association mode lists died
+# with the mode router, 2026-08-03).  The sidecar answers the different
+# question "do we have an ASSET" — it may carry assets for
 # imageable:false concepts (hola's greeting illustration) without ever
 # widening selection.  Those assets reach the learner only through code-
-# owned decision.image_concept channels with their own justification — the
-# placement-open «hola» image is SCENE-SETTING for a true-zero learner
-# (modes.py blank_open_placement), not R-B meaning-binding.
+# owned channels with their own justification — the blank-open «hola»
+# image is SCENE-SETTING for a true-zero learner
+# (turn_pipeline.stage_fallback_image), not R-B meaning-binding.
 # ---------------------------------------------------------------------------
 
 SIDECAR_FILENAME = "asset_sidecar.json"

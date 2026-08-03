@@ -23,10 +23,9 @@ the string scans could produce are impossible against typed kinds):
     substring scans over whole notes become event-kind checks — a payload
     accidentally containing "due_elicit_offered" / "introduce_planned:"
     no longer satisfies the expectation.
-  - ``_mode`` / ``uptake_flag_honored`` /
-    ``progress_milestones_fired``: same answers by construction (their
-    string parses were prefix-anchored); the event path simply reads
-    kind/key/payload instead of splitting strings.
+  - ``uptake_flag_honored`` / ``progress_milestones_fired``: same answers
+    by construction (their string parses were prefix-anchored); the event
+    path simply reads kind/key/payload instead of splitting strings.
 """
 
 from __future__ import annotations
@@ -71,25 +70,6 @@ _GATE_FAIL_EVENT_KINDS = (
 )
 
 
-def _mode(turn: dict) -> str | None:
-    parts = turn.get("parts") or {}
-    m = parts.get("mode")
-    if m:
-        return str(m)
-    md = parts.get("mode_decision") or {}
-    if isinstance(md, dict) and md.get("mode"):
-        return str(md["mode"])
-    # typed events (preferred), then legacy notes fallback: mode=foo
-    for e in _events_of(turn, "mode") or []:
-        if e.get("key"):
-            return str(e["key"])
-    for n in turn.get("notes") or []:
-        s = str(n)
-        if s.startswith("mode="):
-            return s.split("=", 1)[1].strip()
-    return None
-
-
 def _parts(turn: dict) -> dict:
     return turn.get("parts") or {}
 
@@ -121,25 +101,10 @@ def no_turn_error(traj: dict, result: dict) -> list[str]:
     ]
 
 
-def mode_sequence(traj: dict, result: dict) -> list[str]:
-    expect = (traj.get("expect") or {}).get("mode_sets") or []
-    turns = _turns(result)
-    findings = []
-    if len(turns) != len(expect):
-        findings.append(
-            f"turn count {len(turns)} != expect.mode_sets length {len(expect)}"
-        )
-    n = min(len(turns), len(expect))
-    for i in range(n):
-        allowed = set(expect[i] or [])
-        got = _mode(turns[i])
-        if not allowed:
-            continue
-        if got not in allowed:
-            findings.append(
-                f"turn {i}: mode {got!r} not in allowed {sorted(allowed)}"
-            )
-    return findings
+# (mode_sequence / recast_or_gate_attempt / association_signal /
+# comprehension_repair_targets / transfer_seen_or_warn DELETED 2026-08-03
+# with the mode router — full-code-audit S4: parts.mode / mode_decision no
+# longer exist, so mode expectations have nothing to read.)
 
 
 def teach_moves(traj: dict, result: dict) -> list[str]:
@@ -219,46 +184,6 @@ def gate_contract(traj: dict, result: dict) -> list[str]:
         ):
             if marker in blob:
                 findings.append(f"turn {i}: sheet/tool leak marker {marker!r}")
-    return findings
-
-
-def recast_or_gate_attempt(traj: dict, result: dict) -> list[str]:
-    """For cf_recast turns: either recast text present or gate flagged it.
-
-    Event path (preferred): a gate signal is any of the six ``output_gate*``
-    event KINDS or a ``missing_recast`` fault id inside a gate-fail event's
-    payload — TIGHTENED vs the legacy joined-notes substring scan, which an
-    unrelated payload containing "output_gate"/"missing_recast" could
-    satisfy accidentally (declared improvement, module docstring)."""
-    findings = []
-    for i, t in enumerate(_turns(result)):
-        if _mode(t) != "cf_recast":
-            continue
-        parts = _parts(t)
-        if _truthy(parts, "recast"):
-            continue
-        gate_faults = _gate(t).get("faults") or []
-        if "gate:missing_recast" in gate_faults:
-            findings.append(
-                f"WARN turn {i}: cf_recast still missing <recast> after gate"
-            )
-            continue
-        gate_evs = _events_of(t, *_GATE_EVENT_KINDS)
-        if gate_evs is not None:
-            gate_signal = bool(gate_evs) or any(
-                "missing_recast" in str(f)
-                for e in _events_of(t, *_GATE_FAIL_EVENT_KINDS) or []
-                for f in (e.get("payload") or {}).get("faults") or []
-            )
-        else:  # replay fallback: old records without events
-            notes = " ".join(str(n) for n in (t.get("notes") or []))
-            gate_signal = "output_gate" in notes or "missing_recast" in notes
-        if gate_signal:
-            findings.append(
-                f"WARN turn {i}: cf_recast without recast part (gate notes only)"
-            )
-            continue
-        findings.append(f"turn {i}: cf_recast without <recast> and no gate signal")
     return findings
 
 
@@ -403,56 +328,6 @@ def sheet_evolution(traj: dict, result: dict) -> list[str]:
     return findings
 
 
-def association_signal(traj: dict, result: dict) -> list[str]:
-    """Pass if the learner turn is association OR conversation carrying bote."""
-    turns = _turns(result)
-    if len(turns) < 2:
-        return ["association traj needs open + >=1 learner turn"]
-    t = turns[1]
-    mode = _mode(t)
-    parts = _parts(t)
-    md = parts.get("mode_decision") or {}
-    img = md.get("image_concept") if isinstance(md, dict) else None
-    teach_imgs = parts.get("teach_images") or []
-    concepts = [
-        (x.get("concept") if isinstance(x, dict) else None) for x in teach_imgs
-    ]
-    if mode == "association":
-        return []
-    if mode == "conversation" and (img == "bote" or "bote" in concepts):
-        return []
-    if mode in ("association", "conversation") and (
-        "bote" in str(parts.get("model") or "").lower()
-        or "bote" in str(parts.get("try") or "").lower()
-    ):
-        return [
-            "WARN association: mode conversation without image_concept=bote "
-            "but bote present in model/try"
-        ]
-    return [
-        f"turn 1: expected association signal (mode/image bote), "
-        f"got mode={mode!r} image_concept={img!r} teach={concepts!r}"
-    ]
-
-
-def comprehension_repair_targets(traj: dict, result: dict) -> list[str]:
-    findings = []
-    for i, t in enumerate(_turns(result)):
-        if _mode(t) != "comprehension_repair":
-            continue
-        md = _parts(t).get("mode_decision") or {}
-        targets = (md.get("targets") or {}) if isinstance(md, dict) else {}
-        if not targets.get("require_same_topic") and not targets.get(
-            "forbid_new_topic"
-        ):
-            findings.append(
-                f"turn {i}: comprehension_repair missing same-topic targets"
-            )
-        if not _truthy(_parts(t), "try") and not _truthy(_parts(t), "model"):
-            findings.append(f"turn {i}: comprehension_repair without model/try")
-    return findings
-
-
 def due_elicit_fired(traj: dict, result: dict) -> list[str]:
     """expect.due_elicit=true → some turn's notes must carry due_elicit_offered.
 
@@ -547,38 +422,20 @@ def introduce_scaffolded(traj: dict, result: dict) -> list[str]:
 # kinds no longer exist; trajectories no longer declare those expectations.)
 
 
-def transfer_seen_or_warn(traj: dict, result: dict) -> list[str]:
-    want = (traj.get("expect") or {}).get("require_mode_somewhere") or []
-    if not want:
-        return []
-    seen = {_mode(t) for t in _turns(result)}
-    return [
-        f"WARN required mode {m!r} never observed "
-        f"(seen={sorted(x for x in seen if x)})"
-        for m in want
-        if m not in seen
-    ]
-
-
 CHECKS = {
     f.__name__: f
     for f in (
         no_empty_reply,
         no_turn_error,
-        mode_sequence,
         teach_moves,
         open_english_orientation,
         gate_contract,
-        recast_or_gate_attempt,
         recast_no_confirm_praise,
         uptake_flag_honored,
         sheet_evolution,
-        association_signal,
-        comprehension_repair_targets,
         due_elicit_fired,
         progress_milestones_fired,
         introduce_scaffolded,
-        transfer_seen_or_warn,
     )
 }
 

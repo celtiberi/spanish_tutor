@@ -69,8 +69,6 @@ class TestFresh:
         assert st.last_plan is None
         assert st.pedagogy_memory.turns == 0
         assert st.pedagogy_memory.sheet_seeded is False
-        assert st.mode_state.learner_turn_index == 0
-        assert st.last_mode_decision is None
         assert st.debug_requests.maxlen == DEBUG_RING_SIZE
         assert len(st.debug_requests) == 0
         assert st.costs.source == "unittest"
@@ -84,6 +82,11 @@ class TestFresh:
         assert not hasattr(st, "task_state")
         assert "phase_state" not in SESSION_STATE_FIELDS
         assert "task_state" not in SESSION_STATE_FIELDS
+        # Mode router DELETED 2026-08-03 (full-code-audit S4).
+        assert not hasattr(st, "mode_state")
+        assert not hasattr(st, "last_mode_decision")
+        assert "mode_state" not in SESSION_STATE_FIELDS
+        assert "last_mode_decision" not in SESSION_STATE_FIELDS
 
 
 # ---------------------------------------------------------------------------
@@ -96,14 +99,12 @@ def _mutate_everything(st: SessionState) -> dict[str, int]:
     ids = {f: id(getattr(st, f)) for f in SESSION_STATE_FIELDS}
     st.pedagogy_memory.asked_topics.add(SENTINEL_TOPIC)
     st.pedagogy_memory.turns = 99
-    st.mode_state.english_only_streak = 77
     st.costs._by_category["__sentinel__"] = {"usd": 0.0}
     st.focus_panel = {"__sentinel__": True}
     st.focus_meta = {"source": "__sentinel__"}
     st.focus_version = 44
     st.focus_inflight = True
     st.image_warm_inflight.add("__sentinel__")
-    st.last_mode_decision = {"mode": "__sentinel__"}
     st.last_plan = {"plan": "__sentinel__"}
     st.debug_requests.append({"marker": "__sentinel__"})
     st.progress_session_id = "__sentinel__"
@@ -127,17 +128,15 @@ class TestResetFull:
         assert st.focus_inflight is False
         assert st.image_warm_inflight == set()
         assert st.last_plan is None
-        assert st.last_mode_decision is None
         assert st.progress_session_id == ""
         # Stores are RECONSTRUCTED (construction replay), not scrubbed
-        for f in ("pedagogy_memory", "mode_state",
+        for f in ("pedagogy_memory",
                   "debug_requests", "costs", "focus_lock",
                   "image_warm_lock"):
             assert id(getattr(st, f)) != pre_ids[f], f
         assert SENTINEL_TOPIC not in st.pedagogy_memory.asked_topics
         assert st.pedagogy_memory.turns == 0
-        assert st.mode_state.english_only_streak == 0
-        assert twin.mode_state.english_only_streak == 0
+        assert twin.pedagogy_memory.turns == 0
         assert len(st.debug_requests) == 0
         assert st.debug_requests.maxlen == DEBUG_RING_SIZE
         assert st.costs.source == "resetter"
@@ -200,15 +199,9 @@ class TestUnifiedResetKinds:
         st = _fresh_state()
         st.pedagogy_memory.introduced_this_session.extend(["hola", "pan"])
         st.pedagogy_memory.asked_topics.add("size:ciudad")
-        st.mode_state.form_focus_cooldown["weather_hace"] = 3
-        st.mode_state.content_uptake_last_turn = 4
-        st.mode_state.learner_turn_index = 6
         st.reset("new_chat")
         assert st.pedagogy_memory.intro_budget_remaining() == 2
         assert st.pedagogy_memory.asked_topics == set()
-        assert st.mode_state.form_focus_cooldown == {}
-        assert st.mode_state.content_uptake_last_turn == -999
-        assert st.mode_state.learner_turn_index == 0
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +227,6 @@ class TestSnapshotRoundTrip:
         st.focus_meta = {"source": "ai"}
         st.focus_version = 7
         st.last_plan = {"phase": "new_input"}
-        st.last_mode_decision = {"mode": "conversation", "reason": "flow"}
         st.progress_session_id = "20260728-web"
         # memory — including the fields snapshot() alone omits
         m = st.pedagogy_memory
@@ -246,14 +238,7 @@ class TestSnapshotRoundTrip:
         m.images_generated = 2
         m.declared_image_cooldown = 1
         m.sheet_seeded = True
-        # mode state — including the aggregate-only extras
-        s = st.mode_state
-        s.tick()
-        s.tick()
-        s.note_error_hits(["weather_hace"])
-        s.set_cooldown("weather_hace", 3)
-        s.note_content_uptake()
-        s.english_only_streak = 1
+        # (mode_state died with the router, 2026-08-03 — no block here.)
         return st
 
     def test_round_trip_snapshot_equality(self):
@@ -277,10 +262,6 @@ class TestSnapshotRoundTrip:
         assert m.last_tutor_ack == "¡Muy bien!"
         assert m.images_generated == 2
         assert m.declared_image_cooldown == 1
-        ms = restored.mode_state
-        assert ms.learner_turn_index == 2
-        assert ms.last_error_hit_turn == {"weather_hace": 2}
-        assert ms.content_uptake_last_turn == 2
 
     def test_excluded_runtime_fields_rebuilt_fresh(self):
         """Locks, inflight flags, debug ring and costs are excluded BY
@@ -311,7 +292,6 @@ class TestDelegates:
     def test_reads_and_writes_route_to_state(self, tutor_session):
         session = tutor_session.session
         assert session.pedagogy_memory is session.state.pedagogy_memory
-        assert session.mode_state is session.state.mode_state
         assert session.costs is session.state.costs
         assert session.debug_requests is session.state.debug_requests
         assert session._focus_lock is session.state.focus_lock
@@ -359,7 +339,6 @@ def _was_reset(field: str, st: SessionState, pre_ids: dict[str, int]) -> bool:
         "pedagogy_memory": lambda: (
             SENTINEL_TOPIC not in st.pedagogy_memory.asked_topics
         ),
-        "mode_state": lambda: st.mode_state.english_only_streak != 77,
         "costs": lambda: "__sentinel__" not in st.costs._by_category,
         "focus_panel": lambda: st.focus_panel != {"__sentinel__": True},
         "focus_meta": lambda: (
@@ -373,9 +352,6 @@ def _was_reset(field: str, st: SessionState, pre_ids: dict[str, int]) -> bool:
         ),
         "image_warm_inflight": lambda: (
             "__sentinel__" not in st.image_warm_inflight
-        ),
-        "last_mode_decision": lambda: (
-            st.last_mode_decision != {"mode": "__sentinel__"}
         ),
         "last_plan": lambda: st.last_plan != {"plan": "__sentinel__"},
         "debug_requests": lambda: not any(
@@ -445,8 +421,9 @@ class TestCoverageTableShape:
         })
         # 12 pre-batch2 fields minus phase_state/task_state/focus_key
         # (deleted 2026-08-03 with the session-phase machinery + the focus
-        # enricher).
-        assert len(RESET_COVERAGE["sheet-reset"]["pre_batch2"]) == 9
+        # enricher) minus mode_state/last_mode_decision (deleted 2026-08-03
+        # with the mode router — full-code-audit S4).
+        assert len(RESET_COVERAGE["sheet-reset"]["pre_batch2"]) == 7
 
 
 class TestCoverageCharacterization:
@@ -461,7 +438,6 @@ class TestCoverageCharacterization:
         # including the debug ring (batch 1 cleared it in place).
         assert id(session.state.debug_requests) != pre_deque_id
         assert id(session.state.pedagogy_memory) != pre_ids["pedagogy_memory"]
-        assert id(session.state.mode_state) != pre_ids["mode_state"]
         assert id(session.state.costs) != pre_ids["costs"]
         assert session.state.focus_version == 0
         # Declared delta 3: the learner-epoch mark landed in the (isolated)
@@ -527,7 +503,6 @@ class TestCoverageCharacterization:
         # The census leak class, seeded explicitly (budget/topics/cooldowns)
         session.pedagogy_memory.introduced_this_session.extend(
             ["hola", "pan"])
-        session.mode_state.form_focus_cooldown["weather_hace"] = 3
 
         saved = dict(web_app._sessions)
         web_app._sessions.clear()
@@ -558,8 +533,6 @@ class TestCoverageCharacterization:
         # THE LEAK, CLOSED — batch 1 pinned every one of these surviving:
         assert SENTINEL_TOPIC not in session.pedagogy_memory.asked_topics
         assert session.pedagogy_memory.intro_budget_remaining() == 2
-        assert session.mode_state.english_only_streak == 0
-        assert session.mode_state.form_focus_cooldown == {}
         # Kept on purpose: same live session id for the progress rail
         assert session.progress_session_id == "__sentinel__"
         # New chat ≠ new learner: reconstructed memory re-seeded from sheet

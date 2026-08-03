@@ -1,24 +1,25 @@
 """Phase 5 (docs/reviews-architecture-refactor.md): the §1.1a single-
 inventory law as an executable gate.
 
-Batch 2 (the flip) landed: the four legacy concept lists are TABLE-DERIVED —
-session_memory.TOPIC_CONCEPT_NOUNS / SPANISH_CONCEPT_PAIRS, modes.
-NOUN_TEXT_PAIRS / NEW_CONCRETE_NOUNS, observe's topic_vocab regex — and
-teach_assets' in-code CONCEPT_LEXICON is DELETED (the pack asset sidecar is
-the sole metadata source; ASSOCIATION_NOUNS, zero readers, deleted too).
+Batch 2 (the flip) landed: the legacy concept lists are TABLE-DERIVED —
+session_memory.TOPIC_CONCEPT_NOUNS / SPANISH_CONCEPT_PAIRS and observe's
+topic_vocab regex — and teach_assets' in-code CONCEPT_LEXICON is DELETED
+(the pack asset sidecar is the sole metadata source).  (modes.
+NOUN_TEXT_PAIRS / NEW_CONCRETE_NOUNS died with the mode router,
+2026-08-03 — full-code-audit S4.)
 
 The gate therefore no longer chases hand-listed inventories toward the
 table; it pins the DERIVATION LAWS instead:
 
 - every derived concept id folds to an association-table key (single
   inventory; the deprecation escape hatch stays available but is EMPTY);
-- guard-6 / association / topic_vocab selection members are imageable:true
-  table entries (imageable-vs-sidecar ruling: the table's `imageable`
-  answers "can this concept be dual-coded for meaning"; the sidecar answers
-  "do we have an asset" and never widens selection — the placement-open
-  «hola» image is the one adjudicated decision.image_concept exemption);
+- topic_vocab selection members are imageable:true table entries
+  (imageable-vs-sidecar ruling: the table's `imageable` answers "can this
+  concept be dual-coded for meaning"; the sidecar answers "do we have an
+  asset" and never widens selection);
 - the topic palette excludes STRUCTURAL themes/keys (CHAR-BUG-007 fix) and
-  the module default equals the production palette (one derivation);
+  SOCIAL_FORMULA themes (the location:y-tu derivation bug, 2026-08-03),
+  and the module default equals the production palette (one derivation);
 - the sidecar never mints concepts and keeps resolving the legacy asset ids
   (cache filenames are pinned byte-exact via fold_asset_key).
 
@@ -36,12 +37,12 @@ import unittest.mock
 from pathlib import Path
 
 from tutor.association_table import (
+    SOCIAL_FORMULA_THEMES,
     STRUCTURAL_KEYS,
     STRUCTURAL_THEMES,
     content_topic_keys,
     load_association_table,
 )
-from tutor.modes import NEW_CONCRETE_NOUNS, NOUN_TEXT_PAIRS
 from tutor.observe import _TOPIC_VOCAB_TABLE_KEYS, probe_signals
 from tutor.session_memory import (
     _TOPIC_PRIORITY_KEYS,
@@ -102,21 +103,6 @@ class CoverageGate(unittest.TestCase):
             TOPIC_CONCEPT_NOUNS, "session_memory.TOPIC_CONCEPT_NOUNS"
         )
 
-    def test_noun_text_pairs_concepts_covered_and_imageable(self) -> None:
-        concepts = {concept for _needle, concept in NOUN_TEXT_PAIRS}
-        self._assert_covered(concepts, "modes.NOUN_TEXT_PAIRS (concept side)")
-        self.assertEqual(
-            sorted(concepts - self.imageable_ids),
-            [],
-            "guard-6 selection must derive from imageable:true entries",
-        )
-
-    def test_new_concrete_nouns_covered_and_imageable(self) -> None:
-        self._assert_covered(NEW_CONCRETE_NOUNS, "modes.NEW_CONCRETE_NOUNS")
-        self.assertEqual(
-            sorted(set(NEW_CONCRETE_NOUNS) - self.imageable_ids), []
-        )
-
     def test_spanish_concept_pairs_covered(self) -> None:
         self._assert_covered(
             {concept for _needle, concept in SPANISH_CONCEPT_PAIRS},
@@ -156,11 +142,12 @@ class CoverageGate(unittest.TestCase):
         for key in palette:
             entry = self.table.get(key)
             if entry is not None:
-                self.assertNotIn(
-                    str(entry.get("theme") or ""),
-                    STRUCTURAL_THEMES,
-                    key,
-                )
+                theme = str(entry.get("theme") or "")
+                self.assertNotIn(theme, STRUCTURAL_THEMES, key)
+                # Gate retune 2026-08-03: conversational formulas («y tú»)
+                # are moves, not topics — never palette concepts.
+                self.assertNotIn(theme, SOCIAL_FORMULA_THEMES, key)
+        self.assertNotIn("y tú", palette)
 
     def test_topic_palette_module_default_equals_production(self) -> None:
         # ONE derivation: the module constant IS topic_palette(default table)
@@ -183,16 +170,6 @@ class CoverageGate(unittest.TestCase):
         # Session without a table (missing/invalid pack) keeps the legacy
         # 21-surface fallback via the priority tier.
         self.assertEqual(len(topic_palette(None)), 21)
-
-    # -- derivation validation raises loudly --------------------------------
-
-    def test_guard6_derivation_rejects_non_imageable(self) -> None:
-        from tutor.modes import _imageable_concept_id
-
-        with self.assertRaises(ValueError):
-            _imageable_concept_id(self.table, "hola", "test")  # imageable:false
-        with self.assertRaises(ValueError):
-            _imageable_concept_id(self.table, "not_a_key", "test")
 
     # -- deprecation escape hatch: EMPTY since batch 2 ----------------------
 

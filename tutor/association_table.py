@@ -40,6 +40,16 @@ STRUCTURAL_KEYS = frozenset({
     "estoy", "estás", "está", "estamos", "estáis", "están",
 })
 
+# Conversational-formula themes: greetings, courtesy and social moves are
+# things you SAY, not things you talk ABOUT — they must never bind as a
+# topic CONCEPT ("location:y tu" incident, gate retune 2026-08-03: the
+# palette tail matched «y tú» as the concept of a location try).  The gate's
+# unscaffolded scan deliberately does NOT use this set (social phrases are
+# still lexical introductions there — Grok guardrail on the farewell block).
+SOCIAL_FORMULA_THEMES = frozenset({
+    "greetings", "how_are_you", "farewells", "introductions", "courtesy",
+})
+
 _REQUIRED_FIELDS = ("gloss_en", "theme", "imageable")
 _NULLABLE_STR_FIELDS = ("cognate_en", "false_friend", "keyword_en")
 _ALLOWED_FIELDS = frozenset(_REQUIRED_FIELDS) | frozenset(_NULLABLE_STR_FIELDS) | {
@@ -184,14 +194,18 @@ def content_topic_keys(table: dict[str, dict] | None) -> list[str]:
     Excludes STRUCTURAL_THEMES / STRUCTURAL_KEYS — grammar infrastructure
     (pronouns, question words, copulas, numbers, `hay`) is never a topic of
     conversation (CHAR-BUG-007: «¿Dónde estás tú?» must register the bare
-    ``location`` frame, not ``location:tu``).  No in_pack filter: off-pack
-    keys stay valid for OBSERVATION (asked-topics, probe-loop dedupe) even
-    though they are introduce-ineligible (batch-1 record)."""
+    ``location`` frame, not ``location:tu``) — and SOCIAL_FORMULA_THEMES:
+    conversational formulas («y tú», «mucho gusto») are moves, not topics
+    (gate retune 2026-08-03, the ``location:y tu`` derivation bug).  No
+    in_pack filter: off-pack keys stay valid for OBSERVATION (asked-topics,
+    probe-loop dedupe) even though they are introduce-ineligible (batch-1
+    record)."""
     out: list[str] = []
     for key, entry in (table or {}).items():
         if not isinstance(entry, dict):
             continue
-        if str(entry.get("theme") or "") in STRUCTURAL_THEMES:
+        theme = str(entry.get("theme") or "")
+        if theme in STRUCTURAL_THEMES or theme in SOCIAL_FORMULA_THEMES:
             continue
         if key in STRUCTURAL_KEYS:
             continue

@@ -35,7 +35,14 @@ TOPIC_FRAME_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("location", re.compile(r"\bd[oó]nde\b|\bwhere\b", re.I)),
     ("size", re.compile(r"\bgrande\b|pequeñ|\bsize\b|\bbig\b|\bsmall\b", re.I)),
 ]
-_WHAT_VERB_RE = re.compile(rf"(?:¿\s*|\b)qu[eé]\s+([{SPANISH_LETTERS}]+)", re.I)
+# qué-frame verb extraction: skip clitic/object pronouns so «¿Qué te
+# gusta…?» keys on the VERB («what:gusta»), not the pronoun («what:te» —
+# gate retune 2026-08-03, baseline run 20260803-104618 turn 8/9).
+_WHAT_VERB_RE = re.compile(
+    rf"(?:¿\s*|\b)qu[eé]\s+(?:(?:te|me|se|le|les|nos|os|lo|la|los|las)\s+)*"
+    rf"([{SPANISH_LETTERS}]+)",
+    re.I,
+)
 
 # ---------------------------------------------------------------------------
 # Topic-concept palette — TABLE-DERIVED (Phase 5 batch 2 flip, BROADENED,
@@ -441,8 +448,6 @@ class SessionMemory:
         ).strip()
         if name:
             self.shown.add("name")
-            # Do not re-ask name in a new chat when we already store it
-            self.asked.add("ask_name")
         sk4 = skills.get("IP-04") if isinstance(skills.get("IP-04"), dict) else {}
         try:
             c4 = float(sk4.get("confidence") or 0)
@@ -450,8 +455,12 @@ class SessionMemory:
             c4 = 0.0
         if c4 >= 0.55 or str(sk4.get("status") or "").lower() == "known":
             self.shown.add("estoy")
-            # Mark ask_how so open/modes prefer advancing over wellbeing drill
-            self.asked.add("ask_how")
+        # Gate retune 2026-08-03: seed_from_sheet no longer writes `asked` —
+        # a sheet-seeded ask_name/ask_how was a PERMANENT probe ban (the
+        # learner never being allowed ¿Cómo estás? again because the sheet
+        # says they know estoy).  `asked` records only what THIS session's
+        # tutor actually asked; the sheet's knowledge rides in `shown` and
+        # in the prompt facts.
         self.sheet_seeded = True
 
     def snapshot(self) -> dict:

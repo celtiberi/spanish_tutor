@@ -40,18 +40,22 @@ class TestConceptClassFold:
         assert compose_topic_key("size", "ciudad") == "size:ciudad"
 
 
+# The open turn ASKS ¿Cómo estás? (recorded via note_plan_try → asked);
+# the second reply re-asks the SAME probe → gate:probe_loop (the surviving
+# true-positive class after the 2026-08-03 retune: this session's own
+# repeat, not the deleted shown-skill ban).
 OPEN_OK_REPLY = (
     "<tutor>\n"
     "  <acknowledge>¡Empezamos!</acknowledge>\n"
     "  <model>**Yo estoy muy contento hoy.**</model>\n"
-    "  <try>¿Estás contento hoy también?</try>\n"
+    "  <try>¿Cómo estás hoy?</try>\n"
     "</tutor>"
 )
 PROBE_REPLY = (
     "<tutor>\n"
     "  <acknowledge>¡Muy bien!</acknowledge>\n"
     "  <model>**Estoy bien**, gracias.</model>\n"
-    "  <try>¿«Cómo estás» es «How are you?»? ¿Sí o no?</try>\n"
+    "  <try>¿Cómo estás hoy también?</try>\n"
     "</tutor>"
 )
 
@@ -101,7 +105,7 @@ class TestGateNoHide:
         assert turn.parts.get("gate_fail") is True
         assert turn.parts.get("gate_hold") is not True
         # Raw attempt still present (including the bad probe) — not hidden.
-        assert "Sí o no" in (turn.reply or "") or "Estoy bien" in (turn.reply or "")
+        assert "Cómo estás" in (turn.reply or "") or "Estoy bien" in (turn.reply or "")
         assert getattr(s, "gate_still_fail_count", 0) >= 1
 
     def test_no_second_model_call_on_gate_fail(
@@ -127,13 +131,35 @@ class TestGateNoHide:
                 raised = True
             assert raised or "output_gate_repaired" not in turn.notes
 
-    def test_fault_partition_constants(self):
-        from tutor.turn_pipeline import _DEGRADE_OK, _INTEGRITY_HOLD
+    def test_critical_fault_set_matches_retune(self):
+        # Gate retune 2026-08-03: mode-keyed contracts gone; bare
+        # unscaffolded items SOFT; cluster veto is the surviving critical.
+        from tutor.turn_pipeline import (
+            GATE_CRITICAL_FAULTS,
+            GATE_SHIP_BAN_FAULTS,
+        )
 
-        assert "gate:probe_loop" in _INTEGRITY_HOLD
-        assert "gate:unscaffolded_new_item" in _INTEGRITY_HOLD
-        assert "pedagogy:no_teach_move" in _DEGRADE_OK
-        assert not (_INTEGRITY_HOLD & _DEGRADE_OK)
+        assert GATE_CRITICAL_FAULTS == frozenset({
+            "pedagogy:no_teach_move",
+            "pedagogy:open_needs_model_try",
+            "gate:english_wall",
+            "gate:sheet_leak",
+            "gate:truncated",
+            "gate:cluster_veto",
+            "gate:probe_loop",
+        })
+        assert GATE_SHIP_BAN_FAULTS == GATE_CRITICAL_FAULTS
+        # Retired machinery stays retired (absence pins).
+        import tutor.turn_pipeline as tp
+
+        for name in ("_INTEGRITY_HOLD", "_DEGRADE_OK"):
+            assert not hasattr(tp, name)
+        for gone in (
+            "gate:missing_recast", "gate:form_focus_needs_model",
+            "gate:comprehension_needs_check", "gate:unscaffolded_flood",
+            "gate:unscaffolded_new_item",
+        ):
+            assert gone not in GATE_CRITICAL_FAULTS
 
 
 class TestNoHideInternalErrors:

@@ -3,12 +3,23 @@
 After the model speaks, code checks for failures that prompts cannot self-guarantee:
   - no teach move (model/try/recast)
   - English wall (tutor turn mostly English when it should be Spanish-forward)
-  - probe loop (re-asking something session memory already covered)
-  - unscaffolded new item (r7 S3: naked first exposure / cluster dump in
-    the visible teaching text) and re-gloss of already-introduced items
+  - probe loop (this session's tutor re-asking a try it already asked)
+  - same-theme cluster dump (gate:cluster_veto — near-synonym interference,
+    r7 R-F as code) and re-gloss of already-introduced items
+  - soft advisories: bare unscaffolded first exposures
+    (gate:unscaffolded_new_item — SOFT since the 2026-08-03 gate retune)
 
-On failure the session may do **one** bounded re-ask with a specific fault.
-See docs/reviews-claude-idea-spar.md (Claude: gate output, not decision).
+Gate retune 2026-08-03 (full-code-audit S4, Grok AMENDs binding): the
+mode-keyed contracts (missing_recast / form_focus_needs_model /
+comprehension_needs_check / placement arms) are DELETED — the mode router
+was shadow-only, so those rules demanded tags the model was never asked
+for.  Bare new items are ONE soft advisory; CRITICAL survives only for the
+same-theme cluster veto.  Every visibly-used table key gets a first_seen
+exposure write (scaffold_saved carries the evidence kind, incl. "bare").
+No parsing of the model's <plan> text — ever.
+
+Faults ship raw + visible (no-hide, 2026-08-01): the gate never rewrites,
+strips, or blanks a reply.
 """
 
 from __future__ import annotations
@@ -34,9 +45,11 @@ MIN_ALPHA_TOKENS = 12
 # true-zero opening (one English framing line + glossed tiny Spanish)
 # measures tl_ratio ≈ 0.32–0.40 and used to trip the wall, whose forced
 # "Rewrite Spanish-forward" re-ask reproduced the 100%-Spanish incident.
-# Placement mode and blank_zero turns (zero-register overlay riding
-# conversation/repair modes, threaded from conv_session) use this floor
-# instead; a genuinely all-English turn (ratio ≈ 0) still faults everywhere.
+# blank_zero turns (true-zero register: blank sheet, no successful Spanish
+# this turn — re-derived in turn_pipeline.stage_gate_context) use this
+# floor instead; a genuinely all-English turn (ratio ≈ 0) still faults.
+# The placement-MODE arm of this floor was DELETED with the mode router
+# (gate retune 2026-08-03) — blank_zero is the only true-zero path.
 ZERO_MIN_SPANISH_RATIO = 0.25
 # Short L1 sandwich in <explain>: exclude English from the ratio when explain
 # has at most this many non-Spanish alphabetic tokens (A3 "≤6 words" gloss).
@@ -77,12 +90,14 @@ class OutputGateResult:
     notes: list[str] = field(default_factory=list)
     spanish_ratio: float | None = None
     repair_instruction: str = ""
-    # Round-2 AMEND 1c: keys that would have faulted but were saved solely by
-    # an in-reply scaffold, mapped to the scaffold kind ("gloss" | "anchor").
-    # The session writes their durable first_seen bit post-turn.
+    # Exposure-ledger map (gate retune 2026-08-03, Grok AMEND verbatim:
+    # first_seen for EVERY association-table key the tutor visibly used):
+    # not-yet-introduced keys visibly presented this turn, mapped to the
+    # evidence kind — "gloss" | "anchor" | "image" (scaffolded) or "bare"
+    # (naked use; soft-faulted but still exposure).  The session writes
+    # their durable first_seen bit post-turn (stage_first_seen).  Exposure
+    # only — never ability evidence.
     scaffold_saved: dict[str, str] = field(default_factory=dict)
-    # Round-2 storm soften: bare keys degraded to soft gate:unscaffolded_flood.
-    flood_keys: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -92,40 +107,38 @@ class OutputGateResult:
             "spanish_ratio": self.spanish_ratio,
             "repair_instruction": self.repair_instruction,
             "scaffold_saved": dict(self.scaffold_saved),
-            "flood_keys": list(self.flood_keys),
         }
 
 
 @dataclass
 class GateContext:
     """E3 (Phase 4 batch 3, docs/reviews-architecture-refactor.md): the
-    gate's full input surface as ONE typed object — what the historical
-    18-argument ``check_output_gate`` signature encoded (2 positionals +
-    16 keyword-only).  ``check_output_gate(ctx)`` is the new surface; the
-    legacy kwarg call remains as a thin shim that builds this context, so
-    the existing gate tests keep their call shape.  Field semantics are
-    exactly the old parameters':
+    gate's full input surface as ONE typed object.  ``check_output_gate
+    (ctx)`` is the surface; the legacy kwarg call remains as a thin shim
+    that builds this context, so gate tests keep their call shape.
 
-    - ``parts``/``visible``/``raw``: the parsed tutor reply under test
-      (per-ATTEMPT fields — the repair loop re-checks a rewritten reply
-      via ``dataclasses.replace`` on the same turn-constant base).
-    - ``require_recast``/``truncated``: per-attempt check switches.
+    Gate retune 2026-08-03: the mode-keyed fields died with the mode-keyed
+    contracts — ``mode`` (placement/recast arms), ``already_shown`` (the
+    shown-skill permanent probe ban), ``require_recast`` and
+    ``image_present`` (the association image note) are GONE.
+    ``image_concepts`` arrived: the teach-image concepts attached this
+    turn (a same-turn image for a key COUNTS as its scaffold).
+
+    - ``parts``/``visible``/``raw``: the parsed tutor reply under test.
+    - ``truncated``: per-attempt check switch.
     - everything else is turn-constant session/turn state (sheet, table,
-      memory registries, mode, learner text, blank-zero register).
+      memory registries, learner text, blank-zero register).
     """
 
     # -- per-attempt: the reply under test -----------------------------------
     parts: dict | None = None
     visible: str = ""
     raw: str | None = None
-    require_recast: bool = False
     truncated: bool = False
     # -- turn-constant context ----------------------------------------------
     is_open: bool = False
     already_asked: set[str] | list[str] | None = None
-    already_shown: set[str] | list[str] | None = None
-    mode: str | None = None
-    image_present: bool = False
+    image_concepts: Any = None
     association_table: dict | None = None
     sheet: dict | None = None
     introduce_key: str | None = None
@@ -238,7 +251,6 @@ _SHEET_LEAK_MARKERS = (
     "resolved_streak",
     "solid_uses",
     "error_patterns",
-    "update_character_sheet",
     "present_estar_person",
 )
 _SHEET_LEAK_RES = (
@@ -246,62 +258,61 @@ _SHEET_LEAK_RES = (
     re.compile(r'"grammar"\s*:\s*\{'),
     re.compile(r'"skills"\s*:\s*\{'),
     re.compile(r"```\s*json\b", re.I),
+    # The tool name counts ONLY in a JSON-/call-ish context (gate retune
+    # 2026-08-03): the system prompt itself teaches the model the term
+    # `update_character_sheet`, so a prose mention is not a sheet dump —
+    # quoted/braced or followed by call/JSON punctuation is.
+    re.compile(
+        r"[\"'{\[]\s*update_character_sheet"
+        r"|update_character_sheet\s*[\"':,({]"
+    ),
 )
 
 
 # --- Phase 4 enforcement (r7 S3, docs/pedagogy-research-r7-association-intro.md §7)
-# gate:unscaffolded_new_item (CRITICAL): the model presented an association-
-# table key anywhere in the VISIBLE teaching text (all composed parts —
-# acknowledge/recast/explain/model/try/continue; widened 2026-07-28 after
-# blind-grade defect #2: bare «Mucho gusto» rode the acknowledge part past a
-# model/try-only scan) that the ledger + sheet say the learner has NEVER
-# seen (not introduced, no lexicon evidence), that is not this turn's
-# IntroducePlan key, and that carries no in-reply scaffold (no "(≤6-word
-# gloss)" parenthetical right after it, no cognate/keyword anchor text from
-# its table entry). Cluster veto (r7 R-F as CODE, not advice): more than one
-# unintroduced same-theme key in one reply faults the extras even when
-# glossed — one new item per turn; the IntroducePlan key holds its slot.
-# gate:regloss (SOFT): an already-introduced key re-glossed with a fresh
-# "(english)" parenthetical without a retrieval failure this turn (r7 E2:
-# retrieval re-encounters ride WITHOUT re-gloss unless they fail).
+# RETUNED 2026-08-03 (full-code-audit S4, Grok AMEND verbatim):
 #
-# gate:unscaffolded_flood (SOFT — Round-2 storm soften, docs/
-# reviews-pedagogy-engine-build.md Adjudication Round 2 §2): when >= 3
-# DISTINCT bare unscaffolded keys fire on one turn (formulaic-opener
-# signature, e.g. hola/cómo estás/bien on a blank sheet), the critical fault
-# degrades to this soft note carrying the key list — logged, no forced
-# rewrite. Same-theme cluster extras are EXCEPT-ed: they stay CRITICAL
-# gate:unscaffolded_new_item at ANY count (the dual-farewell case fires at
-# 2 glossed farewells and is untouched). <= 2 bare keys stay CRITICAL.
+# gate:unscaffolded_new_item (SOFT advisory): the model presented an
+# association-table key anywhere in the VISIBLE teaching text (all composed
+# parts — acknowledge/recast/explain/model/try/continue; widened 2026-07-28
+# after blind-grade defect #2) that the ledger + sheet say the learner has
+# NEVER seen, with NO in-reply scaffold — no "(≤6-word gloss)"
+# parenthetical, no cognate/keyword anchor from its table entry, and no
+# same-turn teach image for the key (an attached image IS a scaffold —
+# AMEND 2b).  ONE soft advisory carrying the key list; never a forced
+# rewrite.  (The old CRITICAL severity + the inverted >=3
+# gate:unscaffolded_flood split are DELETED — dumping MORE bare keys must
+# not read as better.)
+#
+# gate:cluster_veto (CRITICAL — the ONLY critical class here): more than
+# one unintroduced same-theme key in one reply faults the extras even when
+# glossed (r7 R-F near-synonym/antonym interference as CODE) — one new
+# item per turn; the IntroducePlan key holds its slot.
+#
+# gate:regloss (SOFT): an already-introduced key re-glossed with a fresh
+# "(english)" parenthetical without a retrieval failure this turn (r7 E2).
+#
+# Exposure ledger (AMEND 2a): EVERY not-yet-introduced key the tutor
+# visibly used this turn — scaffolded, bare, even a cluster extra — lands
+# in scaffold_saved with its evidence kind; the session writes durable
+# first_seen bits post-turn, so a bare-but-used key stops re-faulting
+# forever (the «bien» fired-5× pathology).  Exposure only, never ability.
 #
 # Pragmatics (never trip): keys already introduced; keys with a durable
-# `first_seen` bit (Round-2 AMEND 1c: the tutor already presented them WITH
-# an in-reply scaffold — later bare reuse is re-encounter, not naked first
-# exposure); keys with ANY sheet lexicon evidence (confidence > 0 — the
-# learner has produced/seen them; this subsumes the high-confidence skip);
-# keys in the learner's OWN current utterance; entries marked in_pack: false;
-# structural paradigm/sequence themes (pronouns, question words, copulas,
-# numbers, `hay`) — grammar infrastructure, not lexical introductions; the
-# r7 cluster ban targets near-synonym/antonym interference, which paradigms
-# and counting sequences are not — plus STRUCTURAL_KEYS, surface forms of
-# exempt paradigms the table themes elsewhere (`soy` sits under
-# `introductions`; ser/estar conjugations are copula paradigm, Round-2
-# AMEND 3 option B). Greetings/how_are_you/farewells themes are NOT
+# `first_seen` bit; keys with ANY sheet lexicon evidence (confidence > 0);
+# keys in the learner's OWN current utterance; entries marked
+# in_pack: false; structural paradigm/sequence themes (pronouns, question
+# words, copulas, numbers, `hay`) plus STRUCTURAL_KEYS surface forms
+# (Round-2 AMEND 3B).  Greetings/how_are_you/farewells themes are NOT
 # structural (Grok guardrail — that would gut the dual-farewell block).
-# Placement mode is exempt: the blank-sheet feel-out precedes the introduce
-# protocol (blank_open_placement freezes the phase clock and the router
-# never plans on placement). Without an association table AND a sheet the
-# check is disabled entirely.
+# Without an association table AND a sheet the check is disabled entirely.
 # Canonical home moved to tutor/association_table.py (Phase 5 batch 2 —
 # the sets describe table data; session_memory's topic palette shares them).
-# Historical names re-exported here; the semantics are unchanged.
 from .association_table import (  # noqa: E402  (re-export façade)
     STRUCTURAL_KEYS,
     STRUCTURAL_THEMES,
 )
 MAX_NEW_ITEM_GLOSS_WORDS = 6
-# >= this many DISTINCT bare unscaffolded keys on one turn → soft flood.
-FLOOD_MIN_DISTINCT = 3
 
 def gloss_after_key(key: str, text: str) -> bool:
     """True when the key is immediately followed by a short "(gloss)".
@@ -362,37 +373,39 @@ def scan_unscaffolded_new_items(
     introduce_key: str | None = None,
     retrieval_failed_keys=None,
     learner_text: str = "",
+    image_concepts=None,
 ) -> tuple[list[str], list[str], list[str], dict[str, str]]:
     """(bare_keys, cluster_extra_keys, reglossed_keys, scaffold_saved).
 
-    bare_keys: unintroduced keys presented with NO in-reply scaffold (flood-
-    eligible — the caller applies the >=3 soften). cluster_extra_keys: keys
-    that carried a scaffold but faulted anyway as same-theme cluster extras
-    (r7 R-F as code — ALWAYS critical, any count). scaffold_saved maps keys
-    that WOULD have faulted but were saved solely by an in-reply scaffold to
-    the scaffold kind ("gloss" | "anchor") — the session writes their durable
-    first_seen bit post-turn (Round-2 AMEND 1c).
+    bare_keys: unintroduced keys presented with NO in-reply scaffold — the
+    caller emits ONE soft gate:unscaffolded_new_item advisory (retune
+    2026-08-03).  cluster_extra_keys: same-theme cluster extras (r7 R-F as
+    code — gate:cluster_veto, ALWAYS critical, any count).  scaffold_saved
+    is the EXPOSURE map (AMEND 2a): every not-yet-introduced key visibly
+    used this turn → evidence kind ("gloss" | "anchor" | "image" | "bare");
+    the session writes durable first_seen bits post-turn so bare-but-used
+    keys stop re-faulting forever.  A same-turn teach image whose concept
+    is the key counts as its scaffold (``image_concepts``, AMEND 2b).
 
     Detection scans ALL visible teaching text — the composed learner-facing
     reply (acknowledge/recast/explain/model/try/continue; full visible reply
     when unstructured). Incident 2026-07-28 (blind-grade defect #2): bare
     «¡Mucho gusto, Patrick!» rode the <acknowledge> part while the scan
     looked only at model/try — new items reach the learner from EVERY part.
-    Scaffold signals (gloss/anchor) may likewise live anywhere in the
-    learner-facing text; the formulaic-storm vector stays covered by the
-    >=3-distinct-bare flood soften. Keys present in the learner's OWN
-    current utterance are evidence of exposure (the sheet observer only
-    records them after the gate runs) and never fault. Pure; see the module
-    notes above for the law.
+    Keys present in the learner's OWN current utterance are evidence of
+    exposure (the sheet observer only records them after the gate runs) and
+    never fault. Pure; see the module notes above for the law.
     """
     if not table or not isinstance(sheet, dict):
         return [], [], [], {}
     from .retrieval_scheduler import has_first_seen, is_introduced
+    from .textnorm import fold_asset_key
 
     parts = parts or {}
     teach_blob = learner_facing_blob(parts, visible)
     full_blob = teach_blob
     failed = set(retrieval_failed_keys or [])
+    img_concepts = {str(c) for c in (image_concepts or []) if c}
 
     hits: list[tuple[int, int, str]] = []
     reglossed: list[str] = []
@@ -460,22 +473,29 @@ def scan_unscaffolded_new_items(
         # scaffold TYPE lapsed (R-A cognate planned, gloss delivered) still
         # exposed the learner to a scaffolded key — record scaffold_saved so
         # the first_seen ledger sees it (no bare fault either way; the
-        # introduce path owns the lapse). Skipping the key outright left
-        # BOTH ledgers blind → guaranteed critical thrash on next bare use
-        # (Grok's encantado proof).
+        # introduce path owns the lapse).
         if gloss_after_key(key, full_blob):
             scaffold_saved[key] = "gloss"
             continue
         if anchor_in_reply(entry, full_blob, key=key):
             scaffold_saved[key] = "anchor"
             continue
+        if fold_asset_key(key) in img_concepts or key in img_concepts:
+            # AMEND 2b: a same-turn attached teach image for the key IS a
+            # scaffold (dual-coding delivered).
+            scaffold_saved[key] = "image"
+            continue
+        # AMEND 2a: bare use is STILL exposure — the ledger records it so
+        # the key never re-faults as a naked first exposure again.
+        scaffold_saved[key] = "bare"
         if key == introduce_key:
             continue  # planned key bare: introduce path owns fault/lapse
         bare.append(key)
-    # Cluster veto: >1 unintroduced same-theme key in one reply → the extras
-    # fault even when glossed (one new item per turn). Bare same-theme keys
-    # are already in `bare` (flood-eligible); the veto's distinctive output
-    # is the GLOSSED extras, which stay critical at any count.
+    # Cluster veto (gate:cluster_veto, the surviving CRITICAL): >1
+    # unintroduced same-theme key in one reply → the extras fault even when
+    # glossed (one new item per turn).  Extras KEEP their scaffold_saved
+    # entry: the learner still saw them this turn (exposure truth beats the
+    # fault — AMEND 2a covers every visibly-used key).
     by_theme: dict[str, list[str]] = {}
     for key in ordered:
         theme = str((table.get(key) or {}).get("theme") or "")
@@ -486,11 +506,8 @@ def scan_unscaffolded_new_items(
             continue
         keep_key = introduce_key if introduce_key in keys else keys[0]
         for key in keys:
-            if key != keep_key and key not in bare and key not in cluster_extras:
+            if key != keep_key and key not in cluster_extras:
                 cluster_extras.append(key)
-    # A glossed key that faulted as a cluster extra was NOT saved.
-    for key in cluster_extras:
-        scaffold_saved.pop(key, None)
     return bare, cluster_extras, reglossed, scaffold_saved
 
 
@@ -520,10 +537,7 @@ def check_output_gate(
     *,
     is_open: bool = False,
     already_asked: set[str] | list[str] | None = None,
-    already_shown: set[str] | list[str] | None = None,
-    mode: str | None = None,
-    image_present: bool = False,
-    require_recast: bool = False,
+    image_concepts=None,
     raw: str | None = None,
     truncated: bool = False,
     association_table: dict | None = None,
@@ -535,13 +549,14 @@ def check_output_gate(
     asked_topics=None,
     topic_nouns=None,
 ) -> OutputGateResult:
-    """Hard checks on the composed tutor turn (+ optional per-mode contracts).
+    """Hard checks on the composed tutor turn.
 
     E3 surface (Phase 4 batch 3): pass a single ``GateContext`` as the
-    first argument — ``check_output_gate(ctx)``.  The legacy 18-argument
-    kwarg signature remains as a thin shim that builds the context; both
-    paths funnel into the same implementation, so shim == context by
-    construction.
+    first argument — ``check_output_gate(ctx)``.  The legacy kwarg
+    signature remains as a thin shim that builds the context; both paths
+    funnel into the same implementation.  (The mode-keyed kwargs — mode /
+    already_shown / require_recast / image_present — died with the
+    mode-keyed contracts, gate retune 2026-08-03.)
 
     association_table + sheet (+ this turn's IntroducePlan key and any
     retrieval-failure keys) enable the Phase 4 r7 S3 checks; without both the
@@ -559,10 +574,7 @@ def check_output_gate(
         visible=visible,
         is_open=is_open,
         already_asked=already_asked,
-        already_shown=already_shown,
-        mode=mode,
-        image_present=image_present,
-        require_recast=require_recast,
+        image_concepts=image_concepts,
         raw=raw,
         truncated=truncated,
         association_table=association_table,
@@ -581,10 +593,6 @@ def _check_output_gate(gctx: GateContext) -> OutputGateResult:
     visible = gctx.visible
     is_open = gctx.is_open
     already_asked = gctx.already_asked
-    already_shown = gctx.already_shown
-    mode = gctx.mode
-    image_present = gctx.image_present
-    require_recast = gctx.require_recast
     raw = gctx.raw
     truncated = gctx.truncated
     association_table = gctx.association_table
@@ -598,10 +606,8 @@ def _check_output_gate(gctx: GateContext) -> OutputGateResult:
 
     parts = gctx.parts or {}
     asked = set(already_asked or [])
-    shown = set(already_shown or [])
     faults: list[str] = []
     notes: list[str] = []
-    mode_l = (mode or "").strip().lower()
 
     # Reply hit the token cap → shipped text ends mid-sentence. Always critical.
     if truncated:
@@ -625,7 +631,7 @@ def _check_output_gate(gctx: GateContext) -> OutputGateResult:
 
     ped = evaluate_turn(
         parts,
-        is_open=is_open or mode_l == "placement",
+        is_open=is_open,
         structured=bool(parts.get("structured")),
         visible=visible,
     )
@@ -633,31 +639,11 @@ def _check_output_gate(gctx: GateContext) -> OutputGateResult:
         faults.append(v)
     notes.extend(ped.notes)
 
-    # Form error this turn → must expose a short recast (not only soft rewrite in ack)
-    if require_recast or mode_l in ("cf_recast", "form_focus"):
-        has_recast = bool((parts.get("recast") or "").strip())
-        if not has_recast:
-            faults.append("gate:missing_recast")
-            notes.append("gate:missing_recast")
-
-    # Per-mode contracts (teaching system v2)
-    if mode_l == "association" and not image_present:
-        # Soft: prefer image; do not hard-fail if cache miss (warm later)
-        notes.append("mode:association_no_image_cache")
-    if mode_l == "form_focus":
-        has_contrast = bool(
-            (parts.get("explain") or "").strip()
-            or (parts.get("recast") or "").strip()
-            or (parts.get("model") or "").strip()
-        )
-        if not has_contrast:
-            faults.append("gate:form_focus_needs_model")
-            notes.append("gate:form_focus_needs_model")
-    if mode_l == "comprehension_check":
-        try_t = (parts.get("try") or parts.get("continue") or "").lower()
-        if not any(x in try_t for x in ("?", "¿", " o ", "sí", "si", "no")):
-            faults.append("gate:comprehension_needs_check")
-            notes.append("gate:comprehension_needs_check")
+    # (The mode-keyed contracts — gate:missing_recast /
+    # gate:form_focus_needs_model / gate:comprehension_needs_check and the
+    # mode:association_no_image_cache note — were DELETED 2026-08-03: the
+    # mode router was shadow-only, so they enforced tags the model was
+    # never asked for.)
 
     # English wall on learner-facing text (model+try+ack+recast+explain).
     # Spec 2026-07-26: critical iff ratio < 0.50 AND >= 12 alphabetic tokens;
@@ -666,29 +652,23 @@ def _check_output_gate(gctx: GateContext) -> OutputGateResult:
     ratio = spanish_token_ratio(ratio_blob_with_sandwich_exempt(parts, visible))
     n_alpha = alphabetic_token_count(full_blob)
     notes.append(f"tl_ratio={ratio:.2f}")
-    # True-zero exemption (2026-07-28 incident): placement opens and
-    # blank_zero overlay turns REQUIRE English orientation — the wall floor
-    # drops to 0.25 there so a compliant glossed opening passes while a
-    # genuinely all-English turn (ratio ≈ 0) still faults in every mode.
-    min_ratio = (
-        ZERO_MIN_SPANISH_RATIO
-        if (mode_l == "placement" or blank_zero)
-        else MIN_SPANISH_RATIO
-    )
+    # True-zero exemption (2026-07-28 incident): blank_zero overlay turns
+    # REQUIRE English orientation — the wall floor drops to 0.25 there so a
+    # compliant glossed opening passes while a genuinely all-English turn
+    # (ratio ≈ 0) still faults everywhere.
+    min_ratio = ZERO_MIN_SPANISH_RATIO if blank_zero else MIN_SPANISH_RATIO
     if n_alpha >= MIN_ALPHA_TOKENS and ratio < min_ratio:
         faults.append("gate:english_wall")
         notes.append(f"gate:english_wall ratio={ratio:.2f}<{min_ratio}")
 
-    # Phase 4 enforcement (r7 S3): naked first exposures + cluster veto +
-    # re-gloss. Placement (blank feel-out) precedes the introduce protocol.
-    # Round-2 storm soften: >= FLOOD_MIN_DISTINCT bare keys degrade to SOFT
-    # gate:unscaffolded_flood; same-theme cluster extras stay CRITICAL at
-    # any count (dual-farewell block untouched).
+    # Phase 4 enforcement (r7 S3, retuned 2026-08-03): bare first exposures
+    # are ONE soft advisory; the same-theme cluster veto is the only
+    # critical class; every visibly-used key lands in the exposure map.
     unscaffolded: list[str] = []
-    flood_keys: list[str] = []
+    cluster_extras: list[str] = []
     reglossed: list[str] = []
     scaffold_saved: dict[str, str] = {}
-    if association_table and isinstance(sheet, dict) and mode_l != "placement":
+    if association_table and isinstance(sheet, dict):
         bare, cluster_extras, reglossed, scaffold_saved = (
             scan_unscaffolded_new_items(
                 parts,
@@ -698,46 +678,38 @@ def _check_output_gate(gctx: GateContext) -> OutputGateResult:
                 introduce_key=introduce_key,
                 retrieval_failed_keys=retrieval_failed_keys,
                 learner_text=learner_text,
+                image_concepts=gctx.image_concepts,
             )
         )
-        if len(bare) >= FLOOD_MIN_DISTINCT:
-            flood_keys = list(bare)
-        else:
-            unscaffolded = list(bare)
-        unscaffolded += [k for k in cluster_extras if k not in unscaffolded]
+        # A bare key that is ALSO a cluster extra belongs to the veto —
+        # one fault per key, at the higher severity.
+        unscaffolded = [k for k in bare if k not in cluster_extras]
         if unscaffolded:
             faults.append("gate:unscaffolded_new_item")
             notes.append(
                 "gate:unscaffolded_new_item " + ",".join(unscaffolded[:8])
             )
-        if flood_keys:
-            faults.append("gate:unscaffolded_flood")
-            notes.append(
-                "gate:unscaffolded_flood " + ",".join(flood_keys[:8])
-            )
+        if cluster_extras:
+            faults.append("gate:cluster_veto")
+            notes.append("gate:cluster_veto " + ",".join(cluster_extras[:8]))
         if reglossed:
             faults.append("gate:regloss")
             notes.append("gate:regloss " + ",".join(reglossed[:8]))
 
-    # Loop: tutor re-asks a probe we already asked OR they already answered
+    # Loop: this session's tutor re-asking a try it already asked.  Retune
+    # 2026-08-03: the scan reads the TRY + CONTINUE parts ONLY — model /
+    # acknowledge text is roleplay dialogue, not an ask (T2–T4 false
+    # positives, evals/results/20260803-104618-student).  The shown-skill
+    # permanent ban is DELETED: a learner having demonstrated «estoy» must
+    # not forbid ¿Cómo estás? forever.
     probe_blob = " ".join(
-        str(parts.get(k) or "") for k in ("try", "continue", "model", "acknowledge")
+        str(parts.get(k) or "") for k in ("try", "continue")
     )
     probes = detect_tutor_probe_keys(probe_blob)
     loop_hits: list[str] = []
     for p in probes:
         if p in asked:
             loop_hits.append(p)
-        # They already showed the skill this session
-        skill_map = {
-            "ask_how": "estoy",
-            "ask_name": "name",
-            "ask_origin": "origin",
-            "ask_gusta": "gusta",
-        }
-        sk = skill_map.get(p)
-        if sk and sk in shown:
-            loop_hits.append(f"{p}/shown:{sk}")
     # Registry check (2026-07-28 repetition forensics): the composed try's
     # semantic key — same extractor that writes SessionMemory.asked_topics —
     # already asked this session ⇒ probe loop on ANY topic, not only the 4
@@ -785,5 +757,4 @@ def _check_output_gate(gctx: GateContext) -> OutputGateResult:
         spanish_ratio=ratio,
         repair_instruction=diagnosis,
         scaffold_saved=scaffold_saved,
-        flood_keys=flood_keys,
     )

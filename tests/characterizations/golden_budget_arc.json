@@ -13,11 +13,7 @@
       },
       "intro_budget_remaining": 2,
       "introduced_this_session": [],
-      "learner_turn_index": 1,
-      "mode": "conversation",
       "notes": [
-        "mode=conversation",
-        "mode_reason=known_open_from_sheet",
         "introduce_planned:me llamo:R-D",
         "output_gate_ok",
         "rules_backup",
@@ -26,14 +22,12 @@
         "pedagogy:ok",
         "pedagogy:known_learner_open",
         "open_phase=known",
-        "hard_break=False",
-        "plan_source=mode_runtime",
+        "plan_source=model",
         "teacher_mode=planned",
         "mem_shown=greet",
-        "mem_asked=conversation"
+        "mem_asked=—"
       ],
-      "requests_so_far": 1,
-      "uptake_last_turn": -999
+      "requests_so_far": 1
     },
     {
       "instructions": {
@@ -43,11 +37,7 @@
       "introduced_this_session": [
         "me llamo"
       ],
-      "learner_turn_index": 2,
-      "mode": "conversation",
       "notes": [
-        "mode=conversation",
-        "mode_reason=default_conversation",
         "uptake_flagged:pan",
         "introduce_planned:me llamo:R-D",
         "output_gate_ok",
@@ -59,14 +49,12 @@
         "progress_milestone:planted:me llamo",
         "pedagogy:known_learner_open",
         "phase=ai_tutor",
-        "hard_break=False",
-        "plan_source=mode_runtime",
+        "plan_source=model",
         "teacher_mode=planned",
         "mem_shown=greet,spanish_ok",
-        "mem_asked=conversation"
+        "mem_asked=—"
       ],
-      "requests_so_far": 2,
-      "uptake_last_turn": 2
+      "requests_so_far": 2
     },
     {
       "instructions": {
@@ -77,11 +65,8 @@
         "me llamo",
         "soy"
       ],
-      "learner_turn_index": 3,
-      "mode": "conversation",
       "notes": [
-        "mode=conversation",
-        "mode_reason=default_conversation",
+        "uptake_flagged:leche",
         "introduce_planned:soy:R-D",
         "output_gate_ok",
         "rules_backup",
@@ -92,15 +77,13 @@
         "progress_milestone:planted:soy",
         "pedagogy:known_learner_open",
         "phase=ai_tutor",
-        "hard_break=False",
-        "plan_source=mode_runtime",
+        "plan_source=model",
         "teacher_mode=planned",
         "mem_shown=greet,spanish_ok",
-        "mem_asked=conversation",
+        "mem_asked=—",
         "morph_card:ser"
       ],
-      "requests_so_far": 3,
-      "uptake_last_turn": 2
+      "requests_so_far": 3
     },
     {
       "instructions": {
@@ -111,11 +94,7 @@
         "me llamo",
         "soy"
       ],
-      "learner_turn_index": 4,
-      "mode": "conversation",
       "notes": [
-        "mode=conversation",
-        "mode_reason=default_conversation",
         "output_gate_ok",
         "rules_backup",
         "scaffold=ES-forward+EN-rescue",
@@ -123,14 +102,12 @@
         "pedagogy:ok",
         "pedagogy:known_learner_open",
         "phase=ai_tutor",
-        "hard_break=False",
-        "plan_source=mode_runtime",
+        "plan_source=model",
         "teacher_mode=planned",
         "mem_shown=greet,spanish_ok",
-        "mem_asked=conversation"
+        "mem_asked=—"
       ],
-      "requests_so_far": 4,
-      "uptake_last_turn": 2
+      "requests_so_far": 4
     },
     {
       "instructions": {
@@ -141,11 +118,7 @@
         "me llamo",
         "soy"
       ],
-      "learner_turn_index": 5,
-      "mode": "conversation",
       "notes": [
-        "mode=conversation",
-        "mode_reason=default_conversation",
         "uptake_flagged:leche",
         "output_gate_ok",
         "rules_backup",
@@ -154,14 +127,12 @@
         "pedagogy:ok",
         "pedagogy:known_learner_open",
         "phase=ai_tutor",
-        "hard_break=False",
-        "plan_source=mode_runtime",
+        "plan_source=model",
         "teacher_mode=planned",
         "mem_shown=greet,spanish_ok",
-        "mem_asked=conversation"
+        "mem_asked=—"
       ],
-      "requests_so_far": 5,
-      "uptake_last_turn": 5
+      "requests_so_far": 5
     }
   ]
 }

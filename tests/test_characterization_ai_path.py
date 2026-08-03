@@ -196,16 +196,8 @@ def _observe(ctx, result, *, save_slice, sheet_keys=()) -> dict:
             "intro_budget_remaining":
                 s.pedagogy_memory.intro_budget_remaining(),
         },
-        "mode_state": {
-            "hard_breaks_this_session":
-                s.mode_state.hard_breaks_this_session,
-            "turns_since_hard_break": s.mode_state.turns_since_hard_break,
-            "last_mode": s.mode_state.last_mode,
-            "english_only_streak": s.mode_state.english_only_streak,
-            "learner_turn_index": s.mode_state.learner_turn_index,
-            "form_focus_cooldown": dict(s.mode_state.form_focus_cooldown),
-            "last_resolved_form": s.mode_state.last_resolved_form,
-        },
+        # (mode_state observation DELETED 2026-08-03 — the mode router
+        # died with the S4 teardown; goldens regenerated.)
         # CHAR_PIN — CHAR-BUG-001 RESOLVED (Phase 4 batch 4,
         # tests/characterizations/known_bugs.json): the call-site list pins
         # the ATOMIC turn — exactly one _commit_sheet per successful turn
@@ -255,7 +247,7 @@ def test_tutor_session_fixture_smoke(tutor_session):
 
 
 # ---------------------------------------------------------------------------
-# Golden (i): blank-sheet open (placement) + zero-register English turn
+# Golden (i): blank-sheet open + zero-register English turn
 # ---------------------------------------------------------------------------
 
 
@@ -271,10 +263,19 @@ def test_golden_blank_open_and_zero_register_turn(tutor_session_factory):
     assert open_res.error is None
     n_open = len(ctx.save_calls)
 
-    # CHAR_PIN: blank open routes to placement (blank_open_placement).
-    assert open_res.parts["mode"] == "placement"
-    assert "mode_reason=blank_open_placement" in open_res.notes
+    # CHAR_PIN: blank open keeps the diagnostic pedagogy note; the mode
+    # router (and parts["mode"]) died 2026-08-03 (full-code-audit S4).
+    assert "mode" not in open_res.parts
     assert "pedagogy:diagnostic_open" in open_res.notes
+    # DECLARED DELTA (router teardown): the shadow introduce planner now
+    # runs on the open too (the placement guard died) — the canned open
+    # presents «Hola» WITH its scaffold, so the introduce ledger fires on
+    # the OPEN and the gate scan (no placement exemption) writes the
+    # first_seen exposure for the glossed «estoy bien».
+    assert "introduce_planned:hola:R-E" in open_res.notes
+    assert "introduced:hola" in open_res.notes
+    assert "first_seen:estoy bien" in open_res.notes
+    assert s.pedagogy_memory.intro_budget_remaining() == 1
     obs_open = _observe(
         ctx, open_res, save_slice=slice(0, n_open),
         sheet_keys=(("lexicon", "hola"), ("lexicon", "bien")),
@@ -287,49 +288,29 @@ def test_golden_blank_open_and_zero_register_turn(tutor_session_factory):
     )
     assert turn.error is None
 
-    # CHAR_PIN: post-open English turn stays conversation (no hard break —
-    # the open's placement break blocks another for 3 turns) and carries the
-    # TRUE-ZERO register overlay + INTRODUCE plan (the session-phase layer
-    # died 2026-08-03 — introduce rides flavorable turns directly).
-    assert turn.parts["mode"] == "conversation"
-    assert "mode_reason=default_conversation" in turn.notes
-    # §1.1 rewrite (2026-08-03): the routers still COMPUTE (shadow notes
-    # above prove it) but their scripts never reach the model.
+    # CHAR_PIN: no mode machinery on the learner turn; the model gets
+    # FACTS only.
+    assert "mode" not in turn.parts
     payload = ctx.fake.task_payload()
     assert "mode" not in payload
     assert "hard_observations" not in payload
     assert "teaching_data" in payload
-    # CHAR_PIN: reply omitted the planned key → no introduce ledger write,
-    # budget unconsumed (mere plan is not exposure).
+    # CHAR_PIN: reply omitted the planned key («me llamo») → no introduce
+    # ledger write, budget unconsumed beyond the open's «hola».
     assert not any(n.startswith("introduced:") for n in turn.notes)
-    assert s.pedagogy_memory.intro_budget_remaining() == 2
-    # CHAR_PIN (Round-2 AMEND 1c + Phase 5 batch 2 declared delta): «estoy
-    # bien» is a real in-pack table key since batch 2 (the batch-1 deferral
-    # resolved), so the gate's longest-match overlap filter now keeps the
-    # MWU span over bare «bien» — scaffold_saved {estoy bien: gloss} and the
-    # durable first_seen bit land on «estoy bien», while «bien» stays
-    # untouched (pinned below via sheet_keys).  Honesty laws unchanged: no
-    # introduced_at, no retrieval enqueue, confidence untouched.
-    assert "first_seen:estoy bien" in turn.notes
-    assert "first_seen:bien" not in turn.notes
-    # CHAR_PIN (2026-07-29 morph-card review; re-homed by the §1.1b
-    # settlement round the same day): the tutor-side introduction engages
-    # the Morphology card in the SAME turn — «estoy bien» → the estar
-    # paradigm block, now settled into the frozen TurnRender (the
-    # _turn_morph shared-dict stash is dead) which every sheet_public
-    # repaint reads.
-    assert "morph_card:estar" in turn.notes
-    render = s.last_turn_render
-    assert render is not None
-    tm = render.card or {}
-    assert tm.get("form_id") == "present_estar_person"
-    assert tm.get("engaged_by") == "introduction"
+    assert s.pedagogy_memory.intro_budget_remaining() == 1
+    # CHAR_PIN (exposure ledger): «estoy bien» took first_seen on the OPEN
+    # (scan runs there since the retune); this turn's re-gloss of the
+    # already-first_seen MWU leaves it skipped, and the subword «bien» —
+    # no longer covered by the skipped MWU span — records its own
+    # exposure.  Honesty laws unchanged: no introduced_at, no retrieval
+    # enqueue, confidence untouched.
+    assert "first_seen:bien" in turn.notes
     eb = s.sheet["lexicon"]["estoy bien"]
     assert eb.get("first_seen")
     assert not eb.get("introduced_at")
     assert not eb.get("next_due")
     assert float(eb.get("confidence") or 0.0) == 0.0
-    assert "bien" not in s.sheet["lexicon"]
 
     obs_turn = _observe(
         ctx, turn, save_slice=slice(n_open, None),
@@ -361,7 +342,6 @@ def test_golden_due_elicit_turn(tutor_session_factory):
     # CHAR_PIN: known open + due queue → the due-offer event fires from the
     # due-DATA path (stage_prompt_build) with both due items (oldest-due
     # order: agua, pan).
-    assert "mode_reason=known_open_from_sheet" in open_res.notes
     assert "due_elicit_offered:agua,pan" in open_res.notes
     # §1.1 rewrite: due items ship as FACTS, not a scripted DUE block.
     open_payload = ctx.fake.task_payload(0)
@@ -497,7 +477,6 @@ def test_notes_chronological_order(tutor_session_factory):
     assert s.open_session().error is None
     turn = s.user_turn("Muy bien, gracias.")
     notes = list(turn.notes)
-    mode_i = notes.index("mode=conversation")
     planned_i = notes.index("introduce_planned:me llamo:R-D")
     gate_i = notes.index("output_gate_ok")
     # Sheet maintenance note: tool-only ability (2026-07-31) emits
@@ -508,9 +487,9 @@ def test_notes_chronological_order(tutor_session_factory):
     else:
         sheet_i = notes.index("rules_backup")
     marked_i = notes.index("introduced:me llamo")
-    # True chronology: mode select → introduce plan (pre-call) → gate
-    # (post-call) → sheet maintenance (_finish) → introduce mark (post-gate).
-    assert mode_i < planned_i < gate_i < sheet_i < marked_i
+    # True chronology: introduce plan (pre-call) → gate (post-call) →
+    # sheet maintenance (_finish) → introduce mark (post-gate).
+    assert planned_i < gate_i < sheet_i < marked_i
     # And the notes list is exactly the rendered event log, in seq order.
     from tutor.turn_events import render
 
@@ -522,55 +501,19 @@ def test_notes_chronological_order(tutor_session_factory):
 # ---------------------------------------------------------------------------
 
 
-def test_char_bug_002_resolved_single_streak_owner(tutor_session_factory):
-    # CHAR_PIN — CHAR-BUG-002 RESOLVED (Phase 4 batch 3, known_bugs.json):
-    # conv_session's stage_english_streak is the streak's single owner (it
-    # counts the CURRENT turn before select_mode); modes guard 4 reads the
-    # state only.  The old guard-4 `+ 1` double-counted the current turn,
-    # so ONE English-only learner turn hard-broke into association; the
-    # break now requires a GENUINE >=2 streak — the SECOND consecutive
-    # English-only turn.  This pin flipped WITH the fix;
-    # golden_english_streak regenerated in the same change (the pinned
-    # association-break observation moved from turn 1 to turn 2).
-    ctx = tutor_session_factory(
-        seed_sheet=_known_seed(),
-        replies=[OPEN_KNOWN_REPLY, TURN_BLANK_REPLY, TURN_ASSOC_REPLY],
-    )
-    s = ctx.session
-    assert s.open_session().error is None
+def test_char_bug_002_class_unreachable_router_deleted():
+    # CHAR-BUG-002 history: the english-only streak double count once
+    # hard-broke into association on the FIRST English turn; the single-
+    # owner fix resolved it (Phase 4 batch 3).  The whole class is now
+    # STRUCTURALLY UNREACHABLE: the mode router, the streak store and the
+    # association hard break were DELETED 2026-08-03 (full-code-audit S4).
+    import importlib.util
 
-    # Turn 1 — FIRST English-only turn: streak is genuinely 1, NO break.
-    t1 = s.user_turn(
-        "That was a long day at the office and there is a lot to do."
-    )
-    assert t1.error is None
-    assert t1.parts["mode"] != "association"
-    assert "mode_reason=english_stuck_association" not in t1.notes
-    assert "hard_break=False" in t1.notes
-    assert s.mode_state.english_only_streak == 1
-    assert s.mode_state.hard_breaks_this_session == 0
-    n_t1 = len(ctx.save_calls)
+    import tutor.turn_pipeline as tp
 
-    # Turn 2 — SECOND consecutive English-only turn: threshold met
-    # honestly → association hard break.
-    t2 = s.user_turn(
-        "My day was long and there is so much work to finish tonight."
-    )
-    assert t2.error is None
-    assert t2.parts["mode"] == "association"
-    assert "mode_reason=english_stuck_association" in t2.notes
-    assert "hard_break=True" in t2.notes
-    assert s.mode_state.english_only_streak == 2
-    assert s.mode_state.hard_breaks_this_session == 1
-
-    obs_turn = _observe(
-        ctx, t2, save_slice=slice(n_t1, None),
-        sheet_keys=(("lexicon", "café"),),
-    )
-    obs_turn["learner"] = (
-        "My day was long and there is so much work to finish tonight."
-    )
-    check_golden("golden_english_streak", obs_turn)
+    assert importlib.util.find_spec("tutor.modes") is None
+    assert not hasattr(tp, "stage_english_streak")
+    assert not hasattr(tp, "stage_select_mode")
 
 
 # ---------------------------------------------------------------------------

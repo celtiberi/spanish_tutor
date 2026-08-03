@@ -2,13 +2,13 @@
 
 Direct unit tests for tutor/turn_pipeline.py: each stage runs ALONE against
 a real isolated session (conftest ``tutor_session_factory``) and its state
-effects are asserted against facts the Phase 0 goldens pin (blank open =
-placement; due «pan» success = ladder 0→1 / due tomorrow with status and
-confidence untouched; english-only streak semantics incl. the CHAR-BUG-002
-site).  Plus the pipeline-order contract: the head sequence must match the
-documented stage list.  (Scenes, the session-phase clock and the task
-runtime were DELETED 2026-08-03 — full-code-audit S9; their stages,
-contributors and TurnContext fields are asserted GONE below.)
+effects are asserted against facts the goldens pin (due «pan» success =
+ladder 0→1 / due tomorrow with status and confidence untouched).  Plus the
+pipeline-order contract: the head sequence must match the documented stage
+list.  (Scenes, the session-phase clock and the task runtime were DELETED
+2026-08-03 — full-code-audit S9; the MODE ROUTER and its stages/
+contributors were DELETED 2026-08-03 — full-code-audit S4; all asserted
+GONE below.)
 
 The full-turn integration net stays with the Phase 0 characterization
 goldens (byte-unchanged this batch).
@@ -72,24 +72,28 @@ def _run_head(session, ctx, *, upto: str | None = None) -> None:
 # Pipeline-order contract
 # ---------------------------------------------------------------------------
 
+# Router teardown 2026-08-03 (full-code-audit S4): stage_english_streak /
+# stage_select_mode / stage_guard6_covered died with the mode router;
+# stage_uptake_flag (the §2.1a observation) + stage_introduce_plan (the
+# shadow introduce planner, ex-contributor) joined the head.
 DOCUMENTED_HEAD = [
     "stage_classify_signals",
     "stage_memory_intake",
+    "stage_uptake_flag",
     "stage_observe",
-    "stage_english_streak",
     "stage_due_outcomes",
-    "stage_select_mode",
-    "stage_guard6_covered",
+    "stage_introduce_plan",
 ]
 
 # §1.1b settlement round (2026-07-29): stage_image_costs DELETED — display
 # bookkeeping fires at settle_chrome for CONFIRMED images only.
+# stage_mode_image + stage_mode_snapshot DELETED with the router
+# (2026-08-03); stage_intro_image is the surviving code-side attach wire.
 DOCUMENTED_REALIZE = [
     "stage_signal_shadow",
-    "stage_mode_image",
+    "stage_intro_image",
     "stage_fallback_image",
     "stage_introduce_render",
-    "stage_mode_snapshot",
     "stage_prompt_build",
     "stage_model_call",
 ]
@@ -109,7 +113,7 @@ DOCUMENTED_RECORDERS = [
     "stage_memory_notes",
     "stage_frame_record",
     "stage_declared_image",
-    "stage_mode_record",
+    "stage_resolve_enqueue",
     "stage_soft_plan",
     "stage_tail_events",
     "stage_settle_chrome",
@@ -140,11 +144,21 @@ class TestPipelineOrder:
                      "_due_elicit_build", "_due_elicit_eligible"):
             assert not hasattr(tp, name), name
 
+    def test_mode_router_stages_are_gone(self):
+        # Full-code-audit S4 (2026-08-03): the mode router died — its
+        # stages, the contributor family and the instruction plumbing must
+        # stay gone from the module surface.
+        for name in ("stage_select_mode", "stage_guard6_covered",
+                     "stage_english_streak", "stage_mode_image",
+                     "stage_mode_snapshot", "stage_mode_record",
+                     "stage_contributors", "CONTRIBUTORS",
+                     "InstructionContributor", "flavorable",
+                     "append_instruction"):
+            assert not hasattr(tp, name), name
+
     def test_realize_sequence_matches_documented_list(self):
-        # Batch 3 census (docs/reviews-architecture-refactor.md, batch-1
-        # re-derived inventory: REALIZE = 8) at the EXACT historical
-        # inline order — last_mode_decision snapshots AFTER the deferred
-        # INTRODUCE render, prompt build precedes the model call.
+        # Post-teardown census: prompt build precedes the model call; the
+        # introduce settle (R-B→R-D) follows the image stages.
         assert [f.__name__ for f in tp.REALIZE_STAGES] == DOCUMENTED_REALIZE
         assert all(callable(f) for f in tp.REALIZE_STAGES)
 
@@ -195,7 +209,6 @@ class TestPipelineOrder:
         # historical gate try/except.
         full = (
             list(tp.PRE_MODEL_STAGES)
-            + [tp.stage_contributors]
             + list(tp.REALIZE_STAGES)
             + list(tp.GATE_REPAIR_STAGES)
             + list(tp.RECORDER_STAGES)
@@ -203,7 +216,6 @@ class TestPipelineOrder:
         )
         assert [f.__name__ for f in full] == (
             DOCUMENTED_HEAD
-            + ["stage_contributors"]
             + DOCUMENTED_REALIZE
             + [
                 "stage_settle_pixels", "stage_gate_context",
@@ -214,12 +226,12 @@ class TestPipelineOrder:
         )
         # No stage rides two families.
         assert len(set(full)) == len(full)
-        # Census arithmetic: 7 + 1 + 7 + 4 + 12 + 2 = 33 stage functions
-        # (S9 deletions 2026-08-03: head −stage_open_scenes
-        # −stage_bind_activity, the phase tick gone, contributors down to
-        # self_flag_uptake + introduce).
-        assert len(full) == 33
-        assert len(tp.CONTRIBUTORS) == 2
+        # Census arithmetic: 6 + 6 + 4 + 12 + 2 = 30 stage functions
+        # (router teardown 2026-08-03: select_mode/guard6/english_streak/
+        # mode_image/mode_snapshot gone; mode_record → resolve_enqueue;
+        # the contributor loop replaced by stage_uptake_flag +
+        # stage_introduce_plan in the head).
+        assert len(full) == 30
 
     def test_turn_context_lean_field_census(self):
         # Keep-it-lean law: fields exist only for what the extracted stages
@@ -235,16 +247,17 @@ class TestPipelineOrder:
         # B0 dual path (§3.3 amended 2026-07-30) added realization_artifact
         # — produced by stage_prompt_build (brief path only, None on full),
         # consumed by stage_debug_capture + the completeness_v1 lint.
+        # (decision + need_recast died with the router, 2026-08-03.)
         assert sorted(tp.TurnContext.__dataclass_fields__) == sorted([
             "learner", "is_open", "ev", "input_mode", "log_learner",
             "llm_signals", "sig_pre", "obs", "blank", "sigs",
-            "decision", "intro_plan",
+            "intro_plan",
             "teach_images", "image_decision", "system", "task", "messages",
             "realization_artifact",
             "final", "raw", "model_raw", "plan_turn", "tool_delta",
             "usage", "error_result",
             "render_drops",
-            "gate_ctx", "gate_result", "need_recast", "gate_hold", "gate_fail",
+            "gate_ctx", "gate_result", "gate_hold", "gate_fail",
             "result", "phase_label", "phase_note_key", "soft_plan",
         ])
 
@@ -341,105 +354,22 @@ class TestMemoryIntake:
 
 
 class TestObserve:
-    def test_ticks_and_derives_blank_and_sigs(self, tutor_session_factory):
+    def test_derives_blank_and_sigs(self, tutor_session_factory):
         session = tutor_session_factory().session  # blank sheet
-        assert session.mode_state.learner_turn_index == 0
         ctx = _ctx(session, learner="tell me about the weather")
         tp.stage_observe(session, ctx)
-        assert session.mode_state.learner_turn_index == 1
-        assert ctx.blank is True  # blank-sheet learner (goldens: placement)
+        assert ctx.blank is True  # blank-sheet learner
         assert "english_only" in ctx.sigs
         assert ctx.sigs == set(ctx.obs.get("signals") or [])
 
-    def test_error_hits_recorded_at_turn_index(self, tutor_session_factory):
+    def test_error_hits_surface_in_observations(self, tutor_session_factory):
+        # (The mode_state recency memory died with the router — the hits
+        # themselves stay observation facts.)
         session = tutor_session_factory(seed_sheet=_known_seed()).session
         ctx = _ctx(session, learner="está calor hoy")
         tp.stage_observe(session, ctx)
         hits = list(ctx.obs.get("error_hit_ids") or [])
         assert "weather_hace" in hits
-        for pid in hits:
-            assert (
-                session.mode_state.last_error_hit_turn[pid]
-                == session.mode_state.learner_turn_index
-            )
-
-
-# ---------------------------------------------------------------------------
-# stage_english_streak — the streak's SINGLE owner (CHAR-BUG-002 RESOLVED,
-# Phase 4 batch 3: modes guard 4 reads the state only)
-# ---------------------------------------------------------------------------
-
-
-class TestEnglishStreak:
-    def test_increments_on_english_only(self, tutor_session_factory):
-        session = tutor_session_factory().session
-        ctx = _ctx(session, learner="please speak english")
-        ctx.sigs = {"english_only"}
-        tp.stage_english_streak(session, ctx)
-        assert session.mode_state.english_only_streak == 1
-        tp.stage_english_streak(session, ctx)
-        assert session.mode_state.english_only_streak == 2
-
-    def test_resets_on_spanish_turn(self, tutor_session_factory):
-        session = tutor_session_factory().session
-        session.mode_state.english_only_streak = 3
-        ctx = _ctx(session, learner="hola")
-        ctx.sigs = {"spanish_ok"}
-        tp.stage_english_streak(session, ctx)
-        assert session.mode_state.english_only_streak == 0
-
-    def test_open_turn_leaves_streak(self, tutor_session_factory):
-        session = tutor_session_factory().session
-        session.mode_state.english_only_streak = 2
-        ctx = _ctx(session, learner="", is_open=True)
-        ctx.sigs = set()
-        tp.stage_english_streak(session, ctx)
-        assert session.mode_state.english_only_streak == 2
-
-    def test_char_bug_002_first_english_turn_no_hard_break(
-        self, tutor_session_factory
-    ):
-        # CHAR-BUG-002 RESOLVED (known_bugs.json): the FIRST English-only
-        # turn carries a genuine streak of 1 — guard 4 must NOT hard-break
-        # into association (the old double count fired here).
-        session = tutor_session_factory(seed_sheet=_known_seed()).session
-        ctx = _ctx(
-            session,
-            learner="That was a long day at the office and there is a "
-                    "lot to do.",
-        )
-        for stage in tp.PRE_MODEL_STAGES:
-            stage(session, ctx)
-        assert session.mode_state.english_only_streak == 1
-        assert ctx.decision.mode.value != "association"
-        assert ctx.decision.reason != "english_stuck_association"
-        assert not ctx.decision.hard_break
-
-    def test_char_bug_002_second_english_turn_hard_breaks(
-        self, tutor_session_factory
-    ):
-        # …and the SECOND consecutive English-only turn reaches the >=2
-        # threshold honestly: association hard break fires.
-        session = tutor_session_factory(seed_sheet=_known_seed()).session
-        ctx1 = _ctx(
-            session,
-            learner="That was a long day at the office and there is a "
-                    "lot to do.",
-        )
-        for stage in tp.PRE_MODEL_STAGES:
-            stage(session, ctx1)
-        assert not ctx1.decision.hard_break
-        ctx2 = _ctx(
-            session,
-            learner="My day was long and there is so much work to "
-                    "finish tonight.",
-        )
-        for stage in tp.PRE_MODEL_STAGES:
-            stage(session, ctx2)
-        assert session.mode_state.english_only_streak == 2
-        assert ctx2.decision.mode.value == "association"
-        assert ctx2.decision.reason == "english_stuck_association"
-        assert ctx2.decision.hard_break
 
 
 # ---------------------------------------------------------------------------
@@ -490,191 +420,22 @@ class TestDueOutcomes:
 
 
 # ---------------------------------------------------------------------------
-# stage_select_mode + stage_guard6_covered
+# stage_introduce_plan + prompt-data due offers (ex-contributor family)
 # ---------------------------------------------------------------------------
 
 
-class TestSelectMode:
-    def test_blank_open_is_placement_with_select_events(
-        self, tutor_session_factory
-    ):
-        session = tutor_session_factory().session  # blank sheet
-        ctx = _ctx(session, learner="", is_open=True)
-        _run_head(session, ctx, upto="stage_select_mode")
-        # golden_blank_open: blank open routes to placement (hard break).
-        assert ctx.decision is not None
-        assert ctx.decision.mode.value == "placement"
-        assert ctx.decision.reason == "blank_open_placement"
-        mode_ev = ctx.ev.latest(EV.MODE)
-        reason_ev = ctx.ev.latest(EV.MODE_REASON)
-        assert mode_ev.key == "placement" and mode_ev.stage == "select"
-        assert reason_ev.key == "blank_open_placement"
-        assert reason_ev.stage == "select"
-
-
-class TestGuard6Covered:
-    def test_guard6_reason_records_covered_concept(
-        self, tutor_session_factory
-    ):
-        session = tutor_session_factory().session
-        ctx = _ctx(session, learner="mi casa es grande")
-        # The MODE_REASON emit derives guard6_concept ONCE at the event
-        # boundary (Phase 3 batch 1) — the stage reads the typed payload.
-        ctx.ev.emit(EV.MODE_REASON, key="new_noun:casa", stage="select")
-        tp.stage_guard6_covered(session, ctx)
-        assert "casa" in session.pedagogy_memory.covered_concepts
-
-    def test_non_guard6_reason_writes_nothing(self, tutor_session_factory):
-        session = tutor_session_factory().session
-        ctx = _ctx(session, learner="hola")
-        ctx.ev.emit(EV.MODE_REASON, key="default_conversation",
-                    stage="select")
-        tp.stage_guard6_covered(session, ctx)
-        assert session.pedagogy_memory.covered_concepts == set()
-
-
-# ---------------------------------------------------------------------------
-# Contributor helpers
-# ---------------------------------------------------------------------------
-
-
-def _decision(mode: str, reason: str) -> SimpleNamespace:
-    return SimpleNamespace(mode=SimpleNamespace(value=mode), reason=reason)
-
-
-# ---------------------------------------------------------------------------
-# Phase 4 batch 2 — CONTRIBUTORS family
-# ---------------------------------------------------------------------------
-
-
-class TestContributorOrder:
-    def test_contributor_census_and_order(self):
-        # The surviving contributor census (S9 deletions 2026-08-03:
-        # due_elicit/task/close_summary died with the phase machinery).
-        assert [c.name for c in tp.CONTRIBUTORS] == [
-            "self_flag_uptake",
-            "introduce",
-        ]
-        for c in tp.CONTRIBUTORS:
-            assert callable(c.eligible) and callable(c.build)
-
-    def test_contributors_run_after_head(self):
-        # stage_contributors is its own family site: not in the pre-model
-        # head.
-        assert tp.stage_contributors not in tp.PRE_MODEL_STAGES
-
-    def test_zero_register_overlay_is_not_a_contributor(self):
-        # Verified against the family markers (Phase 4 batch 2): the
-        # true-zero overlay lives inside modes.select_mode (select stage)
-        # and joins with a single "\n", not the contributor idiom.
-        assert "zero_register" not in [c.name for c in tp.CONTRIBUTORS]
-
-
-# ---------------------------------------------------------------------------
-# flavorable() — the ONE eligibility predicate; one test per characterized
-# spelling (the differences are explicit parameters, never silent
-# unification).
-# ---------------------------------------------------------------------------
-
-
-def _flav_ctx(mode: str, reason: str) -> tp.TurnContext:
-    ctx = tp.TurnContext(learner="hola", is_open=False, ev=None)
-    ctx.decision = _decision(mode, reason)
-    return ctx
-
-
-class TestFlavorable:
-    def test_spelling_b_self_flag_uptake(self):
-        # self_flag_uptake_block's internal gate: modes {conversation,
-        # transfer, cf_recast}, guard reasons EXCLUDED.
-        from tutor.conv_session import DUE_GUARD_REASONS, SELF_FLAG_MODES
-
-        kw = dict(modes=SELF_FLAG_MODES, exclude_reasons=DUE_GUARD_REASONS)
-        assert tp.flavorable(
-            _flav_ctx("cf_recast", "recent_error_pattern"), **kw
-        )
-        assert tp.flavorable(
-            _flav_ctx("conversation", "default_conversation"),
-            **kw,
-        )
-        for guard in DUE_GUARD_REASONS:
-            assert not tp.flavorable(_flav_ctx("conversation", guard), **kw)
-        assert not tp.flavorable(
-            _flav_ctx("placement", "blank_open_placement"), **kw
-        )
-
-    def test_spelling_c_flavorable_turns(self):
-        # THE reason-INCLUDING predicate (introduce): conversation +
-        # {known_open_from_sheet, default_conversation} only.
-        from tutor.conv_session import INTRODUCE_FLAVORABLE_REASONS
-
-        kw = dict(
-            modes=frozenset({"conversation"}),
-            include_reasons=INTRODUCE_FLAVORABLE_REASONS,
-        )
-        assert tp.flavorable(
-            _flav_ctx("conversation", "known_open_from_sheet"), **kw
-        )
-        assert tp.flavorable(
-            _flav_ctx("conversation", "default_conversation"), **kw
-        )
-        # Include-polarity: an unlisted reason fails even though it is not
-        # a guard reason (the decisive difference from spelling B).
-        assert not tp.flavorable(
-            _flav_ctx("conversation", "new_noun:casa"), **kw
-        )
-        assert not tp.flavorable(
-            _flav_ctx("transfer", "default_conversation"), **kw
-        )
-
-    def test_activity_terms_are_gone(self):
-        # S9 deletion: flavorable no longer accepts activity keying.
-        import inspect
-
-        params = inspect.signature(tp.flavorable).parameters
-        assert "activities" not in params
-        assert "exclude_activities" not in params
-
-
-class TestAppendInstruction:
-    def test_matches_the_historical_idiom(self):
-        d = _decision("conversation", "default_conversation")
-        d.instructions = None
-        tp.append_instruction(d, "FIRST BLOCK")
-        assert d.instructions == "FIRST BLOCK"
-        tp.append_instruction(d, "SECOND BLOCK")
-        assert d.instructions == "FIRST BLOCK\n\nSECOND BLOCK"
-
-    def test_empty_text_is_a_no_op(self):
-        d = _decision("conversation", "default_conversation")
-        d.instructions = "KEEP"
-        tp.append_instruction(d, "")
-        tp.append_instruction(d, None)
-        assert d.instructions == "KEEP"
-
-
-# ---------------------------------------------------------------------------
-# stage_contributors — golden-pinned facts at unit level
-# ---------------------------------------------------------------------------
-
-
-class TestStageContributors:
+class TestHeadPlanningStages:
     def test_due_offer_fires_from_the_prompt_data_path(
         self, tutor_session_factory
     ):
         # S9 rewire (2026-08-03): DUE_ELICIT_OFFERED fires from
-        # stage_prompt_build when due items ride teaching_data as FACTS —
-        # the phase-gated due_elicit contributor (and its scripted DUE
-        # RE-ENCOUNTERS block) is gone.  stage_frame_record keeps reading
-        # this event for the frames_seen writes
-        # (tests/test_encounter_variety.py proves that leg).
+        # stage_prompt_build when due items ride teaching_data as FACTS.
+        # stage_frame_record keeps reading this event for the frames_seen
+        # writes (tests/test_encounter_variety.py proves that leg).
         session = tutor_session_factory(seed_sheet=_due_seed()).session
         ctx = _ctx(session, learner="", is_open=True)
         for stage in tp.PRE_MODEL_STAGES:
             stage(session, ctx)
-        tp.stage_contributors(session, ctx)
-        # No contributor scripts a DUE block any more.
-        assert "DUE RE-ENCOUNTERS" not in (ctx.decision.instructions or "")
         assert ctx.ev.find(EV.DUE_ELICIT_OFFERED) == []
         tp.stage_prompt_build(session, ctx)
         offered = ctx.ev.find(EV.DUE_ELICIT_OFFERED)
@@ -685,57 +446,27 @@ class TestStageContributors:
         assert '"due_for_review"' in ctx.task
         assert '"agua"' in ctx.task and '"pan"' in ctx.task
 
-    def test_introduce_contributor_defers_render(self, tutor_session_factory):
-        # golden_introduce_open facts: no dues → new_input open plans one
-        # item — the plan parks on ctx.intro_plan and the INSTRUCTIONS DO
-        # NOT carry it yet (R-B honesty: the realize region renders after
-        # image resolution). Key changed hola→me llamo 2026-07-29
-        # (encounter-variety round: _known_seed has IP-01 known, so it is
-        # mid-stream — openers sort last; docs/design-encounter-variety.md).
+    def test_introduce_plan_parks_on_ctx(self, tutor_session_factory):
+        # golden facts: no dues → the shadow planner plans one item — the
+        # plan parks on ctx.intro_plan; NO instruction text exists anywhere
+        # (§1.1: the render died with the router).  Key me llamo since
+        # 2026-07-29 (encounter-variety round).
         session = tutor_session_factory(seed_sheet=_known_seed()).session
         ctx = _ctx(session, learner="", is_open=True)
         for stage in tp.PRE_MODEL_STAGES:
             stage(session, ctx)
-        tp.stage_contributors(session, ctx)
         assert ctx.intro_plan is not None
         assert ctx.intro_plan.key == "me llamo"
         planned = ctx.ev.latest(EV.INTRODUCE_PLANNED)
         assert planned is not None and planned.key == "me llamo"
-        # The plan's rendered block (golden pin: "INTRODUCE (one item,
-        # rule R-E)") is NOT in the instructions yet — realize renders it.
-        assert "INTRODUCE (one item" not in (ctx.decision.instructions or "")
 
-    def test_hard_break_and_repair_turns_get_no_soft_additions(
-        self, tutor_session_factory
-    ):
-        # Guard/hard-break/repair turns keep their single focus under every
-        # spelling: dues are waiting, yet no contributor may touch the turn.
-        session = tutor_session_factory(seed_sheet=_due_seed()).session
-        # CHAR-BUG-002 RESOLVED: a hard break needs a GENUINE >=2 streak —
-        # one prior English-only turn, then this one (the stage increments).
-        session.mode_state.english_only_streak = 1
-        ctx = _ctx(
-            session, learner="That was a long day at the office."
-        )
+    def test_uptake_flag_is_pure_observation(self, tutor_session_factory):
+        session = tutor_session_factory(seed_sheet=_known_seed()).session
+        ctx = _ctx(session, learner="No uvia (rain) hoy")
         for stage in tp.PRE_MODEL_STAGES:
             stage(session, ctx)
-        # The head routes this SECOND consecutive English-only turn to an
-        # association hard break — not a contributor mode.
-        assert ctx.decision.mode.value == "association"
-        before = ctx.decision.instructions
-        tp.stage_contributors(session, ctx)
-        assert ctx.decision.instructions == before
-        assert ctx.ev.find(EV.DUE_ELICIT_OFFERED) == []
-        assert ctx.intro_plan is None
-        # Same law for a repair-shaped decision (the real repair arc is
-        # pinned end-to-end by golden_comprehension_repair).
-        ctx.decision = _decision(
-            "comprehension_repair", "meta_comprehension_stay_on_topic"
-        )
-        ctx.decision.instructions = "REPAIR FOCUS"
-        tp.stage_contributors(session, ctx)
-        assert ctx.decision.instructions == "REPAIR FOCUS"
-        assert ctx.ev.find(EV.DUE_ELICIT_OFFERED) == []
+        flagged = ctx.ev.find(EV.UPTAKE_FLAGGED)
+        assert [e.key for e in flagged] == ["uvia"]
 
 
 # ---------------------------------------------------------------------------
@@ -833,15 +564,22 @@ class TestAtomicSheetCommit:
         commits: list = []
         self._record_commits(monkeypatch, commits)
 
-        assert ctx.session.open_session().error is None
+        open_res = ctx.session.open_session()
+        assert open_res.error is None
         turn = ctx.session.user_turn(
             "Thanks! I don't know any Spanish yet, where do we start?"
         )
         assert turn.error is None
         # Phase 5 batch 2 declared delta: «estoy bien» is an in-pack table
-        # key now — the longest-match overlap filter keeps the MWU span
-        # over bare «bien», so the first_seen bit rides on «estoy bien».
-        assert "first_seen:estoy bien" in turn.notes
+        # key — the longest-match overlap filter keeps the MWU span over
+        # bare «bien», so the first_seen bit rides on «estoy bien».  Since
+        # the gate retune (2026-08-03) the scan runs on the OPEN turn too
+        # (the placement exemption died with the router), so the write
+        # lands on whichever turn first showed the key.
+        assert any(
+            "first_seen:estoy bien" in n
+            for n in list(open_res.notes) + list(turn.notes)
+        )
         assert [c[0] for c in commits] == ["_commit_sheet", "_commit_sheet"]
         eb = (commits[-1][1].get("lexicon") or {})["estoy bien"]
         assert eb.get("first_seen")
@@ -899,8 +637,8 @@ class TestCaptureLogStages:
         assert len(session.debug_requests) == before + 1
         entry = session.debug_requests[-1]
         assert entry["task_message"] == "TASK"
-        assert entry["mode"] == ctx.decision.mode.value
-        assert entry["reason"] == ctx.decision.reason
+        # Router-shadow fields died with the router (2026-08-03).
+        assert "mode" not in entry and "reason" not in entry
         assert entry["response"]["notes"] == ["n1"]
         assert entry["response"]["stop_reason"] == "end_turn"
         assert entry["response"]["usage"]["output_tokens"] == 5
@@ -953,10 +691,12 @@ class TestPhase4CleanupRegressions:
     def test_delegate_census_is_the_adjudicated_kept_list(self):
         # Phase 4 batch 5 delegate decision point (docs/reviews-
         # architecture-refactor.md): every _state_delegate has production
-        # readers through its historical name.  16 kept (phase_state,
-        # task_state and _focus_key delegates died with their stores — S9
-        # deletion, 2026-08-03).  This census is the no-new-delegates lint: adding
-        # or removing a delegate must update the batch record AND this pin.
+        # readers through its historical name.  14 kept (phase_state,
+        # task_state and _focus_key died with their stores — S9 deletion;
+        # mode_state and last_mode_decision died with the mode router —
+        # S4, both 2026-08-03).  This census is the no-new-delegates lint:
+        # adding or removing a delegate must update the batch record AND
+        # this pin.
         from tutor.conv_session import ConversationalSession
 
         delegates = sorted(
@@ -967,8 +707,7 @@ class TestPhase4CleanupRegressions:
             "history", "messages_for_ui", "_focus_panel",
             "_focus_meta", "_focus_version", "_focus_lock",
             "_focus_inflight", "_image_warm_lock", "_image_warm_inflight",
-            "last_plan", "pedagogy_memory", "mode_state",
-            "last_mode_decision", "debug_requests", "costs",
+            "last_plan", "pedagogy_memory", "debug_requests", "costs",
             "progress_session_id",
         ])
 
@@ -987,3 +726,84 @@ class TestPhase4CleanupRegressions:
             "usage = ctx.", "gate_result = ctx.", "result = ctx.",
         ):
             assert bridge not in src, f"locals bridge crept back: {bridge!r}"
+
+
+# ---------------------------------------------------------------------------
+# Image attach survives the router teardown (Grok AMEND: no silent loss)
+# ---------------------------------------------------------------------------
+
+
+class TestImageAttachSurvivors:
+    """Router teardown 2026-08-03: the mode-decision attach died; these are
+    the surviving attach wires — model-declared, introduce R-B, blank-open
+    fallback — pinned so image attach is never silently lost."""
+
+    @staticmethod
+    def _seed_cache(concept: str) -> None:
+        """Plant a real cache asset in the ISOLATED teach-assets dir."""
+        import tutor.teach_assets as ta
+
+        path = ta.CACHE_DIR / f"{concept}.png"
+        path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 200)
+        idx = ta._load_index()
+        idx.setdefault("entries", {})[concept] = {
+            "file": path.name, "form": concept, "caption": "",
+        }
+        ta._save_index()
+
+    def test_declared_image_attaches_from_cache(self, tutor_session_factory):
+        # The model's own <image concept="hola"/> declaration attaches a
+        # cache hit post-reply (stage_declared_image).
+        from tutor.conv_session import TurnResult
+
+        session = tutor_session_factory(seed_sheet=_known_seed()).session
+        self._seed_cache("hola")
+        ctx = _ctx(session, learner="hola")
+        ctx.result = TurnResult(
+            reply="¡Hola! Di: hola.",
+            parts={"image_concept": "hola", "structured": True},
+        )
+        ctx.teach_images = []
+        tp.stage_declared_image(session, ctx)
+        assert ctx.teach_images, "declared cache-hit must attach"
+        assert ctx.teach_images[0]["concept"] == "hola"
+        assert ctx.teach_images[0]["decision_reason"] == "tutor_declared"
+
+    def test_intro_image_stage_attaches_rb_plan(self, tutor_session_factory):
+        # An R-B introduce plan requests its key's image via the surviving
+        # _attach_concept_image wire (cache-only).
+        from types import SimpleNamespace
+
+        session = tutor_session_factory(seed_sheet=_known_seed()).session
+        self._seed_cache("hola")
+        ctx = _ctx(session, learner="hola")
+        ctx.intro_plan = SimpleNamespace(
+            key="hola", scaffold_type="image", rule_id="R-B",
+            scaffold_payload={}, forbid_cluster_with=[],
+        )
+        tp.stage_intro_image(session, ctx)
+        assert ctx.teach_images
+        assert ctx.teach_images[0]["concept"] == "hola"
+        assert ctx.teach_images[0]["decision_reason"] == "introduce:R-B"
+
+    def test_blank_open_fallback_still_wants_the_open_image(
+        self, tutor_session_factory
+    ):
+        # Blank open: the fallback still decides the greeting scene image
+        # (harness has generation disabled → visible miss note, decision
+        # recorded). A KNOWN open ships no code-picked image — exactly the
+        # pre-teardown coverage.
+        session = tutor_session_factory().session  # blank
+        ctx = _ctx(session, is_open=True)
+        tp.stage_observe(session, ctx)
+        tp.stage_fallback_image(session, ctx)
+        assert ctx.image_decision is not None
+        assert ctx.image_decision.want
+        assert ctx.image_decision.concept == "hola"
+
+        known = tutor_session_factory(seed_sheet=_known_seed()).session
+        ctx2 = _ctx(known, is_open=True)
+        tp.stage_observe(known, ctx2)
+        tp.stage_fallback_image(known, ctx2)
+        assert ctx2.teach_images == []
+        assert ctx2.image_decision is None

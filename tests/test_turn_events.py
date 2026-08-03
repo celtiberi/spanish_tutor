@@ -74,8 +74,10 @@ def test_catalog_count_published_number():
     # −8 = ACTIVITY/PHASE_CONSUMED/OPEN_SCENES/TASK_SLOT_FILLED/
     #      TASK_COMPLETE/TASK_GOAL_OFFERED/CLOSE_PHASE_OFFERED/FOCUS_ASYNC,
     #      2026-08-03 full-code-audit S9 deletions (scenes, session-phase
-    #      clock, task runtime, focus enricher)).
-    assert len(NOTE_CATALOG) == 63
+    #      clock, task runtime, focus enricher);
+    # −3 = MODE/MODE_REASON/HARD_BREAK, 2026-08-03 mode-router teardown
+    #      (full-code-audit S4)).
+    assert len(NOTE_CATALOG) == 60
 
 
 def test_stability_classes_are_the_measured_vocabulary():
@@ -84,7 +86,7 @@ def test_stability_classes_are_the_measured_vocabulary():
     eval_pinned = {s.kind for s in NOTE_CATALOG.values()
                    if s.stability == "eval-pinned"}
     assert eval_pinned == {
-        EV.MODE, EV.UPTAKE_FLAGGED, EV.DUE_ELICIT_OFFERED,
+        EV.UPTAKE_FLAGGED, EV.DUE_ELICIT_OFFERED,
         EV.PROGRESS_MILESTONE, EV.INTRODUCE_PLANNED,
         EV.OUTPUT_GATE_OK, EV.OUTPUT_GATE_SOFT_FAIL,
         EV.OUTPUT_GATE_FAIL, EV.OUTPUT_GATE_REPAIRED,
@@ -125,15 +127,12 @@ ROUND_TRIP = [
     (EV.INTRODUCE_TABLE_MISSING, "introduce_table_missing"),
     (EV.INTRODUCE_PLANNED, "introduce_planned:buenos días:R-D"),
     (EV.INTRODUCE_DOWNGRADED, "introduce_downgraded:hola:R-B_to_R-D"),
-    (EV.MODE, "mode=conversation"),
-    (EV.MODE_REASON, "mode_reason=default_conversation"),
-    (EV.MODE_REASON, "mode_reason=new_noun:casa"),
     (EV.OUTPUT_GATE_OK, "output_gate_ok"),
     (EV.OUTPUT_GATE_SOFT_FAIL, "output_gate_soft_fail:gate:regloss"),
     (EV.OUTPUT_GATE_FAIL,
      "output_gate_fail:gate:unscaffolded_new_item,gate:english_wall"),
     (EV.OUTPUT_GATE_REPAIRED, "output_gate_repaired"),
-    (EV.OUTPUT_GATE_STILL_FAIL, "output_gate_still_fail:gate:missing_recast"),
+    (EV.OUTPUT_GATE_STILL_FAIL, "output_gate_still_fail:gate:cluster_veto"),
     (EV.OUTPUT_GATE_ERROR, "output_gate_error:ValueError"),
     (EV.INTERNAL_ERROR, "internal_error:progress_note:KeyError: 'x'"),
     (EV.SESSION_PLAN, "session_plan:updated"),
@@ -172,8 +171,7 @@ ROUND_TRIP = [
     (EV.OPEN_PHASE, "open_phase=diagnostic"),
     (EV.PHASE, "phase=ai_tutor"),
     (EV.PHASE, "phase=chat_stretch"),
-    (EV.HARD_BREAK, "hard_break=False"),
-    (EV.PLAN_SOURCE, "plan_source=mode_runtime"),
+    (EV.PLAN_SOURCE, "plan_source=model"),
     (EV.TEACHER_MODE, "teacher_mode=planned"),
     (EV.MEM_SHOWN, "mem_shown=english_only,greet"),
     (EV.MEM_SHOWN, "mem_shown=—"),
@@ -224,32 +222,21 @@ def test_absorb_preserves_bytes_and_classifies():
     assert log.events[-1].kind is EV.LEGACY_UNCATALOGUED
 
 
-def test_mode_reason_guard6_payload_is_the_boundary_parse():
-    log = TurnEventLog()
-    log.emit(EV.MODE_REASON, key="new_noun:casa")
-    assert log.latest(EV.MODE_REASON).payload["guard6_concept"] == "casa"
-    log.emit(EV.MODE_REASON, key="default_conversation")
-    assert log.latest(EV.MODE_REASON).payload["guard6_concept"] is None
-    # exact equivalence with the legacy predicate, empty-tail included
-    for reason in ("new_noun:casa", "new_noun:", "default_conversation",
-                   "scene_goal:boat_likes", ""):
-        ev_log = TurnEventLog()
-        ev_log.emit(EV.MODE_REASON, key=reason)
-        g6 = ev_log.latest(EV.MODE_REASON).payload["guard6_concept"]
-        legacy_fires = reason.startswith("new_noun:")
-        assert (g6 is not None) == legacy_fires
-        if legacy_fires:
-            assert g6 == reason.split(":", 1)[1]
+def test_mode_event_kinds_stay_deleted():
+    # Absence pin (router teardown 2026-08-03): the mode-selection kinds
+    # must not resurface.
+    for name in ("MODE", "MODE_REASON", "HARD_BREAK"):
+        assert not hasattr(EV, name), name
 
 
 def test_seq_monotonic_and_stage_tagged():
     log = TurnEventLog()
-    log.emit(EV.MODE, key="conversation", stage="select")
+    log.emit(EV.UPTAKE_FLAGGED, key="uvia", stage="instruct")
     log.absorb("pedagogy:ok", stage="contract")
     log.emit(EV.OUTPUT_GATE_OK, stage="gate")
     seqs = [e.seq for e in log.events]
     assert seqs == sorted(seqs) and len(set(seqs)) == len(seqs)
-    assert [e.stage for e in log.events] == ["select", "contract", "gate"]
+    assert [e.stage for e in log.events] == ["instruct", "contract", "gate"]
 
 
 # ---------------------------------------------------------------------------
@@ -300,13 +287,8 @@ def _reparse_equivalence(result):
     new_lapsed = [render(e) for e in events
                   if e.kind is EV.INTRODUCE_LAPSED]
     assert new_lapsed == old_lapsed
-    # (3) guard-6 covered concept (was decision.reason startswith/split)
-    reason_evs = [e for e in events if e.kind is EV.MODE_REASON]
-    for e in reason_evs:
-        legacy = e.key.startswith("new_noun:")
-        assert (e.payload.get("guard6_concept") is not None) == legacy
-        if legacy:
-            assert e.payload["guard6_concept"] == e.key.split(":", 1)[1]
+    # ((3) guard-6 covered concept died with the mode router, 2026-08-03 —
+    # MODE_REASON no longer exists.)
 
 
 def test_blank_session_dual_emit(tutor_session):
@@ -590,12 +572,12 @@ def test_turn_result_json_surface_carries_events():
 
     r = TurnResult(reply="x")
     assert r.to_dict()["events"] == []
-    r.events = [TurnEvent(kind=EV.MODE, key="conversation", seq=0,
-                          stage="select")]
+    r.events = [TurnEvent(kind=EV.UPTAKE_FLAGGED, key="uvia", seq=0,
+                          stage="instruct")]
     d = r.to_dict()
     assert d["events"] == [{
-        "kind": "mode", "key": "conversation", "payload": {}, "seq": 0,
-        "stage": "select",
+        "kind": "uptake_flagged", "key": "uvia", "payload": {}, "seq": 0,
+        "stage": "instruct",
     }]
     _json.dumps(d["events"])  # serializable end-to-end
 

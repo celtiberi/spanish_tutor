@@ -76,16 +76,40 @@ def test_structured_parts_try_is_preferred_over_reply_questions():
     assert findings and "turns 0->1" in findings[0]
 
 
-def test_still_fail_note_is_hard_fail():
-    transcript = [
+def test_still_fail_split_by_rule():
+    # Gate retune 2026-08-03: only CRITICAL classes (cluster veto /
+    # truncated / pedagogy contract) fail hard; other still_fail rows are
+    # WARN-counted, never a session FAIL.
+    warn_only = [
         _row("Hola."),
         _row(
             "¿Cómo estás?",
             notes=["output_gate_still_fail:gate:probe_loop"],
         ),
     ]
-    assert check_still_fail(transcript) == [
-        "turn 1: output_gate_still_fail:gate:probe_loop"
+    assert check_still_fail(warn_only) == [
+        "WARN turn 1: output_gate_still_fail:gate:probe_loop"
     ]
-    _, passed = run_student_checks(transcript)
+    _, passed = run_student_checks(warn_only)
+    assert passed, "probe_loop still_fail is WARN, not FAIL"
+
+    hard = [
+        _row("Hola."),
+        _row(
+            "Adiós y hasta luego.",
+            notes=["output_gate_still_fail:gate:cluster_veto"],
+        ),
+        _row(
+            "…",
+            notes=[
+                "output_gate_still_fail:gate:truncated,gate:probe_loop"
+            ],
+        ),
+    ]
+    findings = check_still_fail(hard)
+    assert findings == [
+        "turn 1: output_gate_still_fail:gate:cluster_veto",
+        "turn 2: output_gate_still_fail:gate:truncated,gate:probe_loop",
+    ]
+    _, passed = run_student_checks(hard)
     assert not passed

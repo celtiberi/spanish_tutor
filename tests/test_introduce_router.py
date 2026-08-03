@@ -374,12 +374,10 @@ class TestLapsedIntroFirstSeen(TableCase):
              "structured": True},
             "Encantado. ¿Puedes decirlo?",
             is_open=False,
-            mode="conversation",
             association_table=self.table,
             sheet=sheet,
         )
         self.assertNotIn("gate:unscaffolded_new_item", g.faults)
-        self.assertNotIn("gate:unscaffolded_flood", g.faults)
 
     def test_first_seen_loop_no_longer_skips_plan_key(self):
         # The conv_session first_seen loop must not skip intro_plan.key
@@ -394,80 +392,37 @@ class TestLapsedIntroFirstSeen(TableCase):
 
 
 class TestIntroduceBlockWiring(TableCase):
-    """conv_session.introduce_block — the smallest wiring function."""
+    """conv_session.introduce_block — the smallest wiring function.
 
-    def test_block_on_new_input_default_conversation(self):
-        block, plan = introduce_block(
-            default_sheet(),
-            self.table,
-            _fresh_snap(),
-            mode="conversation",
-            reason="default_conversation",
-        )
-        self.assertIn("INTRODUCE", block)
+    Router teardown 2026-08-03 (full-code-audit S4): the mode/reason
+    flavor gate died with the router — introduce_block returns the SHADOW
+    IntroducePlan (or None); its instruction text never ships (§1.1)."""
+
+    def test_plan_returned_for_fresh_session(self):
+        plan = introduce_block(default_sheet(), self.table, _fresh_snap())
         self.assertIsNotNone(plan)
-        self.assertIn("Introduce NOTHING else new this turn.", block)
+        self.assertTrue(plan.key)
 
-    def test_block_on_known_open(self):
-        block, plan = introduce_block(
-            default_sheet(),
-            self.table,
-            _fresh_snap(),
-            mode="conversation",
-            reason="known_open_from_sheet",
-        )
-        self.assertIn("INTRODUCE", block)
-        self.assertIsNotNone(plan)
-
-    def test_guard_repair_recast_turns_produce_nothing(self):
-        for mode, reason in (
-            ("conversation", "learner_topic_request"),
-            ("conversation", "learner_help_request"),
-            ("conversation", "grammar_question_inline"),
-            ("conversation", "boredom_new_topic"),
-            ("comprehension_repair", "meta_comprehension_stay_on_topic"),
-            ("cf_recast", "single_error:weather_hace"),
-            ("form_focus", "error_streak:weather_hace"),
-            ("placement", "blank_open_placement"),
-        ):
-            block, plan = introduce_block(
-                default_sheet(),
-                self.table,
-                _fresh_snap(),
-                mode=mode,
-                reason=reason,
-            )
-            self.assertEqual(block, "", f"{mode}/{reason}")
-            self.assertIsNone(plan, f"{mode}/{reason}")
-
-    def test_activity_hint_parameter_is_gone(self):
-        # S9 deletion (2026-08-03): the session-phase activity gate died —
-        # introduce rides flavorable conversation turns, no phase keying.
+    def test_mode_reason_parameters_are_gone(self):
         import inspect
 
         params = inspect.signature(introduce_block).parameters
+        self.assertNotIn("mode", params)
+        self.assertNotIn("reason", params)
         self.assertNotIn("activity_hint", params)
 
     def test_missing_table_disables_router(self):
-        block, plan = introduce_block(
-            default_sheet(),
-            None,
-            _fresh_snap(),
-            mode="conversation",
-            reason="default_conversation",
+        self.assertIsNone(
+            introduce_block(default_sheet(), None, _fresh_snap())
         )
-        self.assertEqual(block, "")
-        self.assertIsNone(plan)
 
     def test_exhausted_budget_produces_nothing(self):
-        block, plan = introduce_block(
+        plan = introduce_block(
             default_sheet(),
             self.table,
-            {"introduced_this_session": ["a", "b"], "intro_budget_remaining": 0},
-            mode="conversation",
-            reason="default_conversation",
+            {"introduced_this_session": ["a", "b"],
+             "intro_budget_remaining": 0},
         )
-        self.assertEqual(block, "")
         self.assertIsNone(plan)
 
 

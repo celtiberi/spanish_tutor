@@ -9,9 +9,7 @@
   },
   "learner": "Muy bien, gracias.",
   "memory": {
-    "asked": [
-      "conversation"
-    ],
+    "asked": [],
     "asked_topics": [],
     "images_shown": [],
     "intro_budget_remaining": 1,
@@ -24,19 +22,8 @@
     ],
     "turns": 1
   },
-  "mode_state": {
-    "english_only_streak": 0,
-    "form_focus_cooldown": {},
-    "hard_breaks_this_session": 0,
-    "last_mode": "conversation",
-    "last_resolved_form": null,
-    "learner_turn_index": 2,
-    "turns_since_hard_break": 999
-  },
   "model_requests": 2,
   "notes": [
-    "mode=conversation",
-    "mode_reason=default_conversation",
     "introduce_planned:me llamo:R-D",
     "output_gate_ok",
     "rules_backup",
@@ -47,16 +34,13 @@
     "progress_milestone:planted:me llamo",
     "pedagogy:known_learner_open",
     "phase=ai_tutor",
-    "hard_break=False",
-    "plan_source=mode_runtime",
+    "plan_source=model",
     "teacher_mode=planned",
     "mem_shown=greet,spanish_ok",
-    "mem_asked=conversation"
+    "mem_asked=—"
   ],
   "parts_keys": [
     "acknowledge",
-    "mode",
-    "mode_decision",
     "model",
     "open_phase",
     "output_gate",

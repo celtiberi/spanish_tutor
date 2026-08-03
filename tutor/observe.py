@@ -18,7 +18,7 @@ from .pedagogy_contract import is_blank_learner
 
 # Historical home of word_present — the implementation now lives in
 # tutor/textnorm.py (Phase 2, docs/reviews-architecture-refactor.md);
-# re-exported here because conv_session/introduce_router/modes and tests
+# re-exported here because conv_session/introduce_router and tests
 # import it from observe. noqa: F401 (re-export façade).
 from .textnorm import (  # noqa: F401
     SPANISH_LETTERS as _ES_LETTERS,
@@ -29,11 +29,12 @@ from .textnorm import (  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # topic_vocab signal — TABLE-DERIVED (Phase 5 batch 2 flip, CONSERVATIVE,
-# docs/reviews-architecture-refactor.md).  The signal gates guard-6's
-# _new_concrete_noun (routing), so membership stays the recorded legacy set
-# — now validated at import against the association table (all members must
-# be imageable table keys; the regex is built from key + accent-folded
-# variant, reproducing the historical accent-tolerant alternation).
+# docs/reviews-architecture-refactor.md).  Surviving consumer after the
+# router teardown (2026-08-03): SessionMemory.note_learner maps it to the
+# "topic" shown-skill fact (session_facts).  Membership stays the recorded
+# legacy set — validated at import against the association table (all
+# members must be imageable table keys; the regex is built from key +
+# accent-folded variant).
 # ---------------------------------------------------------------------------
 
 _TOPIC_VOCAB_TABLE_KEYS: tuple[str, ...] = (
@@ -102,9 +103,10 @@ _SELF_FLAG_QUOTED_RES = (
 def detect_self_flagged_token(text: str) -> str | None:
     """First token the learner marked as uncertain, or None.
 
-    Pure surface detection for the §2.1a instruction path — the caller
-    (conv_session.self_flag_uptake_block) owns guard-turn exclusion and the
-    content-uptake budget. Plain Spanish production never matches.
+    Pure surface detection for the §2.1a OBSERVATION path — the caller
+    (turn_pipeline.stage_uptake_flag) emits the typed UPTAKE_FLAGGED
+    event; no instruction ships (router teardown 2026-08-03).  Plain
+    Spanish production never matches.
     """
     t = text or ""
     if not t.strip():

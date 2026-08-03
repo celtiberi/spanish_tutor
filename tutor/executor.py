@@ -155,7 +155,7 @@ what they just said.
 def load_persona() -> str:
     """Persona spec (voice/character layer) — optional, env-gated.
 
-    Persona is the HOW; modes, gate, and pack always outrank it (the file
+    Persona is the HOW; the gate and the teaching guide outrank it (the file
     itself opens with that rule). TUTOR_PERSONA=off disables.
     """
     if not getattr(config, "PERSONA_ENABLED", True):
@@ -236,21 +236,20 @@ def build_ai_tutor_user_message(
     observations: dict | None = None,  # accepted, no longer injected (§1.1)
     teach_images: list | None = None,
     blank_sheet: bool = False,
-    mode_decision: dict | None = None,  # accepted, no longer injected (§1.1)
     sheet_summary: str = "",
     personal_context: str = "",
     teaching_data: dict | None = None,
     session_plan: str | None = None,
 ) -> str:
-    """User-turn task: code-selected mode + facts; AI realizes the turn.
+    """User-turn task: facts only; the AI is the teacher (§1.1).
 
+    (The mode_decision parameter DELETED 2026-08-03 with the mode router.)
     The character sheet and personal context ride HERE (per-turn tail of the
     request), not in the system prompt: they change every turn, and any
     changed byte in the system message would break provider prefix-caching
     for the entire chat history behind it. Cost decision, content unchanged.
     """
     mem = session_memory or {}
-    mode = mode_decision or {}  # kept for the falsifier arms below only
     payload = {
         "turn": {
             "learner_said": (

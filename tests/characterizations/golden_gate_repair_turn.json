@@ -5,7 +5,10 @@
       "gate:unscaffolded_new_item"
     ],
     "ok": false,
-    "scaffold_saved": {}
+    "scaffold_saved": {
+      "hola": "bare",
+      "mucho gusto": "bare"
+    }
   },
   "gate_surface": {
     "faults": [
@@ -17,9 +20,7 @@
   },
   "learner": "Muy bien, gracias.",
   "memory": {
-    "asked": [
-      "conversation"
-    ],
+    "asked": [],
     "asked_topics": [],
     "images_shown": [],
     "intro_budget_remaining": 2,
@@ -30,40 +31,28 @@
     ],
     "turns": 1
   },
-  "mode_state": {
-    "english_only_streak": 0,
-    "form_focus_cooldown": {},
-    "hard_breaks_this_session": 0,
-    "last_mode": "conversation",
-    "last_resolved_form": null,
-    "learner_turn_index": 2,
-    "turns_since_hard_break": 999
-  },
   "model_requests": 2,
   "notes": [
-    "mode=conversation",
-    "mode_reason=default_conversation",
     "introduce_planned:me llamo:R-D",
     "output_gate_fail:gate:unscaffolded_new_item",
-    "output_gate_still_fail:gate:unscaffolded_new_item",
+    "output_gate_soft_fail:gate:unscaffolded_new_item",
     "rules_backup",
     "scaffold=ES-forward+EN-rescue",
     "structured_reply",
     "pedagogy:ok",
+    "first_seen:hola",
+    "first_seen:mucho gusto",
     "pedagogy:known_learner_open",
     "phase=ai_tutor",
-    "hard_break=False",
-    "plan_source=mode_runtime",
+    "plan_source=model",
     "teacher_mode=planned",
     "mem_shown=greet,spanish_ok",
-    "mem_asked=conversation"
+    "mem_asked=—"
   ],
   "parts_keys": [
     "acknowledge",
     "gate_fail",
     "gate_faults",
-    "mode",
-    "mode_decision",
     "model",
     "open_phase",
     "output_gate",
@@ -80,7 +69,12 @@
   ],
   "sheet": {
     "lexicon:me llamo": null,
-    "lexicon:mucho gusto": null
+    "lexicon:mucho gusto": {
+      "confidence": 0.0,
+      "first_seen": "<TODAY>",
+      "scaffold": "bare",
+      "status": "unknown"
+    }
   },
   "stop_reason": "end_turn",
   "usage": {

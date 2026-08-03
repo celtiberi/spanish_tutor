@@ -27,8 +27,9 @@ amended by Grok round-1 (a)/(f) and the closing adjudication):
      milestones instead of being dedupe-suppressed. ``record_retraction``
      is deliberately NOT used — nothing false to retract.
   4. E2 RULING — WIRED (not deleted): ``snapshot()`` / ``from_snapshot()``
-     compose the per-store serialization APIs (ModeSessionState /
-     SessionMemory ``snapshot``+``from_snapshot``).
+     compose the per-store serialization APIs (SessionMemory
+     ``snapshot``+``from_snapshot``; ModeSessionState's died with the
+     router, 2026-08-03).
      No production caller yet BY DESIGN: this is the documented persistence
      surface for future server-restart resume, pinned by a round-trip test
      so it cannot rot into a third half-serialization.
@@ -50,7 +51,6 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # imported lazily at runtime (conv_session import style)
     from .costs import SessionCostTracker
-    from .modes import ModeSessionState
     from .session_memory import SessionMemory
 
 
@@ -76,8 +76,6 @@ SESSION_STATE_FIELDS: tuple[str, ...] = (
     "image_warm_inflight",
     "last_plan",
     "pedagogy_memory",
-    "mode_state",
-    "last_mode_decision",
     "debug_requests",
     "costs",
     "progress_session_id",
@@ -141,7 +139,7 @@ RESET_COVERAGE: dict[str, dict[str, Any]] = {
                   "on-disk cost ledger keeps the money history (append-only "
                   "forever).",
         "notes": "Leak CLOSED (batch 2): intro budget, asked_topics, "
-                 "covered_concepts, mode cooldowns "
+                 "covered_concepts "
                  "and the debug ring no longer bleed between chats.",
     },
     # ConversationalSession.reset_sheet → SessionState.reset("sheet_reset").
@@ -153,10 +151,11 @@ RESET_COVERAGE: dict[str, dict[str, Any]] = {
                 "(SessionState.reset('sheet_reset'))",
         "current": UNIFIED_RESET,
         "churn": frozenset(),
+        # (historical census strings; mode_state / last_mode_decision
+        # themselves died with the router, 2026-08-03)
         "pre_batch2": frozenset({
             "history", "messages_for_ui", "focus_panel",
-            "focus_meta", "pedagogy_memory", "mode_state",
-            "last_mode_decision", "last_plan",
+            "focus_meta", "pedagogy_memory", "last_plan",
             "debug_requests",
         }),
         "ruling": "Resets EVERYTHING including costs (the 4 batch-1 misses: "
@@ -210,8 +209,8 @@ class SessionState:
     image_warm_inflight: set[str]
     last_plan: dict | None
     pedagogy_memory: "SessionMemory"
-    mode_state: "ModeSessionState"
-    last_mode_decision: dict | None
+    # (mode_state / last_mode_decision DELETED 2026-08-03 with the mode
+    # router — full-code-audit S4.)
     # Debug ring buffer (web debug box): in-memory only, never disk logs.
     debug_requests: deque
     costs: "SessionCostTracker"
@@ -237,7 +236,6 @@ class SessionState:
     def _construct(args: dict) -> dict:
         """The one construction recipe (shared by fresh() and reset)."""
         from .costs import SessionCostTracker
-        from .modes import ModeSessionState
         from .session_memory import SessionMemory
 
         return {
@@ -252,8 +250,6 @@ class SessionState:
             "image_warm_inflight": set(),
             "last_plan": None,
             "pedagogy_memory": SessionMemory(),
-            "mode_state": ModeSessionState(),
-            "last_mode_decision": None,
             "debug_requests": deque(maxlen=DEBUG_RING_SIZE),
             "costs": SessionCostTracker(source=args["source_label"]),
             "progress_session_id": "",
@@ -268,7 +264,7 @@ class SessionState:
           fresh() inputs, including locks and progress_session_id (batch-1
           semantics, kept for tests/tools).
         - ``"new_chat"`` — every session-scoped field resets
-          (``UNIFIED_RESET``): memory, mode state (cooldowns, asked
+          (``UNIFIED_RESET``): memory (intro budget, asked
           topics), debug ring, focus fields, last_*, and — per the costs
           continuity ruling — the per-chat cost tracker (the on-disk cost
           ledger keeps the money history). Kept: the two runtime locks
@@ -309,9 +305,8 @@ class SessionState:
 
         E2 ruling (docs/reviews-architecture-refactor.md, batch 2): the
         per-store serialization APIs are WIRED here rather than deleted —
-        composed via ModeSessionState.snapshot / SessionMemory.snapshot
-        (plus their ``from_snapshot`` restores). No production
-        caller yet BY DESIGN: this is the documented persistence surface
+        composed via SessionMemory.snapshot (plus its ``from_snapshot``
+        restore). No production caller yet BY DESIGN: this is the documented persistence surface
         for future server-restart resume, pinned by a round-trip test so
         it cannot rot into a third half-serialization.
 
@@ -323,13 +318,13 @@ class SessionState:
 
         The per-store ``snapshot()`` shapes are consumed by prompt/debug
         paths and stay untouched; fields they omit (SessionMemory:
-        last_learner, last_tutor_ack, image counters/cooldown;
-        ModeSessionState: learner_turn_index, last_error_hit_turn) ride
+        last_learner, last_tutor_ack, image counters/cooldown) ride
         here as sibling keys and are restored by the stores'
-        ``from_snapshot``.
+        ``from_snapshot``.  (The mode_state block died with the router,
+        2026-08-03; old snapshots' "mode_state"/"last_mode_decision" keys
+        are ignored on restore.)
         """
         mem = self.pedagogy_memory
-        ms = self.mode_state
         return {
             "version": 1,
             "history": [dict(m) for m in self.history],
@@ -344,10 +339,6 @@ class SessionState:
                 dict(self.last_plan)
                 if isinstance(self.last_plan, dict) else None
             ),
-            "last_mode_decision": (
-                dict(self.last_mode_decision)
-                if isinstance(self.last_mode_decision, dict) else None
-            ),
             "progress_session_id": str(self.progress_session_id or ""),
             "memory": {
                 **mem.snapshot(),
@@ -356,11 +347,6 @@ class SessionState:
                 "images_generated": mem.images_generated,
                 "images_declared_generated": mem.images_declared_generated,
                 "declared_image_cooldown": mem.declared_image_cooldown,
-            },
-            "mode_state": {
-                **ms.snapshot(),
-                "learner_turn_index": ms.learner_turn_index,
-                "last_error_hit_turn": dict(ms.last_error_hit_turn),
             },
         }
 
@@ -376,10 +362,10 @@ class SessionState:
         The fresh() inputs are required because the excluded runtime fields
         (locks, inflight flags, debug ring, costs) and the reset-replay args
         are constructed anew; every persisted field is then overlaid.
-        (Snapshots from before 2026-08-03 may carry phase_state/task_state
-        keys — ignored; that machinery is deleted.)
+        (Snapshots from before 2026-08-03 may carry phase_state /
+        task_state / mode_state / last_mode_decision keys — ignored; that
+        machinery is deleted.)
         """
-        from .modes import ModeSessionState
         from .session_memory import SessionMemory
 
         state = cls.fresh(source_label=source_label)
@@ -394,11 +380,6 @@ class SessionState:
         state.focus_version = int(d.get("focus_version") or 0)
         lp = d.get("last_plan")
         state.last_plan = dict(lp) if isinstance(lp, dict) else None
-        lmd = d.get("last_mode_decision")
-        state.last_mode_decision = (
-            dict(lmd) if isinstance(lmd, dict) else None
-        )
         state.progress_session_id = str(d.get("progress_session_id") or "")
         state.pedagogy_memory = SessionMemory.from_snapshot(d.get("memory"))
-        state.mode_state = ModeSessionState.from_snapshot(d.get("mode_state"))
         return state

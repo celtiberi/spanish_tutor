@@ -83,57 +83,25 @@ function renderTeachImages(parts) {
     .join("");
 }
 
-function renderModeBadge(parts) {
-  const mode = parts?.mode || parts?.plan?.mode || "";
-  if (!mode) return "";
-  const reason = parts?.plan?.mode_reason || parts?.mode_decision?.reason || "";
-  const hard = parts?.plan?.hard_break || parts?.mode_decision?.hard_break;
-  const label = hard ? `Mode · ${mode} (focus)` : `Mode · ${mode}`;
-  const title = reason ? esc(reason) : esc(mode);
-  return (
-    `<div class="part part-mode" title="${title}">` +
-    `<span class="part-label">${esc(label)}</span></div>`
-  );
-}
+// (renderModeBadge DELETED 2026-08-03 with the mode router — parts.mode /
+// parts.mode_decision no longer exist.)
 
 function renderTutorParts(parts, fallbackContent) {
   if (!parts || !parts.structured) {
     // Still show teach images if present on unstructured reply
     const img = renderTeachImages(parts);
-    return renderModeBadge(parts) + img + esc(fallbackContent || "");
+    return img + esc(fallbackContent || "");
   }
   const blocks = [];
-  const modeBadge = renderModeBadge(parts);
-  if (modeBadge) blocks.push(modeBadge);
   // Teach image first: associate form with meaning before/with the models
   const imgBlock = renderTeachImages(parts);
   if (imgBlock) blocks.push(imgBlock);
 
   if (parts.acknowledge) {
     const plan = parts.plan || {};
-    const mode = parts.mode || plan.mode || "";
     const isDiag =
-      plan.phase === "diagnostic" ||
-      plan.move === "english_frame" ||
-      plan.move === "associate" ||
-      mode === "placement" ||
-      mode === "association" ||
-      parts.open_phase === "diagnostic";
-    // Avoid empty "Got it" when we're framing meaning / associating a form
-    let ackLabel = "Got it";
-    if (mode === "form_focus") {
-      ackLabel = "Form focus";
-    } else if (mode === "association" || plan.move === "associate") {
-      ackLabel = "Meaning";
-    } else if (mode === "placement" || isDiag || plan.move === "english_frame") {
-      ackLabel = "Welcome";
-    } else if (mode === "cf_recast" || plan.move === "recast_retry") {
-      ackLabel = "Almost";
-    } else if (mode === "transfer") {
-      ackLabel = "Try again";
-    } else if (mode === "comprehension_check") {
-      ackLabel = "Check";
-    }
+      plan.phase === "diagnostic" || parts.open_phase === "diagnostic";
+    const ackLabel = isDiag ? "Welcome" : "Got it";
     blocks.push(
       `<div class="part part-ack"><span class="part-label">${ackLabel}</span>${esc(
         parts.acknowledge
@@ -148,15 +116,8 @@ function renderTutorParts(parts, fallbackContent) {
     );
   }
   if (parts.model) {
-    const mode = parts.mode || (parts.plan || {}).mode || "";
-    const modelLabel =
-      mode === "form_focus"
-        ? "Focus"
-        : mode === "association"
-          ? "Form"
-          : "Model";
     blocks.push(
-      `<div class="part part-model"><span class="part-label">${modelLabel}</span>${esc(
+      `<div class="part part-model"><span class="part-label">Model</span>${esc(
         parts.model
       )}</div>`
     );
@@ -172,15 +133,7 @@ function renderTutorParts(parts, fallbackContent) {
     );
   }
   if (parts.try) {
-    const mode = parts.mode || (parts.plan || {}).mode || "";
-    const tryLabel =
-      mode === "comprehension_check"
-        ? "Check"
-        : mode === "form_focus"
-          ? "Practice"
-          : mode === "transfer"
-            ? "Transfer"
-            : "Your turn";
+    const tryLabel = "Your turn";
     blocks.push(
       `<div class="part part-try"><span class="part-label">${tryLabel}</span>${esc(
         parts.try
@@ -261,16 +214,15 @@ function renderFocus(sheet) {
   const f = sheet?.focus || {};
   const nb = sheet?.next_best || {};
   const src = sheet?.focus_source || "static";
-  // Primary: this-turn mode (what the tutor is actually doing)
-  const mode = f.mode || sheet?.parts?.mode || "—";
-  els.focusPill.textContent = mode;
-  els.focusPill.classList.toggle("warn", !!f.hard_break || f.skill_status === "fragile");
+  // Sheet projection (the this-turn mode pill died with the router)
+  els.focusPill.textContent = f.can_do || "sheet";
+  els.focusPill.classList.toggle("warn", f.skill_status === "fragile");
   els.focusTitle.textContent =
     f.title || nb.statement || "Conversation";
 
   const why = f.blurb || f.reason_ai || f.why || f.reason || "—";
   const rows = [
-    ["This turn", f.activity || mode || "chat"],
+    ["Up next", f.activity || "chat"],
     ["Why", why],
   ];
   // Sheet longer arc — only if different from this-turn title
@@ -305,9 +257,6 @@ function renderFocus(sheet) {
 
   const chips = [];
   if (f.learner_name) chips.push(`<span class="chip hot">${esc(f.learner_name)}</span>`);
-  if (f.hard_break) {
-    chips.push(`<span class="chip" style="color:var(--warn);border-color:#6b5420">hard break</span>`);
-  }
   if (f.error_focus) {
     chips.push(
       `<span class="chip" style="color:var(--warn);border-color:#6b5420">err×${esc(
@@ -602,7 +551,6 @@ function renderDebugEntry(e, idx) {
   const u = e.response?.usage || {};
   const summary =
     `turn ${e.turn}${e.is_open ? " (open)" : ""} · ` +
-    `${e.mode || "?"}/${e.reason || "?"} · ${e.activity || "—"} · ` +
     fmtTokens(u);
   const sysBlocks = (e.system_blocks || [])
     .map((b) =>
@@ -636,9 +584,6 @@ function renderDebugEntry(e, idx) {
     `<button type="button" class="btn ghost dbg-copy" data-idx="${idx}" title="Copy this entry as JSON">Copy</button>` +
     `</div>` +
     dbgSection(`SYSTEM BLOCKS · ${(e.system_blocks || []).length}`, sysBlocks) +
-    dbgSection("INSTRUCTIONS (mode decision)", dbgPre(e.instructions), {
-      open: true,
-    }) +
     dbgSection("TASK MESSAGE", dbgPre(e.task_message)) +
     dbgSection(`HISTORY · ${hist.length} messages`, histHtml || '<p class="muted">none</p>') +
     dbgSection(

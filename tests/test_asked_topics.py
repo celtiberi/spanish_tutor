@@ -38,28 +38,41 @@ class TestTopicExtractor(unittest.TestCase):
         self.assertEqual(compose_topic_key(frame, concept), "size:ciudad")
 
     def test_wellbeing_frame(self):
-        # Phase 5 batch 2 (declared broadened delta): the module default now
-        # EQUALS the production palette (topic_palette over the table), which
-        # has always contained the how_are_you table key «cómo estás» — so
-        # the frame phrase itself binds as the concept, exactly as the live
-        # gate/registry path behaved before the flip.  The old bare
-        # ("wellbeing", "") pinned the narrower 21-noun default that only
-        # existed when callers passed no nouns.
+        # Gate retune 2026-08-03: SOCIAL_FORMULA_THEMES left the topic
+        # palette — «cómo estás» is a conversational move, not a topic
+        # concept («location:y tu» derivation bug).  The frame alone is
+        # the registry key.
         self.assertEqual(
-            topic_key_for_try("¿Cómo estás hoy?"), ("wellbeing", "como estas")
+            topic_key_for_try("¿Cómo estás hoy?"), ("wellbeing", "")
         )
 
     def test_name_frame(self):
-        # Same declared delta as test_wellbeing_frame («cómo te llamas» is
-        # an introductions-theme table key in the production palette).
+        # Same retune delta: «cómo te llamas» no longer binds as a concept.
         self.assertEqual(
-            topic_key_for_try("¿Cómo te llamas?"), ("name", "como te llamas")
+            topic_key_for_try("¿Cómo te llamas?"), ("name", "")
         )
+
+    def test_social_formula_never_binds_as_concept(self):
+        # The location:y tu incident verbatim (baseline run
+        # 20260803-104618 turn 10): «y tú» must not be the concept of a
+        # location try.
+        frame, concept = topic_key_for_try("¿Y tú? ¿Dónde bebes tu café?")
+        self.assertEqual(frame, "location")
+        self.assertEqual(concept, "cafe")
 
     def test_what_verb_frame(self):
         frame, concept = topic_key_for_try("¿Qué hay en tu casa?")
         self.assertEqual(frame, "what:hay")
         self.assertEqual(concept, "casa")
+
+    def test_what_frame_skips_clitic_pronouns(self):
+        # Baseline run 20260803-104618 turns 8/9: «¿Qué te gusta…?» keyed
+        # "what:te" (the pronoun) — the verb is the frame.
+        frame, concept = topic_key_for_try(
+            "¿Qué te gusta más en el bote: el café, la música o la comida?"
+        )
+        self.assertEqual(frame, "what:gusta")
+        self.assertEqual(concept, "bote")
 
     def test_no_frame_returns_empty(self):
         self.assertEqual(topic_key_for_try("Me gusta el café."), ("", ""))

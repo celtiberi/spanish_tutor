@@ -96,17 +96,11 @@ class SessionLogger:
         debug-ring entry printed router-shadow ``instructions`` next to
         ``system_blocks`` and the operator reasonably concluded scripts
         were shipping): ``sent`` holds EXACTLY what went to the model,
-        ``received`` what came back, and ``router_shadow_NOT_SENT`` the
-        code-router telemetry that never reaches the prompt (§1.1).
+        ``received`` what came back.  (The ``router_shadow_NOT_SENT``
+        pop-list died with the mode router, 2026-08-03 — debug entries no
+        longer carry mode/reason/instructions/hard_break at all.)
         Full text, no truncation."""
         e = dict(entry)
-        # ("activity" left this pop list 2026-08-03: the session-phase clock
-        # died with the S9 deletions; debug entries no longer carry it.)
-        shadow = {
-            k: e.pop(k)
-            for k in ("mode", "reason", "instructions", "hard_break")
-            if k in e
-        }
         record = {
             "ts": e.pop("ts", None),
             "turn": e.pop("turn", None),
@@ -118,7 +112,6 @@ class SessionLogger:
                 "task_message": e.pop("task_message", ""),
             },
             "received": e.pop("response", {}),
-            "router_shadow_NOT_SENT": shadow,
             **e,  # anything future entries add stays visible, unhidden
         }
         path = config.LOG_DIR / f"{self.session_id}.requests.jsonl"

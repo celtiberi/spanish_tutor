@@ -51,15 +51,7 @@ def _patch_runtime_for_smoke() -> None:
         pass
 
 
-def _apply_mode_state(session: ConversationalSession, seed: dict | None) -> None:
-    if not seed:
-        return
-    ms = session.mode_state
-    for k, v in seed.items():
-        if k == "form_focus_cooldown" and isinstance(v, dict):
-            ms.form_focus_cooldown = dict(v)
-        elif hasattr(ms, k):
-            setattr(ms, k, v)
+# (_apply_mode_state DELETED 2026-08-03 with the mode router.)
 
 
 def _skill_conf(sheet: dict, cid: str) -> float:
@@ -105,7 +97,6 @@ def run_conv_trajectory(
     )
     # Re-assert planned path regardless of ambient env
     session.teacher_mode = "planned"
-    _apply_mode_state(session, traj.get("seed_mode_state"))
 
     turns_out: list[dict] = []
     conf_series: dict[str, list[float]] = {cid: [] for cid in SNAPSHOT_SKILLS}
@@ -133,8 +124,6 @@ def run_conv_trajectory(
             "usage": dict(tr.usage or {}),
             "stop_reason": tr.stop_reason,
             "parts": parts,
-            "mode": parts.get("mode"),
-            "mode_decision": parts.get("mode_decision"),
             "output_gate": parts.get("output_gate"),
             "next_best": dict(tr.next_best or {}),
             "sheet_identity": deepcopy(session.sheet.get("identity") or {}),
@@ -142,7 +131,6 @@ def run_conv_trajectory(
                 session.sheet.get("error_patterns") or {}
             ),
             "skill_confidence": snap,
-            "mode_state": session.mode_state.snapshot(),
         })
 
     print(f"\n--- {traj['id']} open ---")
@@ -281,7 +269,6 @@ def main() -> None:
                     if str(f).startswith("WARN")
                 ),
                 "findings": findings,
-                "modes": [t.get("mode") for t in result.get("turns") or []],
             })
 
         (outdir / f"{traj['id']}.json").write_text(
@@ -310,10 +297,8 @@ def main() -> None:
     print(f"Conv mechanical scoreboard [{cell['cell']}] ({outdir}):")
     for row in summary:
         warns = f" ({row['warns']} warns)" if row.get("warns") else ""
-        modes = row.get("modes")
-        mode_s = f" modes={modes}" if modes else ""
         extra = f" err={row.get('error')}" if row.get("status") == "ERROR" else ""
-        print(f"  {row['status']:5} {row['id']}{warns}{mode_s}{extra}")
+        print(f"  {row['status']:5} {row['id']}{warns}{extra}")
 
 
 if __name__ == "__main__":

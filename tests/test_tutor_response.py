@@ -105,7 +105,7 @@ class TestTutorResponse(unittest.TestCase):
         self.assertNotIn("active_error_focus", parts.continue_ or "")
         # Gate on raw must fail so session will repair
         gate = check_output_gate(
-            parts.as_dict(), vis, mode="transfer", raw=raw,
+            parts.as_dict(), vis, raw=raw,
         )
         self.assertFalse(gate.ok)
         self.assertIn("gate:sheet_leak", gate.faults)
@@ -121,7 +121,7 @@ class TestTutorResponse(unittest.TestCase):
         """
         self.assertFalse(detect_sheet_leak(raw))
         vis, parts = process_tutor_raw(raw)
-        gate = check_output_gate(parts.as_dict(), vis, mode="conversation", raw=raw)
+        gate = check_output_gate(parts.as_dict(), vis, raw=raw)
         self.assertNotIn("gate:sheet_leak", gate.faults)
 
 

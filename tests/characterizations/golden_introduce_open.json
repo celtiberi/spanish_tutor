@@ -6,9 +6,7 @@
     "scaffold_saved": {}
   },
   "memory": {
-    "asked": [
-      "conversation"
-    ],
+    "asked": [],
     "asked_topics": [],
     "images_shown": [],
     "intro_budget_remaining": 2,
@@ -18,19 +16,8 @@
     ],
     "turns": 0
   },
-  "mode_state": {
-    "english_only_streak": 0,
-    "form_focus_cooldown": {},
-    "hard_breaks_this_session": 0,
-    "last_mode": "conversation",
-    "last_resolved_form": null,
-    "learner_turn_index": 1,
-    "turns_since_hard_break": 999
-  },
   "model_requests": 1,
   "notes": [
-    "mode=conversation",
-    "mode_reason=known_open_from_sheet",
     "introduce_planned:me llamo:R-D",
     "output_gate_ok",
     "rules_backup",
@@ -39,16 +26,13 @@
     "pedagogy:ok",
     "pedagogy:known_learner_open",
     "open_phase=known",
-    "hard_break=False",
-    "plan_source=mode_runtime",
+    "plan_source=model",
     "teacher_mode=planned",
     "mem_shown=greet",
-    "mem_asked=conversation"
+    "mem_asked=—"
   ],
   "parts_keys": [
     "acknowledge",
-    "mode",
-    "mode_decision",
     "model",
     "open_phase",
     "output_gate",

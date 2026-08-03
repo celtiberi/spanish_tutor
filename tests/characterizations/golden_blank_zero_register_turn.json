@@ -4,57 +4,41 @@
     "faults": [],
     "ok": true,
     "scaffold_saved": {
-      "estoy bien": "gloss"
+      "bien": "gloss"
     }
   },
   "learner": "Thanks! I don't know any Spanish yet, where do we start?",
   "memory": {
-    "asked": [
-      "conversation",
-      "placement"
-    ],
+    "asked": [],
     "asked_topics": [],
     "images_shown": [],
-    "intro_budget_remaining": 2,
-    "introduced_this_session": [],
+    "intro_budget_remaining": 1,
+    "introduced_this_session": [
+      "hola"
+    ],
     "shown": [
       "english_only"
     ],
     "turns": 1
   },
-  "mode_state": {
-    "english_only_streak": 1,
-    "form_focus_cooldown": {},
-    "hard_breaks_this_session": 1,
-    "last_mode": "conversation",
-    "last_resolved_form": null,
-    "learner_turn_index": 2,
-    "turns_since_hard_break": 1
-  },
   "model_requests": 2,
   "notes": [
-    "mode=conversation",
-    "mode_reason=default_conversation",
-    "introduce_planned:hola:R-E",
+    "introduce_planned:me llamo:R-D",
     "output_gate_ok",
     "rules_backup",
     "scaffold=ES-forward+EN-rescue",
     "structured_reply",
     "pedagogy:ok",
-    "first_seen:estoy bien",
+    "first_seen:bien",
     "pedagogy:known_learner_open",
     "phase=ai_tutor",
-    "hard_break=False",
-    "plan_source=mode_runtime",
+    "plan_source=model",
     "teacher_mode=planned",
     "mem_shown=english_only",
-    "mem_asked=conversation,placement",
-    "morph_card:estar"
+    "mem_asked=—"
   ],
   "parts_keys": [
     "acknowledge",
-    "mode",
-    "mode_decision",
     "model",
     "open_phase",
     "output_gate",
@@ -64,20 +48,39 @@
     "teach_images",
     "try"
   ],
-  "progress_events": [],
+  "progress_events": [
+    {
+      "key": "hola",
+      "kind": "planted",
+      "polarity": "up"
+    }
+  ],
   "reply": "¡Perfecto! Empezamos poco a poco.\n\n**Estoy bien** (I'm fine).\n\nDi: **Estoy bien** (I'm fine).",
   "save_sheet_calls": [
     "_commit_sheet"
   ],
   "sheet": {
-    "lexicon:bien": null,
+    "lexicon:bien": {
+      "confidence": 0.0,
+      "first_seen": "<TODAY>",
+      "scaffold": "gloss",
+      "status": "unknown"
+    },
     "lexicon:estoy bien": {
       "confidence": 0.0,
       "first_seen": "<TODAY>",
       "scaffold": "gloss",
       "status": "unknown"
     },
-    "lexicon:hola": null
+    "lexicon:hola": {
+      "confidence": 0.0,
+      "interval_days": 1,
+      "introduced_at": "<TODAY>",
+      "next_due": "<TOMORROW>",
+      "scaffold": "keyword",
+      "status": "unknown",
+      "successive_successes": 0
+    }
   },
   "stop_reason": "end_turn",
   "usage": {

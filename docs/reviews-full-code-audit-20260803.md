@@ -395,3 +395,56 @@ session_facts re-feed the learner's world every turn and <replan/> is
 documented in every round note. Revive condition: a live transcript
 showing the tutor contradicting its own plan or losing post-window
 context (the traffic log now captures the evidence needed to prove it).
+
+---
+
+## EXECUTION — S4 gate retune + mode-router teardown (chunk 2, 2026-08-03)
+
+Per the accepted AMENDs, both parts landed in one working set (suite
+691 passed; truncation gate ok):
+
+**Gate retune (tutor/output_gate.py):** mode-keyed contracts DELETED
+(gate:missing_recast + require_recast, gate:form_focus_needs_model,
+gate:comprehension_needs_check, mode:association_no_image_cache,
+english_wall placement arm — blank_zero floor kept, re-derived in
+stage_gate_context).  unscaffolded rework per AMEND verbatim:
+scaffold_saved is now the EXPOSURE map — every visibly-used
+not-yet-introduced key → first_seen (kinds gloss/anchor/image/bare;
+same-turn teach image = scaffold); bare keys = ONE SOFT
+gate:unscaffolded_new_item; gate:unscaffolded_flood + FLOOD_MIN_DISTINCT
+DELETED; CRITICAL survives only as gate:cluster_veto (new fault id — the
+old shared name could not carry two severities).  probe_loop: scan = try
++ continue ONLY; shown-skill ban + seed_from_sheet asked-permanence
+DELETED; asked-registry + topic-registry true-positive classes kept.
+topic-key fixes: qué-clitic skip (what:te→what:gusta) +
+SOCIAL_FORMULA_THEMES excluded from the topic palette (location:y tu).
+sheet_leak: update_character_sheet counts only in JSON-/call-ish context.
+No plan-NLP anywhere.  evals/student_checks: still_fail split by rule
+(HARD = cluster_veto/truncated/pedagogy), mem-key mode-name filter, \bo\b
+quiz assumption deleted, english_wall docstring fixed.
+
+**Router teardown:** tutor/modes.py DELETED (git is the archive).  Died
+with it: ModeSessionState (+ SessionState field/persistence/reset rows),
+last_mode_decision, stage_select_mode/guard6/english_streak/mode_image/
+mode_snapshot/mode_record, the contributor family (flavorable/
+append_instruction/InstructionContributor), MODE/MODE_REASON/HARD_BREAK
+event kinds, parts.mode/mode_decision, the UI mode badge + mode labels
+(app.js; ?v= bumped), debug-entry shadow fields + the traffic-log
+router_shadow_NOT_SENT pop-list, focus-rail live-mode overlay
+(build_focus_panel is a sheet projection), classifier-shadow
+routed_mode/disagree fields, conv-smoke seed_mode_state/mode_sets/
+mode-keyed checkers.  SURVIVING WIRES (Grok AMEND — no silent loss):
+introduce planner runs every turn as pure shadow (stage_introduce_plan;
+mode/reason flavor gate gone), R-B image attach via stage_intro_image →
+_attach_concept_image, R-B→R-D downgrade (stage_introduce_render, no
+instruction render), declared-image path, blank-open fallback image
+(known opens ship none, as before), error-resolve→enqueue
+(stage_resolve_enqueue), UPTAKE_FLAGGED re-keyed to
+turn_pipeline.stage_uptake_flag over observe.detect_self_flagged_token
+(instruction path + ModeSessionState budget deleted — observation needs
+no pacing; uptake_flag_honored eval pin intact).  ERROR_PATTERN_CATALOG
+detect/resolve lists STAY (live consumers: _record_due_outcomes +
+resolve-enqueue).  Goldens regenerated (CHAR_GOLDEN_UPDATE=1);
+golden_english_streak deleted with its class; declared behavior deltas:
+introduce may now plan/mark on ANY turn incl. blank opens, uptake budget
+gone, gate scan runs on open turns (no placement exemption).

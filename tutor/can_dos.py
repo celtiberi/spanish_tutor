@@ -491,71 +491,9 @@ def morphology_blocks_for_can_do(can_do_id: str | None) -> list[dict]:
     return blocks
 
 
-_MODE_TITLES = {
-    "placement": "Placement — feel out level",
-    "conversation": "Conversation",
-    "cf_recast": "Recast — short fix, keep chat",
-    "form_focus": "Form focus (hard break)",
-    "association": "Association — form ↔ meaning",
-    "comprehension_check": "Comprehension check",
-    "comprehension_repair": "Comprehension repair — same idea",
-    "transfer": "Transfer — same form, new context",
-}
-
-
-def _live_focus_from_mode(mode_decision: dict | None) -> dict:
-    """What the tutor is actually doing *this turn* (mode runtime)."""
-    md = mode_decision if isinstance(mode_decision, dict) else {}
-    mode = (md.get("mode") or "").strip() or "conversation"
-    targets = md.get("targets") if isinstance(md.get("targets"), dict) else {}
-    reason = (md.get("reason") or "").strip()
-    instructions = (md.get("instructions") or "").strip()
-    title = _MODE_TITLES.get(mode, mode.replace("_", " ").title())
-
-    # Sharpen title from targets
-    if mode == "association":
-        concept = targets.get("concept") or targets.get("form") or md.get("image_concept")
-        if concept:
-            title = f"Associate · {targets.get('form') or concept}"
-    elif mode in ("form_focus", "cf_recast"):
-        pid = targets.get("error_pattern") or targets.get("form_id") or targets.get("label")
-        if pid:
-            title = f"{'Form focus' if mode == 'form_focus' else 'Recast'} · {pid}"
-    elif mode == "transfer":
-        fid = targets.get("form_id") or targets.get("error_pattern")
-        title = f"Transfer · {fid}" if fid else title
-    elif mode == "comprehension_repair":
-        title = "Repair — re-ask same question"
-
-    # One-line "do" for the rail (not the full mode essay)
-    do = reason.replace("_", " ") if reason else mode
-    if mode == "transfer":
-        do = "Same form in a new micro-context"
-    elif mode == "conversation" and "known_open" in reason:
-        do = "Open from sheet — advance, don't re-probe"
-    elif mode == "association":
-        do = f"Bind meaning with image · {targets.get('form') or targets.get('concept') or 'concept'}"
-    elif mode == "cf_recast":
-        do = "Short recast + continue chat"
-    elif mode == "form_focus":
-        do = "Contrast wrong→right; produce once; exit to transfer"
-    elif mode == "comprehension_repair":
-        do = "Explain + simpler model; same try (no new topic)"
-
-    why = instructions
-    if len(why) > 280:
-        why = why[:277] + "…"
-
-    return {
-        "mode": mode,
-        "mode_reason": reason,
-        "title": title,
-        "activity": do,
-        "why": why or reason or "—",
-        "hard_break": bool(md.get("hard_break")),
-        "targets": targets,
-        "image_concept": md.get("image_concept"),
-    }
+# (_MODE_TITLES + _live_focus_from_mode DELETED 2026-08-03 with the mode
+# router — full-code-audit S4: the rail is a sheet projection now; there
+# is no code-owned "this-turn mode" to display.)
 
 
 def morphology_blocks_for_form(form_id: str | None) -> list[dict]:
@@ -568,15 +506,13 @@ def morphology_blocks_for_form(form_id: str | None) -> list[dict]:
     return [b]
 
 
-def build_focus_panel(
-    sheet: dict,
-    mode_decision: dict | None = None,
-) -> dict:
-    """Right-rail: **this-turn mode** (primary) + sheet arc (secondary).
+def build_focus_panel(sheet: dict) -> dict:
+    """Right-rail: sheet arc + morphology/lexicon projection.
 
-    After the mode runtime, the tutor does *not* follow next_best as a script.
-    Showing only sheet next_best (e.g. IP-03 names while chatting boat/estoy)
-    is misleading — so the pill/title are live mode; sheet stretch is secondary.
+    The live this-turn-mode overlay DELETED 2026-08-03 with the mode
+    router (full-code-audit S4): the rail is a projection of the SHEET —
+    what the model actually teaches each turn is its own decision and is
+    visible in the transcript, not paraphrased by code.
     """
     nb = sheet.get("next_best") or {}
     can_do = nb.get("can_do")
@@ -584,7 +520,6 @@ def build_focus_panel(
     meta = CAN_DOS.get(can_do) or {}
     rec = sheet.get("receptive") or {}
     aff = sheet.get("affect") or {}
-    live = _live_focus_from_mode(mode_decision)
 
     from .character_sheet import active_error_patterns
 
@@ -600,12 +535,8 @@ def build_focus_panel(
             "examples": top.get("last_examples") or [],
         }
 
-    # Morphology: form in play this turn / on sheet — not a stale can-do paradigm
-    targets = live.get("targets") or {}
-    form_id = targets.get("form_id") or nb.get("form_focus")
-    if form_id and form_id not in MORPHOLOGY_BY_FORM:
-        # error_pattern ids are not form inventory keys
-        form_id = nb.get("form_focus")
+    # Morphology: form on sheet — not a stale can-do paradigm
+    form_id = nb.get("form_focus")
     morph = morphology_blocks_for_form(
         form_id if form_id in MORPHOLOGY_BY_FORM else None
     )
@@ -675,23 +606,18 @@ def build_focus_panel(
 
     return {
         "focus": {
-            # Live (mode runtime) — what the tutor is doing now
-            "live": bool(mode_decision),
-            "mode": live.get("mode"),
-            "mode_reason": live.get("mode_reason"),
-            "hard_break": live.get("hard_break"),
-            "title": live.get("title") or "Conversation",
-            "activity": live.get("activity") or "chat",
-            "why": live.get("why") or "—",
-            "image_concept": live.get("image_concept"),
-            # Sheet stretch (secondary)
+            # Sheet projection only (mode-runtime "live" keys DELETED
+            # 2026-08-03 with the router — full-code-audit S4).
+            "title": sheet_statement or "Conversation",
+            "activity": nb.get("activity") or nb.get("stretch") or "chat",
+            "why": nb.get("reason") or "—",
             "can_do": can_do,
             "sheet_title": sheet_statement,
             "sheet_activity": nb.get("activity") or nb.get("stretch"),
             "sheet_reason": nb.get("reason"),
             "primary_is_form": primary_is_form,
             "avoid": nb.get("avoid"),
-            "reason": live.get("why") or nb.get("reason"),
+            "reason": nb.get("reason"),
             "method": nb.get("method") or "CLT/TBLT + CI + focus_on_form",
             "skill_status": skill.get("status") or "unknown",
             "skill_confidence": skill.get("confidence") or 0.0,

@@ -1,9 +1,10 @@
 """Regression tests for session 20260726-155600 failures.
 
-Covers: truncated replies (gate:truncated), topic-request routing (English
-meta requests must not become comprehension repair), grammar-question inline
-answers, family-loss engagement-note updates, topic-fatigue affect, IP-03
-next_best deadlock, and pack-driven topic suggestions.
+Covers: truncated replies (gate:truncated), topic/help-request SIGNAL
+detection + comprehension-hold semantics, personal-capture bans, IP-03
+next_best deadlock, tutor-declared images, and the concept-image attach
+path.  (The select_mode ROUTING pins died with the mode router, 2026-08-03
+— full-code-audit S4: the model routes its own turns now.)
 """
 
 import unittest
@@ -15,7 +16,6 @@ from tutor.character_sheet import (
     default_sheet,
     process_turn,
 )
-from tutor.modes import Mode, ModeSessionState, select_mode
 from tutor.observe import probe_signals, strip_quoted
 from tutor.output_gate import check_output_gate
 from tutor.session_memory import SessionMemory
@@ -84,62 +84,6 @@ class TestTopicRequestRouting(unittest.TestCase):
         mem = SessionMemory()
         mem.note_learner("what does saludarte mean?")
         self.assertTrue(mem.await_comprehension)
-
-    def test_topic_request_routes_to_conversation_and_honors_request(self):
-        d = select_mode(
-            _known_sheet(),
-            learner=TURN3,
-            observations={
-                "blank_sheet": False,
-                "signals": sorted(probe_signals(TURN3)),
-            },
-            mode_state=ModeSessionState(),
-            session_memory={
-                "last_tutor_try": "¿Dónde está ella hoy?",
-                "await_comprehension": True,
-            },
-            pack_topics=["Greetings", "Nouns, gender, articles"],
-        )
-        self.assertEqual(d.mode, Mode.CONVERSATION)
-        self.assertEqual(d.reason, "learner_topic_request")
-        self.assertFalse(d.hard_break)
-        self.assertTrue(d.targets.get("honor_request"))
-        self.assertIn("Nouns, gender, articles", d.instructions)
-
-    def test_grammar_question_with_own_answer_not_repair(self):
-        d = select_mode(
-            _known_sheet(),
-            learner=TURN8,
-            observations={
-                "blank_sheet": False,
-                "signals": sorted(probe_signals(TURN8)),
-            },
-            mode_state=ModeSessionState(),
-            session_memory={
-                "last_tutor_try": "¿las herramientas son caras o baratas?",
-                "await_comprehension": False,
-            },
-        )
-        self.assertEqual(d.mode, Mode.CONVERSATION)
-        self.assertEqual(d.reason, "grammar_question_inline")
-
-    def test_quoted_tutor_spanish_still_repairs(self):
-        utt = '"Qué gusto saludarte!" - I dont know what you are saying at all'
-        d = select_mode(
-            _known_sheet(),
-            learner=utt,
-            observations={
-                "blank_sheet": False,
-                "signals": sorted(probe_signals(utt)),
-            },
-            mode_state=ModeSessionState(),
-            session_memory={
-                "last_tutor_try": "¿Cómo estás hoy?",
-                "last_tutor_model": "Qué gusto saludarte",
-                "await_comprehension": False,
-            },
-        )
-        self.assertEqual(d.mode, Mode.COMPREHENSION_REPAIR)
 
     def test_strip_quoted_removes_echoed_spans(self):
         self.assertNotIn(
@@ -287,38 +231,6 @@ class TestNextBestDeadlock(unittest.TestCase):
         self.assertTrue(candidates_reason)
 
 
-class TestKnownOpenHooks(unittest.TestCase):
-    def test_open_never_uses_personal_data_even_if_profile_passed(self):
-        # Personal-data capture disabled: a profile object passed for compat
-        # must leave no trace in the instructions, and the open must forbid
-        # invented names.
-        from tutor.learner_profile import default_profile
-
-        sheet = default_sheet()
-        sheet.pop("identity", None)
-        sheet["skills"]["IP-01"] = {"status": "emerging", "confidence": 0.5}
-        prof = default_profile()
-        prof["preferred_name"] = "Patrick"
-        prof["hooks"] = [{"fact": "Lives on a boat.", "added": "2026-07-27"}]
-        prof["sensitive"] = [{
-            "fact": "Learner's sister Carolyn is deceased.",
-            "guidance": "Do NOT ask about the sister.",
-            "added": "2026-07-27",
-        }]
-        d = select_mode(
-            sheet,
-            is_open=True,
-            observations={"blank_sheet": False, "signals": []},
-            mode_state=ModeSessionState(),
-            profile=prof,
-        )
-        self.assertNotIn("Patrick", d.instructions)
-        self.assertNotIn("Lives on a boat.", d.instructions)
-        self.assertNotIn("CARE RULE", d.instructions)
-        self.assertIn("WITHOUT any name", d.instructions)
-        self.assertIn("never invent or guess one", d.instructions)
-
-
 class TestImageConceptWordBoundaries(unittest.TestCase):
     """'sol' must never fire inside 'Marisol' or 'solo' (sun-image incidents)."""
 
@@ -331,15 +243,6 @@ class TestImageConceptWordBoundaries(unittest.TestCase):
         self.assertTrue(word_present("gato", "los gatos son bonitos"))
         self.assertFalse(word_present("rio", "es muy serio"))
         self.assertTrue(word_present("río", "estoy en el río"))
-
-    def test_noun_from_text_ignores_marisol(self):
-        from tutor.modes import _noun_from_text
-
-        sheet = {"lexicon": {}}
-        self.assertIsNone(
-            _noun_from_text("Me llama Patrick. Hola Marisol. Mucho gusto", sheet)
-        )
-        self.assertEqual(_noun_from_text("estoy en mi bote", sheet), "bote")
 
     def test_concepts_from_spanish_boundaries(self):
         from tutor.session_memory import _concepts_from_spanish
@@ -422,103 +325,6 @@ class TestTutorDeclaredImage(unittest.TestCase):
         )
         self.assertEqual(p2.as_dict().get("image_concept"), "hace_calor")
 
-    def test_cf_recast_no_longer_auto_picks_image(self):
-        d = select_mode(
-            _known_sheet(),
-            learner="yo esta bien en mi bote",
-            observations={"blank_sheet": False, "signals": ["topic_vocab"]},
-            mode_state=ModeSessionState(),
-        )
-        self.assertEqual(d.mode, Mode.CF_RECAST)
-        self.assertIsNone(d.image_concept)
-
-
-class TestNoDoubleCorrection(unittest.TestCase):
-    """A recast must not be followed by a form_focus re-correction on a clean
-    turn (2026-07-27: 'llama' re-corrected on a message about travel)."""
-
-    def _sheet_with_streak(self, pid="me_llamo_es"):
-        sheet = default_sheet()
-        sheet["skills"]["IP-01"] = {"status": "emerging", "confidence": 0.5}
-        sheet["error_patterns"] = {
-            pid: {"count": 2, "form_id": "me_llamo", "last_examples": ["me llama X"]},
-        }
-        return sheet
-
-    def test_cooldown_after_recast_blocks_streak_break(self):
-        # conv_session sets 3 post-recast; tick() decrements BEFORE select, so
-        # effective suppression = 2 subsequent learner turns (Grok-corrected)
-        state = ModeSessionState()
-        state.note_error_hits(["me_llamo_es"])  # error is recent
-        state.set_cooldown("me_llamo_es", 3)
-        for _ in range(2):  # both suppressed turns
-            state.tick()
-            d = select_mode(
-                self._sheet_with_streak(),
-                learner="yo quiero viajar a Chile",
-                observations={"blank_sheet": False, "signals": ["spanish_ok"]},
-                mode_state=state,
-            )
-            self.assertNotEqual(d.mode, Mode.FORM_FOCUS)
-        state.tick()  # cooldown expired; error still recent (within K=4)
-        d = select_mode(
-            self._sheet_with_streak(),
-            learner="yo quiero viajar a Chile",
-            observations={"blank_sheet": False, "signals": ["spanish_ok"]},
-            mode_state=state,
-        )
-        self.assertEqual(d.mode, Mode.FORM_FOCUS)
-
-    def test_stale_streak_never_hard_breaks(self):
-        # count>=2 on the sheet but NO recorded hit this session → no ambush
-        d = select_mode(
-            self._sheet_with_streak(),
-            learner="yo quiero viajar a Chile",
-            observations={"blank_sheet": False, "signals": ["spanish_ok"]},
-            mode_state=ModeSessionState(),
-        )
-        self.assertNotEqual(d.mode, Mode.FORM_FOCUS)
-
-    def test_recent_hit_break_uses_practice_framing(self):
-        state = ModeSessionState()
-        state.note_error_hits(["me_llamo_es"])
-        state.tick()
-        state.tick()  # hit was 2 turns ago — within K=4, not fresh
-        d = select_mode(
-            self._sheet_with_streak(),
-            learner="yo quiero viajar a Chile",
-            observations={"blank_sheet": False, "signals": ["spanish_ok"]},
-            mode_state=state,
-        )
-        self.assertEqual(d.mode, Mode.FORM_FOCUS)
-        self.assertFalse(d.targets.get("fresh_hit"))
-        self.assertIn("did NOT contain this error", d.instructions)
-
-    def test_hit_beyond_recency_window_no_break(self):
-        state = ModeSessionState()
-        state.note_error_hits(["me_llamo_es"])
-        for _ in range(5):  # 5 turns later — beyond K=4
-            state.tick()
-        d = select_mode(
-            self._sheet_with_streak(),
-            learner="yo quiero viajar a Chile",
-            observations={"blank_sheet": False, "signals": ["spanish_ok"]},
-            mode_state=state,
-        )
-        self.assertNotEqual(d.mode, Mode.FORM_FOCUS)
-
-    def test_streak_break_with_fresh_hit_stays_corrective(self):
-        d = select_mode(
-            self._sheet_with_streak(),
-            learner="me llama Patricio",
-            observations={"blank_sheet": False, "signals": []},
-            mode_state=ModeSessionState(),
-        )
-        self.assertEqual(d.mode, Mode.FORM_FOCUS)
-        self.assertTrue(d.targets.get("fresh_hit"))
-        self.assertNotIn("did NOT contain this error", d.instructions)
-
-
 class TestLearnerUptake(unittest.TestCase):
     """Adaptivity round-1 fixtures (Grok CI spec): help requests answered,
     hold arm/clear semantics, repair preserved for true non-understanding."""
@@ -529,24 +335,6 @@ class TestLearnerUptake(unittest.TestCase):
 
     def test_t3_yields_help_request_signal(self):
         self.assertIn("help_request", probe_signals(self.T3))
-
-    def test_t3_routes_to_help_not_repair_even_with_hold(self):
-        d = select_mode(
-            _known_sheet(),
-            learner=self.T3,
-            observations={
-                "blank_sheet": False,
-                "signals": sorted(probe_signals(self.T3)),
-            },
-            mode_state=ModeSessionState(),
-            session_memory={
-                "last_tutor_try": "¿Cómo está usted?",
-                "last_tutor_model": "Buenas tardes.",
-                "await_comprehension": True,
-            },
-        )
-        self.assertEqual(d.reason, "learner_help_request")
-        self.assertNotEqual(d.mode, Mode.COMPREHENSION_REPAIR)
 
     def test_grammar_question_with_own_spanish_does_not_arm_hold(self):
         mem = SessionMemory()
@@ -564,47 +352,12 @@ class TestLearnerUptake(unittest.TestCase):
         mem.note_learner("hmm")  # turn after: TTL expired
         self.assertFalse(mem.await_comprehension)
 
-    def test_pure_no_entiendo_still_repairs(self):
-        utt = "no entiendo"
-        d = select_mode(
-            _known_sheet(),
-            learner=utt,
-            observations={
-                "blank_sheet": False,
-                "signals": sorted(probe_signals(utt)),
-            },
-            mode_state=ModeSessionState(),
-            session_memory={
-                "last_tutor_try": "¿Cómo está usted?",
-                "last_tutor_model": "Buenas tardes.",
-                "await_comprehension": False,
-            },
-        )
-        self.assertEqual(d.mode, Mode.COMPREHENSION_REPAIR)
-
     def test_help_request_clears_hold(self):
         mem = SessionMemory()
         mem.note_learner("what does saludarte mean?")
         self.assertTrue(mem.await_comprehension)
         mem.note_learner("how do I say searching?")
         self.assertFalse(mem.await_comprehension)
-
-    def test_repair_instructions_require_uptake_first(self):
-        utt = "que??"
-        d = select_mode(
-            _known_sheet(),
-            learner=utt,
-            observations={"blank_sheet": False, "signals": []},
-            mode_state=ModeSessionState(),
-            session_memory={
-                "last_tutor_try": "¿Cómo está usted?",
-                "last_tutor_model": "Buenas tardes.",
-                "await_comprehension": True,
-            },
-        )
-        self.assertEqual(d.mode, Mode.COMPREHENSION_REPAIR)
-        self.assertIn("UPTAKE FIRST", d.instructions)
-
 
 class TestSignalClassifier(unittest.TestCase):
     def test_disabled_returns_none(self):
@@ -636,13 +389,14 @@ class TestPackTopics(unittest.TestCase):
         self.assertEqual(pack_topic_titles(Path(DEFAULT_PACK_DIR)), [])
 
 
-class TestModeImageAttachVisibility(unittest.TestCase):
-    """Incident 2026-07-28 + audit (e): mode-path cache misses must never be
-    SILENT and must never generate on the reply thread (latency law, commits
-    2d160e0/7275bdc). A cap-allowed miss returns [] instantly, notes
-    image_gen_async, and a daemon warm thread generates into the cache
-    (costs recorded via _note_image_costs) so the image attaches on a LATER
-    turn via cache hit."""
+class TestConceptImageAttachVisibility(unittest.TestCase):
+    """Incident 2026-07-28 + audit (e): concept-attach cache misses must
+    never be SILENT and must never generate on the reply thread (latency
+    law, commits 2d160e0/7275bdc). A cap-allowed miss returns [] instantly,
+    notes image_gen_async, and a daemon warm thread generates into the
+    cache (costs via _note_image_costs) so the image attaches on a LATER
+    turn via cache hit.  (_attach_mode_image became _attach_concept_image
+    — the introduce R-B wire — with the 2026-08-03 router teardown.)"""
 
     GEN_KEY = "zz_gen_probe"
 
@@ -683,13 +437,6 @@ class TestModeImageAttachVisibility(unittest.TestCase):
 
         return ConversationalSession(log=False)
 
-    def _decision(self, concept):
-        from tutor.modes import Mode, ModeDecision
-
-        return ModeDecision(
-            Mode.ASSOCIATION, reason="test", image_concept=concept
-        )
-
     def _fake_generator(self):
         def gen(concept, prompt, dest):
             from pathlib import Path
@@ -720,7 +467,7 @@ class TestModeImageAttachVisibility(unittest.TestCase):
         ta.GENERATE_ON_MISS = True
         sess = self._session()
         notes: list[str] = []
-        imgs = sess._attach_mode_image(self._decision(self.GEN_KEY), notes)
+        imgs = sess._attach_concept_image(self.GEN_KEY, decision_reason="introduce:R-B", sched_notes=notes)
         self.assertEqual(imgs, [])  # never generated on the reply thread
         self.assertEqual(notes, [f"image_gen_async:{self.GEN_KEY}"])
         self._join_warm_threads()
@@ -735,7 +482,7 @@ class TestModeImageAttachVisibility(unittest.TestCase):
         )
         # Later turn: the warmed image attaches from cache.
         notes2: list[str] = []
-        imgs2 = sess._attach_mode_image(self._decision(self.GEN_KEY), notes2)
+        imgs2 = sess._attach_concept_image(self.GEN_KEY, decision_reason="introduce:R-B", sched_notes=notes2)
         self.assertTrue(imgs2)
         self.assertEqual(imgs2[0]["cache"], "hit")
         self.assertEqual(imgs2[0]["concept"], self.GEN_KEY)
@@ -765,7 +512,7 @@ class TestModeImageAttachVisibility(unittest.TestCase):
         sess = self._session()
         notes: list[str] = []
         t0 = time.monotonic()
-        imgs = sess._attach_mode_image(self._decision(self.GEN_KEY), notes)
+        imgs = sess._attach_concept_image(self.GEN_KEY, decision_reason="introduce:R-B", sched_notes=notes)
         elapsed = time.monotonic() - t0
         self.assertEqual(imgs, [])
         self.assertLess(elapsed, 1.0)  # no image-API RTT on the reply path
@@ -786,9 +533,7 @@ class TestModeImageAttachVisibility(unittest.TestCase):
             MAX_IMAGE_GENERATIONS_PER_SESSION
         )
         notes: list[str] = []
-        imgs = sess._attach_mode_image(
-            self._decision("zz_never_cached"), notes
-        )
+        imgs = sess._attach_concept_image("zz_never_cached", decision_reason="introduce:R-B", sched_notes=notes)
         self.assertEqual(imgs, [])
         self.assertEqual(notes, ["image_gen_capped:zz_never_cached"])
         self._join_warm_threads()
@@ -826,11 +571,11 @@ class TestModeImageAttachVisibility(unittest.TestCase):
         ta.GENERATE_ON_MISS = True
         sess = self._session()
         notes: list[str] = []
-        imgs = sess._attach_mode_image(self._decision(self.GEN_KEY), notes)
+        imgs = sess._attach_concept_image(self.GEN_KEY, decision_reason="introduce:R-B", sched_notes=notes)
         self.assertEqual(imgs, [])  # downgrade condition holds this turn
         self._join_warm_threads()
         notes2: list[str] = []
-        imgs2 = sess._attach_mode_image(self._decision(self.GEN_KEY), notes2)
+        imgs2 = sess._attach_concept_image(self.GEN_KEY, decision_reason="introduce:R-B", sched_notes=notes2)
         self.assertTrue(imgs2)  # the image exists for the NEXT plan
 
     def test_resolve_decision_assets_generate_false_never_generates(self):
@@ -862,9 +607,7 @@ class TestModeImageAttachVisibility(unittest.TestCase):
         ta.register_generator(None)
         sess = self._session()
         notes: list[str] = []
-        imgs = sess._attach_mode_image(
-            self._decision("zz_never_cached"), notes
-        )
+        imgs = sess._attach_concept_image("zz_never_cached", decision_reason="introduce:R-B", sched_notes=notes)
         self.assertEqual(imgs, [])
         self.assertEqual(notes, ["image_gen_disabled:zz_never_cached"])
 
@@ -878,9 +621,7 @@ class TestModeImageAttachVisibility(unittest.TestCase):
             MAX_IMAGE_GENERATIONS_PER_SESSION
         )
         notes: list[str] = []
-        imgs = sess._attach_mode_image(
-            self._decision("zz_never_cached"), notes
-        )
+        imgs = sess._attach_concept_image("zz_never_cached", decision_reason="introduce:R-B", sched_notes=notes)
         # Cap respected: generator present but NOT invoked; miss is noted
         self.assertEqual(imgs, [])
         self.assertEqual(notes, ["image_gen_capped:zz_never_cached"])
@@ -890,10 +631,10 @@ class TestModeImageAttachVisibility(unittest.TestCase):
         ta.register_generator(None)  # hits never need the generator
         sess = self._session()
         notes: list[str] = []
-        imgs = sess._attach_mode_image(self._decision("hola"), notes)
+        imgs = sess._attach_concept_image("hola", decision_reason="introduce:R-B", sched_notes=notes)
         self.assertTrue(imgs)
         self.assertEqual(imgs[0]["cache"], "hit")
-        self.assertEqual(imgs[0]["decision_reason"], "mode:association")
+        self.assertEqual(imgs[0]["decision_reason"], "introduce:R-B")
         self.assertEqual(notes, [])
 
     def test_health_fields_populated(self):

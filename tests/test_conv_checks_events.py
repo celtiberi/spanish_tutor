@@ -5,11 +5,12 @@ Contract (docs/reviews-architecture-refactor.md, batch-2 scope):
     falls back to note strings when the key is absent — old recorded eval
     results (historical artifacts) must replay unchanged;
   - live parity: on real golden-scenario turns the event path and the
-    stripped-events replay path produce IDENTICAL findings;
-  - the DECLARED TIGHTENING: the two joined-notes substring scans in
-    ``recast_or_gate_attempt`` are precise event-kind checks on the event
-    path — an accidental substring inside an unrelated payload no longer
-    counts as gate evidence (false positive fixed, module docstring).
+    stripped-events replay path produce IDENTICAL findings.
+
+(The mode-keyed checkers — _mode / mode_sequence / recast_or_gate_attempt /
+association_signal / comprehension_repair_targets / transfer_seen_or_warn —
+were DELETED 2026-08-03 with the mode router, full-code-audit S4; their
+parity pins died with them and an absence pin stands guard below.)
 """
 
 from __future__ import annotations
@@ -26,18 +27,16 @@ from test_characterization_ai_path import (
 )
 
 from evals.conv_checks import (
-    _mode,
     due_elicit_fired,
     introduce_scaffolded,
     progress_milestones_fired,
-    recast_or_gate_attempt,
     uptake_flag_honored,
 )
 
 # (phase_adherence + task_goal_offered DELETED 2026-08-03 with the
-# session-phase machinery + task runtime — full-code-audit S9.)
+# session-phase machinery + task runtime — full-code-audit S9;
+# recast_or_gate_attempt + the mode checkers DELETED with the router, S4.)
 MIGRATED_CHECKERS = (
-    recast_or_gate_attempt,
     uptake_flag_honored,
     due_elicit_fired,
     progress_milestones_fired,
@@ -56,8 +55,6 @@ def _turn_record(tr, learner="x") -> dict:
         "notes": list(tr.notes or []),
         "events": [e.as_dict() for e in (tr.events or [])],
         "parts": parts,
-        "mode": parts.get("mode"),
-        "mode_decision": parts.get("mode_decision"),
         "output_gate": parts.get("output_gate"),
     }
 
@@ -74,14 +71,11 @@ def _parity(traj: dict, result: dict) -> None:
     stripped = _strip_events(result)
     for fn in MIGRATED_CHECKERS:
         assert fn(traj, result) == fn(traj, stripped), fn.__name__
-    for t_new, t_old in zip(result["turns"], stripped["turns"]):
-        assert _mode(t_new) == _mode(t_old)
 
 
 def test_live_parity_events_vs_replay(tutor_session_factory):
     """Event path == note-string replay path on real golden-scenario runs
-    (due elicit + introduce arcs; the trajectories exercise due_elicit,
-    introduce_planned, progress_milestones, phase and mode parsing)."""
+    (due elicit + introduce arcs)."""
     ctx = tutor_session_factory(
         seed_sheet=_due_seed(),
         replies=[OPEN_DUE_REPLY, TURN_DUE_REPLY],
@@ -136,54 +130,17 @@ def test_old_artifacts_without_events_still_replay():
     assert progress_milestones_fired(
         {"expect": {"progress_milestones": ["planted:hola"]}}, result
     ) == []
-    assert _mode(result["turns"][0]) == "conversation"
 
 
-def test_tightening_substring_in_payload_no_longer_counts():
-    """DECLARED TIGHTENING: a cf_recast turn with no recast part and NO gate
-    events, whose notes merely CONTAIN the substrings inside an unrelated
-    payload, HARD-fails on the event path (correct) where the legacy
-    substring scan would have soft-WARNed it (false positive)."""
-    base_turn = {
-        "parts": {"mode": "cf_recast"},
-        "notes": [
-            "mode=cf_recast",
-            # unrelated payloads that CONTAIN the scanned substrings:
-            "why=tutor mentioned the output_gate design",
-            "image_decision:missing_recast_lookalike",
-        ],
-    }
-    # Old artifact (no events): substring scan → WARN (gate notes only).
-    old = {"turns": [dict(base_turn)]}
-    out_old = recast_or_gate_attempt({}, old)
-    assert len(out_old) == 1 and out_old[0].startswith("WARN")
-    # New artifact (typed events, none of them gate kinds): HARD finding.
-    new_turn = dict(base_turn)
-    new_turn["events"] = [
-        {"kind": "mode", "key": "cf_recast", "payload": {}, "seq": 0,
-         "stage": "select"},
-        {"kind": "why", "key": "tutor mentioned the output_gate design",
-         "payload": {}, "seq": 1, "stage": "sheet"},
-        {"kind": "image_decision", "key": "missing_recast_lookalike",
-         "payload": {}, "seq": 2, "stage": "record"},
-    ]
-    new = {"turns": [new_turn]}
-    out_new = recast_or_gate_attempt({}, new)
-    assert len(out_new) == 1 and not out_new[0].startswith("WARN")
-    assert "no gate signal" in out_new[0]
+def test_mode_checkers_stay_deleted():
+    """Absence pin (router teardown 2026-08-03): the mode-keyed checkers
+    must not resurface in conv_checks."""
+    import evals.conv_checks as cc
 
-
-def test_event_path_gate_fault_payloads_scanned_precisely():
-    """missing_recast INSIDE a gate-fail event payload still counts as a
-    gate signal on the event path (fault ids are gate evidence)."""
-    turn = {
-        "parts": {"mode": "cf_recast"},
-        "notes": ["output_gate_fail:gate:missing_recast"],
-        "events": [{
-            "kind": "output_gate_fail", "key": "",
-            "payload": {"faults": ["gate:missing_recast"]},
-            "seq": 0, "stage": "gate",
-        }],
-    }
-    out = recast_or_gate_attempt({}, {"turns": [turn]})
-    assert len(out) == 1 and out[0].startswith("WARN")
+    for name in (
+        "_mode", "mode_sequence", "recast_or_gate_attempt",
+        "association_signal", "comprehension_repair_targets",
+        "transfer_seen_or_warn",
+    ):
+        assert not hasattr(cc, name), name
+    assert "mode_sequence" not in cc.CHECKS

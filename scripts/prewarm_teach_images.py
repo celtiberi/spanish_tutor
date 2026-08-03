@@ -18,22 +18,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from tutor.image_gen import install_teach_image_generator  # noqa: E402
 from tutor.costs import SessionCostTracker  # noqa: E402
-from tutor.modes import (  # noqa: E402
-    NEW_CONCRETE_NOUNS,
-    NOUN_TEXT_PAIRS,
-    _form_for_concept,
-)
+from tutor.association_table import cached_default_table  # noqa: E402
 from tutor.teach_assets import (  # noqa: E402
     _lexicon,
     cache_lookup,
     ensure_asset,
     seed_index_from_disk,
 )
+from tutor.textnorm import fold_asset_key  # noqa: E402
 
-# Concepts modes.py can request beyond the sidecar lexicon: the table-derived
-# guard-6 lists (Phase 5 batch 2 — no more hand-copied stray list here).
+# Concepts the pipeline can request beyond the sidecar lexicon: every
+# imageable association-table key (the guard-6 lists died with the mode
+# router, 2026-08-03 — the table's `imageable` flag IS the selection law).
 EXTRA_CONCEPTS = tuple(
-    {concept for _needle, concept in NOUN_TEXT_PAIRS} | set(NEW_CONCRETE_NOUNS)
+    fold_asset_key(key)
+    for key, entry in cached_default_table().items()
+    if isinstance(entry, dict) and entry.get("imageable")
 )
 
 
@@ -55,7 +55,7 @@ def main() -> int:
             print(f"MISS (would generate): {c}")
             continue
         try:
-            asset = ensure_asset(c, form=_form_for_concept(c), generate=True)
+            asset = ensure_asset(c, generate=True)
         except Exception as e:
             print(f"FAIL {c}: {type(e).__name__}: {e}")
             failed += 1

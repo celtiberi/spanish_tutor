@@ -50,56 +50,35 @@ SHEET_TOOLS = [UPDATE_CHARACTER_SHEET_TOOL]
 MAX_IMAGE_GENERATIONS_PER_SESSION = 8
 MAX_DECLARED_NOVEL_PER_SESSION = 5
 
-# --- Guard reasons that keep their single focus -----------------------------
-# Help/topic/grammar guard turns never take soft riders (uptake etc.).
-DUE_GUARD_REASONS = frozenset({
-    "learner_topic_request",
-    "learner_help_request",
-    "grammar_question_inline",
-})
-
 # (due_elicit_block DELETED 2026-08-03 with the session-phase machinery —
 # full-code-audit S9. Due items ship as FACTS in teaching_data
 # (turn_pipeline.stage_prompt_build), which also emits the
 # DUE_ELICIT_OFFERED event that drives stage_frame_record's frames_seen
 # writes.)
-
-
-# --- Introduce router soft wiring (Phase 3 pedagogy engine, r7 S2) ----------
-# The INTRODUCE plan rides flavorable conversation turns (known open /
-# default fallthrough). Guard, repair, and recast turns keep their single
-# focus. The router itself never calls the model.
-INTRODUCE_FLAVORABLE_REASONS = frozenset({
-    "known_open_from_sheet",
-    "default_conversation",
-})
+# (DUE_GUARD_REASONS / SELF_FLAG_MODES / self_flag_uptake_block /
+# INTRODUCE_FLAVORABLE_REASONS DELETED 2026-08-03 with the mode router —
+# full-code-audit S4: the §2.1a self-flag survives as a pure observation
+# in turn_pipeline.stage_uptake_flag; the introduce plan runs every turn.)
 
 
 def introduce_block(
     sheet: dict,
     table: dict | None,
     session_snapshot: dict,
-    *,
-    mode: str,
-    reason: str = "",
 ):
-    """INTRODUCE plan for the turn.
+    """SHADOW introduce plan for the turn (IntroducePlan | None).
 
-    Returns (block_text, IntroducePlan | None). Empty unless the mode
-    decision is a flavorable conversation turn (known-open / default
-    fallthrough — never guard/repair/recast turns). Code decides WHAT to
-    introduce and with WHICH scaffold; the model only realizes it.
+    Code decides WHAT to introduce and with WHICH scaffold; the ledger
+    write happens post-turn only on visible scaffold evidence.  The plan's
+    instruction text never ships (§1.1) — plan_introduction owns budget +
+    eligibility.  (The mode/reason flavor gate died with the router,
+    2026-08-03.)
     """
-    from .introduce_router import plan_introduction, plan_instructions
+    from .introduce_router import plan_introduction
 
     if not table:
-        return "", None
-    if mode != "conversation" or reason not in INTRODUCE_FLAVORABLE_REASONS:
-        return "", None
-    plan = plan_introduction(sheet, table, session_snapshot)
-    if plan is None:
-        return "", None
-    return plan_instructions(plan), plan
+        return None
+    return plan_introduction(sheet, table, session_snapshot)
 
 
 def introduce_scaffold_evidence(plan, reply: str, teach_images=None) -> bool:
@@ -181,54 +160,6 @@ def mark_introduced_if_visible(sheet: dict, plan, reply: str, *, teach_images=No
             EV.INTRODUCE_LAPSED, key=key, payload={"reason": "no_scaffold"}
         )
     return sheet, None
-
-
-# --- §2.1a self-flag uptake, instruction path (BINDING, 2026-07-28) ---------
-# The REGEX-visible cheap case only (surface-form spotting, legit per §4.2):
-# the learner literally marked a token as uncertain (quoted single token or a
-# "(english)?" gloss-guess like «uvia (rain)»). MEANING-level detection
-# (content_offer) stays with the shadow classifier — no routing change, no
-# gate (per docs/reviews-content-uptake-law.md condition (c)).
-# Guard turns are excluded: help/topic/grammar guards already perform uptake.
-SELF_FLAG_MODES = frozenset({"conversation", "transfer", "cf_recast"})
-
-
-def self_flag_uptake_block(
-    learner: str,
-    *,
-    mode: str,
-    reason: str = "",
-    mode_state=None,
-) -> tuple[str, str]:
-    """(instruction_text, flagged_token) for a §2.1a self-flagged form, or
-    ("", "").
-
-    Budget-tracked in ModeSessionState (content_uptake_last_turn): ≤1 per 3
-    teaching turns, never consecutive — when exhausted, nothing fires and the
-    agenda proceeds (§2.1a anti-starvation clause). Fires only on
-    conversation-flavored turns; guard/repair turns keep their single focus.
-
-    Phase 3 batch 2 leaf push-down: returns the RAW token (not the rendered
-    "uptake_flagged:<token>" string) — the caller emits the typed
-    UPTAKE_FLAGGED TurnEvent whose render is that legacy note.
-    """
-    from .observe import detect_self_flagged_token
-
-    if mode not in SELF_FLAG_MODES or reason in DUE_GUARD_REASONS:
-        return "", ""
-    token = detect_self_flagged_token(learner or "")
-    if not token:
-        return "", ""
-    if mode_state is not None and not mode_state.content_uptake_allowed():
-        return "", ""
-    if mode_state is not None:
-        mode_state.note_content_uptake()
-    instr = (
-        f"UPTAKE (§2.1a): the learner flagged «{token}» as uncertain — give "
-        "its correct pack-legal form or nearest pack paraphrase THIS turn "
-        "(one model). No ledger introduce, no denylist breach, no side quest."
-    )
-    return instr, token
 
 
 # --- Progress journey rail wiring (docs/design-progression-view.md) ---------
@@ -324,7 +255,6 @@ def build_debug_entry(
     system,
     messages,
     task: str,
-    decision_dict: dict | None,
     usage: dict | None,
     gate_result=None,
     notes=None,
@@ -334,10 +264,12 @@ def build_debug_entry(
     raw: str = "",
     reply: str = "",
 ) -> dict:
-    """One debug ring-buffer entry (JSON-safe; full text, no truncation)."""
+    """One debug ring-buffer entry (JSON-safe; full text, no truncation).
+
+    The mode/reason/hard_break/instructions shadow fields DELETED
+    2026-08-03 with the mode router (full-code-audit S4)."""
     import datetime as _dt
 
-    dec = decision_dict or {}
     u = usage or {}
     history = [
         {"role": str(m.get("role") or ""), "content": _msg_text(m.get("content"))}
@@ -356,10 +288,6 @@ def build_debug_entry(
         "turn": int(turn or 0),
         "is_open": bool(is_open),
         "model": model,
-        "mode": str(dec.get("mode") or ""),
-        "reason": str(dec.get("reason") or ""),
-        "hard_break": bool(dec.get("hard_break")),
-        "instructions": str(dec.get("instructions") or ""),
         "system_blocks": [
             {
                 "label": _label_system_block(b.get("text") or "", i),
@@ -632,8 +560,6 @@ class ConversationalSession:
     )
     last_plan = _state_delegate("last_plan")
     pedagogy_memory = _state_delegate("pedagogy_memory")
-    mode_state = _state_delegate("mode_state")
-    last_mode_decision = _state_delegate("last_mode_decision")
     debug_requests = _state_delegate("debug_requests")
     costs = _state_delegate("costs")
     progress_session_id = _state_delegate("progress_session_id")
@@ -697,11 +623,12 @@ class ConversationalSession:
             )
         # Aggregate session state (Phase 1 batch 1,
         # docs/reviews-architecture-refactor.md): the surviving stores
-        # (SessionMemory / ModeSessionState / SessionCostTracker) + the
-        # loose session attributes. All historical attribute names keep
-        # working via the delegate properties defined after __init__.
+        # (SessionMemory / SessionCostTracker) + the loose session
+        # attributes. All historical attribute names keep working via the
+        # delegate properties defined after __init__.
         # (PhaseState/TaskState died with the session-phase machinery —
-        # full-code-audit S9 deletion, 2026-08-03.)
+        # full-code-audit S9, 2026-08-03; ModeSessionState died with the
+        # mode router — full-code-audit S4, 2026-08-03.)
         self.state = SessionState.fresh(source_label=label)
         # Association table (Phase 3, r7 S4): loaded once per session. A
         # missing/invalid table disables the introduce router (turns note
@@ -856,7 +783,6 @@ class ConversationalSession:
         system,
         messages,
         task: str,
-        decision_dict: dict | None,
         usage: dict | None,
         gate_result=None,
         notes=None,
@@ -875,7 +801,6 @@ class ConversationalSession:
                 system=system,
                 messages=messages,
                 task=task,
-                decision_dict=decision_dict,
                 usage=usage,
                 gate_result=gate_result,
                 notes=notes,
@@ -906,20 +831,17 @@ class ConversationalSession:
         The grok-3-mini rail enricher (tutor/focus_enrich.py) was DELETED
         2026-08-03 (full-code-audit S9, USER-adjudicated: a per-turn model
         call for right-rail chrome). The rail is the static
-        can_dos.build_focus_panel projection of the sheet + last mode
-        decision + last turn render — cheap, synchronous, no thread.
+        can_dos.build_focus_panel projection of the sheet + last turn
+        render — cheap, synchronous, no thread.  (The last-mode-decision
+        overlay died with the mode router, 2026-08-03.)
         """
         sheet_for_focus = self._sheet_for_focus()
-        if self.last_mode_decision:
-            sheet_for_focus = {**sheet_for_focus, "_last_mode_decision": self.last_mode_decision}
         if self.last_turn_render is not None:
             sheet_for_focus = {
                 **sheet_for_focus,
                 "_last_turn_render": self.last_turn_render.as_dict(),
             }
-        panel = build_focus_panel(
-            sheet_for_focus, mode_decision=self.last_mode_decision
-        )
+        panel = build_focus_panel(sheet_for_focus)
         with self._focus_lock:
             self._focus_panel = panel
             self._focus_meta = {"source": "static"}
@@ -1073,17 +995,22 @@ class ConversationalSession:
         )
         sink.append(ev.emit(EV.IMAGE_GEN_ASYNC, key=concept, stage="image"))
 
-    def _attach_mode_image(
-        self, decision, sched_notes: list[str] | None = None
+    def _attach_concept_image(
+        self,
+        concept: str | None,
+        *,
+        decision_reason: str,
+        sched_notes: list[str] | None = None,
     ) -> list[dict]:
-        """Primary attach: mode-requested concept, cache-only on the reply path.
+        """Code-side concept attach, cache-only on the reply path (the
+        introduce R-B wire; the mode-decision attach died with the router,
+        2026-08-03).
 
         Audit (e) 2026-07-28: the reply path never generates (latency law) —
         a cache hit attaches same-turn; a miss returns [] instantly, is noted
         visibly (capped/disabled/async), and warms in a daemon thread so the
         image exists on a later turn.
         """
-        concept = decision.image_concept
         if not concept:
             return []
         from .teach_assets import ensure_asset
@@ -1094,14 +1021,14 @@ class ConversationalSession:
             # settle_chrome for confirmed display only.
             return [{
                 **hit,
-                "decision_reason": f"mode:{decision.mode.value}",
+                "decision_reason": decision_reason,
                 "visual_score": 1.0,
             }]
         self._note_image_miss(
             concept,
             sched_notes,
-            source="mode",
-            decision_reason=f"warm:mode:{decision.mode.value}",
+            source="introduce",
+            decision_reason=f"warm:{decision_reason}",
         )
         return []
 
@@ -1158,15 +1085,17 @@ class ConversationalSession:
                 notes.extend(self._progress_production(d.key, d.kind))
         return notes
 
-    def _spawn_signal_shadow(self, learner: str, mode: str, reason: str) -> None:
+    def _spawn_signal_shadow(self, learner: str) -> None:
         """LLM intent classifier in SHADOW: parallel to the tutor call (zero
-        added latency). Audits routing disagreements to the cost ledger
-        (Round-2 promotion metrics) and clears stale comprehension holds so a
-        misroute cannot carry into the next turn."""
+        added latency). Records the classified signals to the cost ledger
+        and clears stale comprehension holds so a stale hold cannot carry
+        into the next turn.  (The routed_mode/disagree fields died with
+        the mode router, 2026-08-03 — there is no routing to disagree
+        with.)"""
         from .signal_classifier import classifier_enabled, classify_signals
 
         if getattr(config, "SIGNAL_CLASSIFIER_BLOCKING", False):
-            return  # blocking path already classified pre-routing
+            return  # blocking path already classified pre-turn
         if not classifier_enabled():
             return
 
@@ -1186,18 +1115,11 @@ class ConversationalSession:
                     )
                 from .costs import record_event
 
-                disagree = bool(
-                    sigs & {"help_request", "topic_request"}
-                    and mode in ("comprehension_repair", "form_focus")
-                )
                 record_event({
                     "source": self.costs.source,
                     "category": "classifier_shadow",
                     "model": str(meta.get("model") or ""),
                     "signals": sorted(sigs),
-                    "routed_mode": mode,
-                    "routed_reason": reason,
-                    "disagree": disagree,
                     "outcome": meta.get("outcome") or "ok",
                     "usd": 0.0,
                     "priced": True,
@@ -1325,7 +1247,7 @@ class ConversationalSession:
         # copy: emitters that run after _finish (introduce ledger, gate tail,
         # asked-topic registry, tail summary) land in the same list.
         result.events = ev.events
-        # Mode runtime attaches plan/mode/images *after* finish — log then.
+        # The recorder stages attach plan/gate/images *after* finish — log then.
         if self.logger and not skip_log:
             self._log_turn_result(
                 result,
@@ -1413,12 +1335,13 @@ class ConversationalSession:
         input_mode: str = "text",
         log_learner: str | None = None,
     ) -> TurnResult:
-        """Code selects mode; AI realizes; gate verifies; sheet hard-updates.
+        """The model teaches; gate verifies; sheet hard-updates (§1.1 —
+        the mode router DELETED 2026-08-03, full-code-audit S4).
 
         Phase 4 CLOSED (docs/reviews-architecture-refactor.md): every
         region runs as named stages over a TurnContext — the stage tuples
         in tutor/turn_pipeline.py ARE the documentation.  Executor order:
-        PRE_MODEL_STAGES → stage_contributors → REALIZE_STAGES (a
+        PRE_MODEL_STAGES → REALIZE_STAGES (a
         provider exception becomes ctx.error_result, returned immediately)
         → the GATE_REPAIR_STAGES trio (context build outside the historical
         try/except; any gate exception emits OUTPUT_GATE_ERROR and the turn
@@ -1432,7 +1355,6 @@ class ConversationalSession:
             REALIZE_STAGES,
             RECORDER_STAGES,
             TurnContext,
-            stage_contributors,
             stage_gate_check,
             stage_gate_context,
             stage_gate_repair,
@@ -1448,7 +1370,6 @@ class ConversationalSession:
         )
         for _stage in PRE_MODEL_STAGES:
             _stage(self, ctx)
-        stage_contributors(self, ctx)
         for _stage in REALIZE_STAGES:
             _stage(self, ctx)
         if ctx.error_result is not None:
@@ -1613,49 +1534,19 @@ class ConversationalSession:
         return format_sheet_human(self.sheet)
 
     def sheet_public(self) -> dict:
-        """JSON-safe sheet view for the web UI (includes focus rail cards)."""
-        # Rebuild live mode titles every paint (cheap).
-        try:
-            live_panel = build_focus_panel(
-                self._sheet_for_focus(),
-                mode_decision=self.last_mode_decision,
-            )
-        except Exception as e:
-            self._oops("sheet_public.live_panel", e)
-            live_panel = None
+        """JSON-safe sheet view for the web UI (includes focus rail cards).
 
+        (The live-mode panel merge died with the mode router, 2026-08-03 —
+        the rail is the static sheet projection.)"""
         if self._focus_panel is None:
             try:
                 self._refresh_focus()
             except Exception as e:
                 self._oops("sheet_public.refresh_focus", e)
-                self._focus_panel = live_panel or build_focus_panel(self._sheet_for_focus())
-                self._focus_meta = {"source": "live_mode"}
+                self._focus_panel = build_focus_panel(self._sheet_for_focus())
+                self._focus_meta = {"source": "static"}
 
-        panel = self._focus_panel or live_panel or build_focus_panel(self._sheet_for_focus())
-        if live_panel and isinstance(panel, dict) and isinstance(live_panel, dict):
-            merged = dict(panel)
-            live_f = live_panel.get("focus") or {}
-            old_f = dict(merged.get("focus") or {})
-            old_f.update({
-                k: live_f[k]
-                for k in (
-                    "live", "mode", "mode_reason", "hard_break", "title",
-                    "activity", "why", "image_concept", "can_do",
-                    "sheet_title", "sheet_activity", "sheet_reason",
-                    "primary_is_form", "error_focus", "form_focus",
-                    "error_pattern", "avoid", "skill_status",
-                    "skill_confidence", "learner_name", "scaffold",
-                )
-                if k in live_f
-            })
-            # Prefer live blurb only if enrich didn't set one for this mode
-            if live_f.get("why") and not old_f.get("blurb"):
-                old_f["why"] = live_f["why"]
-            merged["focus"] = old_f
-            if live_panel.get("morphology"):
-                merged["morphology"] = live_panel["morphology"]
-            panel = merged
+        panel = self._focus_panel or build_focus_panel(self._sheet_for_focus())
 
         focus = panel.get("focus") if isinstance(panel, dict) else {}
         morph = panel.get("morphology") if isinstance(panel, dict) else []

@@ -53,7 +53,6 @@ class TestOutputGate(unittest.TestCase):
             "¡Qué bien! Me llamo Sofía. ¿Cómo te llamas?",
             is_open=False,
             already_asked=set(),
-            already_shown=set(),
         )
         self.assertTrue(g.ok, g.faults)
         self.assertTrue(
@@ -62,6 +61,7 @@ class TestOutputGate(unittest.TestCase):
         )
 
     def test_gate_loop_reask_name(self):
+        # This session's tutor already ASKED the name probe → re-ask faults.
         parts = {
             "acknowledge": "¡Hola!",
             "model": "Me llamo Sofía.",
@@ -72,10 +72,42 @@ class TestOutputGate(unittest.TestCase):
             parts,
             "¿Cómo te llamas?",
             already_asked={"ask_name"},
-            already_shown={"name"},
         )
         self.assertFalse(g.ok)
         self.assertIn("gate:probe_loop", g.faults)
+
+    def test_probe_scan_ignores_model_and_acknowledge(self):
+        # Gate retune 2026-08-03: model/acknowledge text is roleplay
+        # dialogue, not an ask (T2–T4 false positives in
+        # evals/results/20260803-104618-student) — the scan reads the TRY
+        # and CONTINUE parts only.
+        parts = {
+            "acknowledge": "¡Qué bien! ¿Cómo estás? es un saludo.",
+            "model": "¡Hola! ¿Cómo estás hoy? — Estoy bien.",
+            "try": "¿Dónde está el capitán?",
+            "structured": True,
+        }
+        g = check_output_gate(
+            parts,
+            "¡Hola! ¿Cómo estás hoy? — Estoy bien. ¿Dónde está el capitán?",
+            already_asked={"ask_how", "ask_name"},
+        )
+        self.assertNotIn("gate:probe_loop", g.faults)
+
+    def test_no_shown_skill_permanent_ban(self):
+        # The shown-skill ban is DELETED: a learner having demonstrated
+        # «estoy» must not forbid ¿Cómo estás? forever — only a repeat of
+        # THIS session's own ask (already_asked) faults.
+        parts = {
+            "acknowledge": "¡Hola!",
+            "model": "Estoy bien.",
+            "try": "¿Cómo estás hoy?",
+            "structured": True,
+        }
+        g = check_output_gate(
+            parts, "Estoy bien. ¿Cómo estás hoy?", already_asked=set(),
+        )
+        self.assertNotIn("gate:probe_loop", g.faults)
 
     def test_gate_english_wall(self):
         """Long mostly-English turn: ratio < 0.50 and alpha >= 12 → critical."""
@@ -205,9 +237,12 @@ class TestOutputGate(unittest.TestCase):
 
 
 class TestUnscaffoldedNewItemGate(unittest.TestCase):
-    """Phase 4 (r7 S3): gate:unscaffolded_new_item (critical) + gate:regloss
-    (soft). Runs against the REAL pack association table like the router
-    tests — enforcement is tested on shipped data."""
+    """Phase 4 (r7 S3), RETUNED 2026-08-03 (full-code-audit S4, Grok
+    AMENDs): gate:unscaffolded_new_item is a SOFT advisory (bare first
+    exposures); gate:cluster_veto is the surviving CRITICAL (same-theme
+    extras); every visibly-used key lands in scaffold_saved (exposure
+    ledger, incl. kind "bare").  Runs against the REAL pack association
+    table — enforcement is tested on shipped data."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -225,7 +260,6 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
             parts,
             visible,
             is_open=False,
-            mode=kw.pop("mode", "conversation"),
             association_table=(self.table if table == "real" else table),
             sheet=sheet if sheet is not None else default_sheet(),
             **kw,
@@ -234,17 +268,22 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
     def _parts(self, model, try_="¿Puedes decirlo?"):
         return {"model": model, "try": try_, "structured": True}
 
-    def test_bare_unintroduced_mwu_is_critical_fault(self):
+    def test_bare_unintroduced_mwu_is_soft_advisory(self):
         g = self._gate(
             self._parts("Hasta luego."),
             "Hasta luego. ¿Puedes decirlo?",
         )
         self.assertIn("gate:unscaffolded_new_item", g.faults)
-        self.assertIn("GATE FAIL", g.repair_instruction)
         self.assertFalse(g.ok)
         self.assertTrue(
             any("gate:unscaffolded_new_item" in n for n in g.notes), g.notes
         )
+        # SOFT severity (retune): never in the pipeline's critical set.
+        from tutor.turn_pipeline import GATE_CRITICAL_FAULTS
+
+        self.assertNotIn("gate:unscaffolded_new_item", GATE_CRITICAL_FAULTS)
+        # AMEND 2a: bare use is still exposure — first_seen evidence "bare".
+        self.assertEqual(g.scaffold_saved.get("hasta luego"), "bare")
 
     def test_glossed_new_item_passes(self):
         g = self._gate(
@@ -253,9 +292,20 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
         )
         self.assertNotIn("gate:unscaffolded_new_item", g.faults)
 
+    def test_same_turn_image_counts_as_scaffold(self):
+        # AMEND 2b: an attached teach image for the key IS its scaffold.
+        g = self._gate(
+            self._parts("Hasta luego."),
+            "Hasta luego. ¿Puedes decirlo?",
+            image_concepts={"hasta_luego"},
+        )
+        self.assertNotIn("gate:unscaffolded_new_item", g.faults)
+        self.assertEqual(g.scaffold_saved.get("hasta luego"), "image")
+
     def test_two_glossed_same_theme_farewells_fault_the_extra(self):
         # r7 R-F cluster ban as CODE: one new item per turn — the second
-        # farewell faults even though both carry glosses.
+        # farewell faults CRITICALLY (gate:cluster_veto) even though both
+        # carry glosses.
         parts = self._parts(
             "**Hasta luego** (see you later). **Adiós** (goodbye)."
         )
@@ -264,9 +314,13 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
             "**Hasta luego** (see you later). **Adiós** (goodbye). "
             "¿Puedes decirlo?",
         )
-        self.assertIn("gate:unscaffolded_new_item", g.faults)
+        self.assertIn("gate:cluster_veto", g.faults)
+        self.assertNotIn("gate:unscaffolded_new_item", g.faults)
         self.assertIn("GATE FAIL", g.repair_instruction)
         self.assertFalse(g.ok)
+        from tutor.turn_pipeline import GATE_CRITICAL_FAULTS
+
+        self.assertIn("gate:cluster_veto", GATE_CRITICAL_FAULTS)
 
     def test_introduce_plan_key_is_exempt(self):
         g = self._gate(
@@ -285,7 +339,7 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
             "**Hasta luego** (see you later). **Adiós** (goodbye).",
             introduce_key="hasta luego",
         )
-        self.assertIn("gate:unscaffolded_new_item", g.faults)
+        self.assertIn("gate:cluster_veto", g.faults)
         self.assertIn("GATE FAIL", g.repair_instruction)
         self.assertFalse(g.ok)
 
@@ -306,7 +360,6 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
         )
         self.assertIn("gate:regloss", g.faults)
         self.assertNotIn("gate:unscaffolded_new_item", g.faults)
-        self.assertIn("GATE FAIL", g.repair_instruction)
         self.assertFalse(g.ok)
 
     def test_regloss_allowed_after_retrieval_failure(self):
@@ -354,14 +407,6 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
         )
         self.assertNotIn("gate:unscaffolded_new_item", g.faults)
 
-    def test_placement_mode_is_exempt(self):
-        g = self._gate(
-            self._parts("Hasta luego."),
-            "Hasta luego.",
-            mode="placement",
-        )
-        self.assertNotIn("gate:unscaffolded_new_item", g.faults)
-
     def test_disabled_without_table(self):
         g = self._gate(
             self._parts("Hasta luego."),
@@ -371,9 +416,9 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
         self.assertNotIn("gate:unscaffolded_new_item", g.faults)
 
     def test_english_wall_still_trips_alongside(self):
-        # Regression guard: r7 S3 must not blunt the wall. A long English
-        # turn with a bare new item carries BOTH faults, and the repair
-        # says one gloss only (no full-English rewrite invitation).
+        # Regression guard: the retune must not blunt the wall. A long
+        # English turn with a bare new item carries BOTH faults (the wall
+        # critical, the bare item a soft advisory).
         parts = {
             "acknowledge": "Good job you nailed it, that was really great!",
             "model": "Hasta luego.",
@@ -413,19 +458,40 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
         self.assertFalse(is_introduced(s, "gracias", "lexicon"))
         g2 = self._gate(self._parts("Gracias."), "Gracias.", sheet=s)
         self.assertNotIn("gate:unscaffolded_new_item", g2.faults)
-        self.assertNotIn("gate:unscaffolded_flood", g2.faults)
         self.assertNotIn("gate:regloss", g2.faults)
         # Skipped keys are not re-reported (no repeat first_seen writes).
         self.assertNotIn("gracias", g2.scaffold_saved)
 
-    def test_formula_storm_softens_to_flood(self):
-        # Round-2 storm soften — Grok's blank-sheet multi-formula storm:
-        # 6 distinct bare keys → SOFT gate:unscaffolded_flood carrying the
-        # key list, NO critical fault, no forced rewrite. Extended
-        # 2026-07-28 (acknowledge-scan re-check): the greeting rides the
-        # ACKNOWLEDGE part — the full-visible-text scan must find it there
-        # and the storm must STILL soften to the soft flood, not go
-        # critical (the formulaic-storm vector stays closed).
+    def test_bare_first_seen_stops_refaulting(self):
+        # AMEND 2a executed end-to-end: a BARE key soft-faults on turn 1
+        # but its exposure lands in scaffold_saved ("bare"); after the
+        # session's first_seen write the same bare key never faults again
+        # (the «bien» fired-5× pathology in the baseline run).
+        from tutor.character_sheet import default_sheet
+        from tutor.retrieval_scheduler import is_introduced, mark_first_seen
+
+        s = default_sheet()
+        g1 = self._gate(
+            self._parts("Gracias."), "Gracias. ¿Puedes decirlo?", sheet=s
+        )
+        self.assertIn("gate:unscaffolded_new_item", g1.faults)
+        self.assertEqual(g1.scaffold_saved.get("gracias"), "bare")
+        for key, kind in g1.scaffold_saved.items():
+            s = mark_first_seen(s, key, "lexicon", kind)
+        self.assertFalse(is_introduced(s, "gracias", "lexicon"))
+        g2 = self._gate(
+            self._parts("Gracias."), "Gracias. ¿Puedes decirlo?", sheet=s
+        )
+        self.assertNotIn("gate:unscaffolded_new_item", g2.faults)
+        self.assertNotIn("gracias", g2.scaffold_saved)
+
+    def test_formula_storm_is_one_soft_advisory(self):
+        # Retune 2026-08-03: the >=3 flood split is DELETED (it INVERTED
+        # severity — more bare keys read as softer).  A 6-key formula
+        # storm is the same ONE soft advisory as a single bare key, every
+        # key exposure-recorded.  («bien»/«y tú» ride how_are_you theme →
+        # the extras beyond the first are the cluster veto's, which stays
+        # critical at any count.)
         parts = {
             "acknowledge": "¡Hola! Buenos días.",
             "model": "¿Cómo estás? Bien, gracias. ¿Y tú?",
@@ -437,57 +503,61 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
             "¡Hola! Buenos días. ¿Cómo estás? Bien, gracias. ¿Y tú? "
             "¿Puedes decirlo?",
         )
-        self.assertIn("gate:unscaffolded_flood", g.faults)
-        self.assertNotIn("gate:unscaffolded_new_item", g.faults)
-        self.assertEqual(
-            set(g.flood_keys),
-            {"hola", "buenos días", "cómo estás", "bien", "gracias", "y tú"},
-        )
-        self.assertTrue(
-            any(n.startswith("gate:unscaffolded_flood ") for n in g.notes),
-            g.notes,
-        )
-        # No forced rewrite: the flood fault must never enter conv_session's
-        # critical set (soft by omission, like gate:regloss).
-        import inspect
+        self.assertIn("gate:unscaffolded_new_item", g.faults)
+        self.assertNotIn("gate:unscaffolded_flood", g.faults)
+        # Every visibly-used key is exposure-recorded, faulted or not.
+        for key in ("hola", "buenos días", "cómo estás", "bien", "gracias",
+                    "y tú"):
+            self.assertIn(key, g.scaffold_saved, key)
+        # The flood machinery is dead: no threshold constant, no
+        # flood_keys result field.
+        import tutor.output_gate as output_gate_mod
+        from tutor.output_gate import OutputGateResult
 
-        import tutor.conv_session as conv_session
-
+        self.assertFalse(hasattr(output_gate_mod, "FLOOD_MIN_DISTINCT"))
         self.assertNotIn(
-            "gate:unscaffolded_flood", inspect.getsource(conv_session)
+            "flood_keys", OutputGateResult.__dataclass_fields__
         )
 
-    def test_two_bare_keys_stay_critical_no_flood(self):
-        # <= 2 distinct bare keys → CRITICAL as today (dual-farewell shape
-        # at N=2 is untouched by the soften).
+    def test_bare_same_theme_pair_is_cluster_veto(self):
+        # Two bare farewells: the first is the soft bare advisory, the
+        # second is the CRITICAL cluster extra — severity comes from
+        # interference, not from the bare count.
         g = self._gate(
             self._parts("Hasta luego. Adiós."),
             "Hasta luego. Adiós. ¿Puedes decirlo?",
         )
         self.assertIn("gate:unscaffolded_new_item", g.faults)
-        self.assertNotIn("gate:unscaffolded_flood", g.faults)
+        self.assertIn("gate:cluster_veto", g.faults)
+        # No double-fault: the cluster extra is not also in the advisory.
+        note = next(
+            n for n in g.notes if n.startswith("gate:unscaffolded_new_item ")
+        )
+        self.assertNotIn("adiós", note)
 
-    def test_flood_plus_glossed_cluster_extra_keeps_critical(self):
-        # 4 firing keys incl. 2 same-theme farewells: the glossed cluster
-        # extra (adiós) stays CRITICAL at any count; the 3 bare non-cluster
-        # keys ride the soft flood.
+    def test_cluster_extra_glossed_stays_critical_bare_keys_soft(self):
+        # 5 firing keys incl. 2 same-theme glossed farewells: the glossed
+        # cluster extra (adiós) is CRITICAL gate:cluster_veto; the 3 bare
+        # non-cluster keys ride the ONE soft advisory.  ALL of them are
+        # exposure-recorded (AMEND 2a — even the faulted extra: the
+        # learner saw it).
         g = self._gate(
             self._parts(
                 "**Hasta luego** (see you later). **Adiós** (goodbye). "
-                "¡Hola! Gracias. Bien."
+                "¡Hola! Gracias. Pan."
             ),
             "**Hasta luego** (see you later). **Adiós** (goodbye). "
-            "¡Hola! Gracias. Bien. ¿Puedes decirlo?",
+            "¡Hola! Gracias. Pan. ¿Puedes decirlo?",
         )
+        self.assertIn("gate:cluster_veto", g.faults)
         self.assertIn("gate:unscaffolded_new_item", g.faults)
         self.assertIn("GATE FAIL", g.repair_instruction)
         self.assertFalse(g.ok)
-        self.assertIn("gate:unscaffolded_flood", g.faults)
-        self.assertEqual(set(g.flood_keys), {"hola", "gracias", "bien"})
-        # The kept glossed farewell was scaffold-saved; the cluster extra
-        # faulted, so it must NOT earn a first_seen write.
-        self.assertIn("hasta luego", g.scaffold_saved)
-        self.assertNotIn("adiós", g.scaffold_saved)
+        self.assertEqual(g.scaffold_saved.get("hasta luego"), "gloss")
+        self.assertEqual(g.scaffold_saved.get("adiós"), "gloss")
+        self.assertEqual(g.scaffold_saved.get("hola"), "bare")
+        self.assertEqual(g.scaffold_saved.get("gracias"), "bare")
+        self.assertEqual(g.scaffold_saved.get("pan"), "bare")
 
     def test_structural_keys_soy_never_faults(self):
         # AMEND 3 option B: ser/estar surface forms are paradigm
@@ -579,9 +649,11 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
         self.assertEqual(extras, [])
         self.assertEqual(saved.get("encantado"), "gloss")
 
-    def test_planned_key_bare_stays_out_of_bare_and_saved(self):
+    def test_planned_key_bare_no_fault_but_exposure_recorded(self):
         # Planned key with NO scaffold at all: the introduce path owns the
-        # lapse — the scan neither faults it bare nor records a scaffold.
+        # lapse (no bare fault) — but the exposure is still recorded (AMEND
+        # 2a: EVERY visibly-used key gets first_seen; previously the lapsed
+        # planned key left both ledgers blind → thrash on next bare use).
         from tutor.character_sheet import default_sheet
         from tutor.output_gate import scan_unscaffolded_new_items
 
@@ -593,7 +665,7 @@ class TestUnscaffoldedNewItemGate(unittest.TestCase):
             introduce_key="encantado",
         )
         self.assertEqual(bare, [])
-        self.assertNotIn("encantado", saved)
+        self.assertEqual(saved.get("encantado"), "bare")
 
     def test_mucho_gusto_glossed_in_acknowledge_is_clean(self):
         # Same incident shape WITH the ≤6-word gloss — clean, and the key
@@ -652,8 +724,10 @@ class TestEnglishWallZeroExemption(unittest.TestCase):
     """2026-07-28 zero-English incident: a COMPLIANT true-zero opening
     (English framing + glossed tiny Spanish, tl_ratio 0.32-0.40) tripped
     gate:english_wall, whose forced "Rewrite Spanish-forward" re-ask
-    reproduced the 100%-Spanish opening. Placement mode and blank_zero
-    overlay turns use min_ratio 0.25; genuine all-English still faults."""
+    reproduced the 100%-Spanish opening. blank_zero turns use min_ratio
+    0.25 (the placement-MODE arm died with the router — the blank_zero
+    flag, re-derived in turn_pipeline.stage_gate_context, is the only
+    true-zero path); genuine all-English still faults."""
 
     # Measured ratio 0.35, alpha 34 (fixture arithmetic asserted below).
     ZERO_OPEN_PARTS = {
@@ -687,35 +761,31 @@ class TestEnglishWallZeroExemption(unittest.TestCase):
             alphabetic_token_count(self._blob(parts)), MIN_ALPHA_TOKENS
         )
 
-    def test_compliant_zero_open_passes_in_placement(self):
+    def test_compliant_zero_open_passes_with_blank_zero(self):
+        # The open turn of a true zero rides the same blank_zero flag
+        # (stage_gate_context: blank sheet AND no spanish_ok this turn).
         parts = self.ZERO_OPEN_PARTS
         g = check_output_gate(
-            parts, self._blob(parts), is_open=True, mode="placement",
+            parts, self._blob(parts), is_open=True, blank_zero=True,
         )
         self.assertNotIn("gate:english_wall", g.faults)
 
     def test_compliant_zero_turn_passes_with_blank_zero_flag(self):
-        # Post-open overlay turns run as conversation/repair modes where the
-        # placement exemption cannot reach — blank_zero (threaded from
-        # conv_session) applies the same 0.25 floor.
         parts = self.ZERO_OPEN_PARTS
         g = check_output_gate(
-            parts, self._blob(parts), is_open=False, mode="conversation",
-            blank_zero=True,
+            parts, self._blob(parts), is_open=False, blank_zero=True,
         )
         self.assertNotIn("gate:english_wall", g.faults)
 
     def test_same_turn_without_blank_zero_still_walls(self):
         # Normal-learner thresholds unchanged: ratio 0.35 < 0.50 faults in a
-        # plain conversation turn.
+        # plain turn.
         parts = self.ZERO_OPEN_PARTS
-        g = check_output_gate(
-            parts, self._blob(parts), is_open=False, mode="conversation",
-        )
+        g = check_output_gate(parts, self._blob(parts), is_open=False)
         self.assertIn("gate:english_wall", g.faults)
 
     def test_all_english_still_faults_everywhere(self):
-        # Genuine all-English (ratio 0.0) faults in placement AND blank_zero.
+        # Genuine all-English (ratio 0.0) faults even under blank_zero.
         parts = {
             "acknowledge": "Good job you nailed it!",
             "model": "That means my name is.",
@@ -724,39 +794,15 @@ class TestEnglishWallZeroExemption(unittest.TestCase):
         }
         blob = self._blob(parts)
         self.assertEqual(spanish_token_ratio(blob), 0.0)
-        g1 = check_output_gate(parts, blob, is_open=True, mode="placement")
+        g1 = check_output_gate(parts, blob, is_open=True, blank_zero=True)
         self.assertIn("gate:english_wall", g1.faults)
-        g2 = check_output_gate(
-            parts, blob, is_open=False, mode="conversation", blank_zero=True,
-        )
+        g2 = check_output_gate(parts, blob, is_open=False, blank_zero=True)
         self.assertIn("gate:english_wall", g2.faults)
-
-    def test_wall_repair_copy_is_mode_aware(self):
-        # Audit (b1) 2026-07-28: under placement/blank_zero the repair keeps
-        # the zero register (orientation line + glosses, raise Spanish above
-        # the 0.25 floor) — "Rewrite Spanish-forward" there re-fought the
-        # register the floor exemption had just permitted. Normal register
-        # keeps the Spanish-forward instruction.
-        parts = {
-            "acknowledge": "Good job you nailed it!",
-            "model": "That means my name is.",
-            "try": "Please say your name in Spanish now.",
-            "structured": True,
-        }
-        blob = self._blob(parts)
-        g1 = check_output_gate(parts, blob, is_open=True, mode="placement")
-        self.assertIn("gate:english_wall", g1.faults)
-        self.assertIn("GATE FAIL", g1.repair_instruction)
-        self.assertFalse(g1.ok)
-        g2 = check_output_gate(
-            parts, blob, is_open=False, mode="conversation", blank_zero=True,
-        )
-        self.assertIn("GATE FAIL", g2.repair_instruction)
-        self.assertFalse(g2.ok)
-        g3 = check_output_gate(parts, blob, is_open=False, mode="conversation")
+        g3 = check_output_gate(parts, blob, is_open=False)
         self.assertIn("gate:english_wall", g3.faults)
-        self.assertIn("GATE FAIL", g3.repair_instruction)
-        self.assertFalse(g3.ok)
+        for g in (g1, g2, g3):
+            self.assertIn("GATE FAIL", g.repair_instruction)
+            self.assertFalse(g.ok)
 
 
 class TestProbeLoopTopicRegistry(unittest.TestCase):
@@ -874,7 +920,8 @@ class TestProbeLoopTopicRegistry(unittest.TestCase):
         self.assertNotIn("gate:probe_loop", g.faults)
 
     def test_social_fast_path_still_fires_without_registry(self):
-        # Regression: the 4 social regexes keep working with no registry.
+        # Regression: the 4 social regexes keep working with no registry
+        # (the T8/T9 true-positive class — a near-identical try re-asked).
         parts = {
             "acknowledge": "¡Hola!",
             "model": "Me llamo Sofía.",
@@ -885,17 +932,18 @@ class TestProbeLoopTopicRegistry(unittest.TestCase):
             parts,
             "¿Cómo te llamas?",
             already_asked={"ask_name"},
-            already_shown={"name"},
         )
         self.assertIn("gate:probe_loop", g.faults)
 
 
 class TestGateContextParity(unittest.TestCase):
-    """E3 (Phase 4 batch 3): check_output_gate(GateContext) is the new
-    surface; the legacy 18-argument kwarg call is a thin shim building the
-    same context.  Parity: both paths must return identical results on
+    """E3 (Phase 4 batch 3): check_output_gate(GateContext) is the
+    surface; the legacy kwarg call is a thin shim building the same
+    context.  Parity: both paths must return identical results on
     identical inputs — including a fault-rich case exercising the r7 S3
-    table/sheet checks, the registry probe-loop and the recast demand."""
+    table/sheet checks and the probe fast path.  (The mode-keyed fields —
+    mode / already_shown / require_recast / image_present — died with the
+    mode-keyed contracts, gate retune 2026-08-03; image_concepts joined.)"""
 
     def _inputs(self):
         from pathlib import Path
@@ -917,10 +965,7 @@ class TestGateContextParity(unittest.TestCase):
         kwargs = dict(
             is_open=False,
             already_asked={"ask_gusta"},
-            already_shown={"gusta"},
-            mode="cf_recast",
-            image_present=False,
-            require_recast=True,
+            image_concepts=set(),
             raw="<tutor>" + visible + "</tutor>",
             truncated=True,
             association_table=table,
@@ -944,11 +989,11 @@ class TestGateContextParity(unittest.TestCase):
         )
         self.assertEqual(legacy.as_dict(), via_ctx.as_dict())
         # The case is fault-rich on purpose — parity on a trivial OK turn
-        # would prove nothing.  Four distinct check families trip: the
-        # truncation flag, the recast demand, the r7 S3 table/sheet scan
-        # («hasta luego» bare + unglossed) and the probe-loop registry.
+        # would prove nothing.  Three distinct check families trip: the
+        # truncation flag, the r7 S3 table/sheet scan («hasta luego» bare
+        # + unglossed) and the probe fast path (ask_gusta re-asked).
         for fault in (
-            "gate:truncated", "gate:missing_recast",
+            "gate:truncated",
             "gate:unscaffolded_new_item", "gate:probe_loop",
         ):
             self.assertIn(fault, legacy.faults)
@@ -963,20 +1008,21 @@ class TestGateContextParity(unittest.TestCase):
         )
         self.assertEqual(legacy.as_dict(), via_ctx.as_dict())
 
-    def test_context_field_census_covers_the_18_arg_seam(self):
-        # The dataclass carries EXACTLY what the historical signature
-        # encoded: 2 positionals + 16 keyword-only = 18.
+    def test_context_field_census(self):
+        # The dataclass carries EXACTLY the retuned surface (15 fields —
+        # the 18-arg seam minus mode/already_shown/require_recast/
+        # image_present, plus image_concepts).
         from tutor.output_gate import GateContext
 
         assert sorted(GateContext.__dataclass_fields__) == sorted([
             "parts", "visible",
-            "is_open", "already_asked", "already_shown", "mode",
-            "image_present", "require_recast", "raw", "truncated",
+            "is_open", "already_asked", "image_concepts", "raw",
+            "truncated",
             "association_table", "sheet", "introduce_key",
             "retrieval_failed_keys", "learner_text", "blank_zero",
             "asked_topics", "topic_nouns",
         ])
-        assert len(GateContext.__dataclass_fields__) == 18
+        assert len(GateContext.__dataclass_fields__) == 15
 
 
 class TestToolOnlyAbility(unittest.TestCase):
