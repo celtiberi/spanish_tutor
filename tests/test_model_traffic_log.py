@@ -55,6 +55,31 @@ def test_log_model_exchange_writes_full_entry(monkeypatch, tmp_path):
     lines = path.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 2
     got = json.loads(lines[0])
-    assert got["system_blocks"][0]["text"] == "S" * 5000
-    assert got["response"]["raw"] == "RAW"
-    assert got["response"]["reply"] == "VISIBLE"
+    # sent / received / router_shadow_NOT_SENT are structurally distinct
+    # (incident 2026-08-03: flat entries let shadow "instructions" read
+    # as shipped prompt text).
+    assert got["sent"]["system_blocks"][0]["text"] == "S" * 5000
+    assert got["received"]["raw"] == "RAW"
+    assert got["received"]["reply"] == "VISIBLE"
+    assert "system_blocks" not in got and "response" not in got
+
+
+def test_router_shadow_never_reads_as_sent(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "LOG_DIR", tmp_path)
+    logger = SessionLogger(arch="conversational", label="shadowtest")
+    entry = build_debug_entry(
+        model="fake", system=[], messages=[], task="T",
+        decision_dict={"mode": "new_input", "reason": "r",
+                       "instructions": "SESSION PHASE: NEW INPUT — script"},
+        activity="new_input", usage=None, raw="", reply="",
+    )
+    logger.log_model_exchange(entry)
+    got = json.loads(
+        (tmp_path / f"{logger.session_id}.requests.jsonl").read_text()
+    )
+    assert got["router_shadow_NOT_SENT"]["instructions"].startswith(
+        "SESSION PHASE"
+    )
+    # The script text appears ONLY under the not-sent key.
+    sent_blob = json.dumps(got["sent"])
+    assert "SESSION PHASE" not in sent_blob

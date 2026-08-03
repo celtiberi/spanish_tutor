@@ -91,12 +91,38 @@ class SessionLogger:
         """Full outbound request + response for ONE tutor model call, one
         JSON line, sibling file ``<session_id>.requests.jsonl`` (USER
         2026-08-03: "I want to see what is being sent and received").
-        Full text, no truncation — system blocks, task, history window,
-        raw model text, visible reply, usage.  Separate from the main
-        jsonl so turn-result logs stay readable."""
+
+        Structure is the honesty contract (incident 2026-08-03: the flat
+        debug-ring entry printed router-shadow ``instructions`` next to
+        ``system_blocks`` and the operator reasonably concluded scripts
+        were shipping): ``sent`` holds EXACTLY what went to the model,
+        ``received`` what came back, and ``router_shadow_NOT_SENT`` the
+        code-router telemetry that never reaches the prompt (§1.1).
+        Full text, no truncation."""
+        e = dict(entry)
+        shadow = {
+            k: e.pop(k)
+            for k in ("mode", "reason", "instructions", "activity",
+                      "hard_break")
+            if k in e
+        }
+        record = {
+            "ts": e.pop("ts", None),
+            "turn": e.pop("turn", None),
+            "is_open": e.pop("is_open", None),
+            "model": e.pop("model", None),
+            "sent": {
+                "system_blocks": e.pop("system_blocks", []),
+                "history": e.pop("history", []),
+                "task_message": e.pop("task_message", ""),
+            },
+            "received": e.pop("response", {}),
+            "router_shadow_NOT_SENT": shadow,
+            **e,  # anything future entries add stays visible, unhidden
+        }
         path = config.LOG_DIR / f"{self.session_id}.requests.jsonl"
         with path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(_jsonable(entry), ensure_ascii=False) + "\n")
+            f.write(json.dumps(_jsonable(record), ensure_ascii=False) + "\n")
 
     def _write_jsonl(self, record: dict) -> None:
         with self.jsonl_path.open("a", encoding="utf-8") as f:
