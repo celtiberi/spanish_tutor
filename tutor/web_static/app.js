@@ -1358,6 +1358,18 @@ async function sendMessage(text, inputMode = "text", opts = {}) {
       body: JSON.stringify({ message: text, input_mode: inputMode }),
     });
     typing.remove();
+    // No-hide (2026-08-03): a turn that carries an error must SHOW it —
+    // an empty tutor bubble with the error invisible was the silent-
+    // failure class (provider errors rendered as blank turns).
+    if (data.error) {
+      addBubble("system", `TURN ERROR (not hidden): ${data.error}`);
+    }
+    const internalErrs = (data.notes || []).filter((n) =>
+      String(n).startsWith("internal_error:")
+    );
+    for (const n of internalErrs) {
+      addBubble("system", `⚠ ${n}`);
+    }
     addBubble("tutor", data.reply, { parts: data.parts });
     setNotes(data.notes);
     renderSheet(data.sheet); // score + static rail immediately

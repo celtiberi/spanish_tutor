@@ -134,3 +134,48 @@ class TestGateNoHide:
         assert "gate:unscaffolded_new_item" in _INTEGRITY_HOLD
         assert "pedagogy:no_teach_move" in _DEGRADE_OK
         assert not (_INTEGRITY_HOLD & _DEGRADE_OK)
+
+
+class TestNoHideInternalErrors:
+    def test_progress_path_exception_surfaces_in_notes(
+        self, tutor_session_factory, monkeypatch
+    ):
+        # No-hide (USER 2026-08-03): a broken side-channel emits a visible
+        # internal_error note — never a silent return [].
+        import tutor.progress_ledger as pl
+
+        def boom(*a, **k):
+            raise RuntimeError("ledger exploded")
+
+        # sheet_crossings runs on EVERY ai turn (conv_session._finish)
+        monkeypatch.setattr(pl, "sheet_crossings", boom)
+        ctx = tutor_session_factory(seed_sheet=_known_wellbeing_seed(),
+                                    replies=[OPEN_OK_REPLY])
+        s = ctx.session
+        res = s.open_session()
+        assert res.error is None
+        joined = " ".join(res.notes)
+        # the open plants nothing on this seed, so trigger via a turn if
+        # the open emitted no progress call; either surface is acceptable
+        if "internal_error:" not in joined:
+            turn = s.user_turn("Estoy muy bien, gracias.")
+            joined = " ".join(turn.notes)
+        assert "internal_error:" in joined
+        assert "RuntimeError" in joined
+
+    def test_strict_errors_reraises(self, tutor_session_factory, monkeypatch):
+        from tutor import config as cfg
+        import tutor.progress_ledger as pl
+        import pytest as _pytest
+
+        ctx = tutor_session_factory(seed_sheet=_known_wellbeing_seed(),
+                                    replies=[OPEN_OK_REPLY, OPEN_OK_REPLY])
+        s = ctx.session
+        s.open_session()
+        # Arm strict + the bomb only after a clean open.
+        monkeypatch.setattr(cfg, "STRICT_ERRORS", True)
+        monkeypatch.setattr(pl, "sheet_crossings",
+                            lambda *a, **k: (_ for _ in ()).throw(
+                                RuntimeError("boom")))
+        with _pytest.raises(RuntimeError):
+            s.user_turn("Estoy muy bien, gracias.")

@@ -877,6 +877,30 @@ class ConversationalSession:
             stamp = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
             self.progress_session_id = f"{stamp}-{label}-nolog"
 
+    def _oops(self, site: str, e: Exception) -> list[str]:
+        """No-hide (USER 2026-08-03: "I want no errors or problems hidden").
+        Every formerly-silent `except Exception` routes here: the error is
+        ALWAYS visible (stderr + an internal_error note in the turn when
+        the event log is reachable), and STRICT_ERRORS=1 re-raises so dev
+        sessions crash loudly instead of degrading quietly."""
+        import sys
+        import traceback
+
+        print(f"[internal_error] {site}: {type(e).__name__}: {e}",
+              file=sys.stderr)
+        traceback.print_exc()
+        if getattr(config, "STRICT_ERRORS", False):
+            raise
+        try:
+            ev = session_event_log(self)
+            return [ev.emit(
+                EV.INTERNAL_ERROR, key=site,
+                payload={"error": f"{type(e).__name__}: {e}"},
+                stage="error",
+            )]
+        except Exception:
+            return []
+
     def _progress_note(
         self,
         kind: str,
@@ -901,8 +925,8 @@ class ConversationalSession:
                 "detail": pl.detail_for(kind, key, **(detail_ctx or {})),
             }], session_id=self.progress_session_id,
                 ev_log=session_event_log(self))
-        except Exception:
-            return []
+        except Exception as e:
+            return self._oops("progress_note", e)
 
     def _progress_production(self, key: str, kind: str) -> list[str]:
         """r8 production-evidence milestones at a due SUCCESS (2026-07-29,
@@ -936,8 +960,8 @@ class ConversationalSession:
                 evs, session_id=self.progress_session_id,
                 ev_log=session_event_log(self), stage="schedule",
             )
-        except Exception:
-            return []
+        except Exception as e:
+            return self._oops("progress_ladder", e)
 
     def _progress_sheet_crossings(self, prev_sheet: dict) -> list[str]:
         """Error-recovered + can-do band crossings after process_turn."""
@@ -951,8 +975,8 @@ class ConversationalSession:
                 evs, session_id=self.progress_session_id,
                 ev_log=session_event_log(self), stage="sheet",
             )
-        except Exception:
-            return []
+        except Exception as e:
+            return self._oops("progress_sheet_crossings", e)
 
     def _topic_nouns(self) -> list[str]:
         """Concept palette for the asked-topic extractor — ONE derivation
@@ -998,8 +1022,8 @@ class ConversationalSession:
                 turn=self.pedagogy_memory.turns,
                 is_open=is_open,
             ))
-        except Exception:
-            pass
+        except Exception as e:
+            self._oops("debug_capture", e)
 
     def _sheet_for_focus(self) -> dict:
         """Ability sheet for the focus rail (no personal-name injection —
@@ -1062,7 +1086,9 @@ class ConversationalSession:
             from .image_gen import image_model
 
             img_model = image_model()
-        except Exception:
+        except Exception as e:
+            # §3.4: a silently-guessed model mislabels the money ledger.
+            self._oops("image_costs.model_lookup", e)
             img_model = "gemini-2.5-flash-image"
         self.costs.add_image(img_model, generated)
 
@@ -1118,8 +1144,8 @@ class ConversationalSession:
                     self._note_image_costs([
                         {**hit, "decision_reason": decision_reason}
                     ])
-            except Exception:
-                pass
+            except Exception as e:
+                self._oops(f"image_warm.{key}", e)
             finally:
                 with self._image_warm_lock:
                     self._image_warm_inflight.discard(key)
@@ -1316,8 +1342,8 @@ class ConversationalSession:
                 })
                 if sigs & {"help_request", "topic_request", "spanish_ok"}:
                     self.pedagogy_memory.clear_comprehension_hold()
-            except Exception:
-                pass
+            except Exception as e:
+                self._oops("signal_shadow", e)
 
         threading.Thread(
             target=_work, name="signal-shadow", daemon=True
@@ -1397,8 +1423,8 @@ class ConversationalSession:
                         self._focus_key = key
                         self._focus_meta = meta
                         self._focus_version = int(self._focus_version or 0) + 1
-            except Exception:
-                pass
+            except Exception as e:
+                self._oops("focus_enrich", e)
             finally:
                 with self._focus_lock:
                     self._focus_inflight = False
@@ -1679,8 +1705,9 @@ class ConversationalSession:
         try:
             self.sheet = load_sheet(self.sheet_path)
             self.sheet = clear_session_scoped_affect(self.sheet)
-        except Exception:
-            pass
+        except Exception as e:
+            # Teaching would proceed on a STALE in-memory sheet — visible.
+            self._oops("open_session.load_sheet", e)
 
         # Unified new-chat reset (Phase 1 batch 2, docs/reviews-architecture-
         # refactor.md): EVERY session-scoped store resets — memory, mode
@@ -1696,8 +1723,9 @@ class ConversationalSession:
         # New chat ≠ new learner: seed session memory from durable sheet
         try:
             self.pedagogy_memory.seed_from_sheet(self.sheet, self.profile)
-        except Exception:
-            pass
+        except Exception as e:
+            # Unseeded memory = probe loops on known material — visible.
+            self._oops("open_session.seed_memory", e)
 
         result = self._execute_planned(
             "", is_open=True, log_learner="(session open)",
@@ -1775,8 +1803,8 @@ class ConversationalSession:
         try:
             if self.sheet_path.exists():
                 self.sheet_path.unlink()
-        except OSError:
-            pass
+        except OSError as e:
+            self._oops("reset_sheet.unlink", e)
         self.sheet = default_sheet()
         self.sheet_path.parent.mkdir(parents=True, exist_ok=True)
         save_sheet(self.sheet_path, self.sheet)
@@ -1790,14 +1818,13 @@ class ConversationalSession:
             from . import progress_ledger as pl
 
             pl.record_epoch(session_id=self.progress_session_id)
-            try:
-                from . import grade_log as gl
+            from . import grade_log as gl
 
-                gl.record_epoch(session_id=self.progress_session_id)
-            except Exception:
-                pass
-        except Exception:
-            pass
+            gl.record_epoch(session_id=self.progress_session_id)
+        except Exception as e:
+            # A missed epoch mixes the fresh learner with prior history —
+            # a real reset defect, not ledger noise. Visible.
+            self._oops("reset_sheet.epoch", e)
         # Unified reset (batch 2): the batch-1 twelve stores + the four
         # misses (costs, focus_version, focus_inflight, image_warm_inflight).
         # The on-disk COST ledger is append-only forever (continuity ruling).
@@ -1817,13 +1844,15 @@ class ConversationalSession:
                 self._sheet_for_focus(),
                 mode_decision=self.last_mode_decision,
             )
-        except Exception:
+        except Exception as e:
+            self._oops("sheet_public.live_panel", e)
             live_panel = None
 
         if self._focus_panel is None:
             try:
                 self._refresh_focus(use_ai=False)
-            except Exception:
+            except Exception as e:
+                self._oops("sheet_public.refresh_focus", e)
                 self._focus_panel = live_panel or build_focus_panel(self._sheet_for_focus())
                 self._focus_meta = {"source": "live_mode"}
 
@@ -1862,7 +1891,9 @@ class ConversationalSession:
             today_usd = 0.0
             if today.get("days"):
                 today_usd = list(today["days"].values())[-1].get("usd", 0.0)
-        except Exception:
+        except Exception as e:
+            # A $0 that should be a gap is how the referee nearly lied to us.
+            self._oops("sheet_public.cost_today", e)
             today_usd = 0.0
         return {
             # UI compat shim: identity is always empty — personal-data

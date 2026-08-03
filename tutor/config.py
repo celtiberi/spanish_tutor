@@ -83,6 +83,15 @@ CONTROLLER_EXECUTOR = os.environ.get("CONTROLLER_EXECUTOR", MODEL)
 # hard ValueError at session construction.
 TEACHER_MODE = (os.environ.get("TEACHER_MODE", "planned") or "planned").strip().lower()
 
+# No-hide (USER 2026-08-03): STRICT_ERRORS=1 re-raises exceptions that the
+# turn path would otherwise surface-and-continue. Default off: errors are
+# VISIBLE (internal_error notes + stderr) but a broken side-channel does
+# not kill the teaching turn.
+STRICT_ERRORS = (
+    os.environ.get("STRICT_ERRORS", "0").strip().lower()
+    in ("1", "true", "yes", "on")
+)
+
 # r9 falsifier arm selector (docs/design-planner-rounds.md, USER-ratified
 # 2026-07-30): legacy | p1_reorder | p2_structured. Position/structure
 # controls only — same content, never truncation (SS3.3).

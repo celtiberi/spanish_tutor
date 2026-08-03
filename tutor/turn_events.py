@@ -120,6 +120,7 @@ class TurnEventKind(str, Enum):
     OUTPUT_GATE_REPAIRED = "output_gate_repaired"
     OUTPUT_GATE_STILL_FAIL = "output_gate_still_fail"
     OUTPUT_GATE_ERROR = "output_gate_error"
+    INTERNAL_ERROR = "internal_error"
     OUTPUT_GATE_STRIPPED = "output_gate_stripped"
     OUTPUT_GATE_RECOVERED = "output_gate_recovered"
     OUTPUT_GATE_DEGRADED = "output_gate_degraded"
@@ -333,6 +334,11 @@ NOTE_CATALOG: dict[TurnEventKind, NoteSpec] = {s.kind: s for s in [
           ["turn_pipeline._settle_pixels"],
           ["design-exchange-settlement.md audits"],
           "log-only", False),
+    _spec(TurnEventKind.INTERNAL_ERROR, "internal_error:", False,
+          "<site>:<exc> (no-hide, USER 2026-08-03: a swallowed exception is "
+          "a hidden problem — every catch surfaces or re-raises under "
+          "STRICT_ERRORS)",
+          ["conv_session._oops (swallow sites)"], [], "log-only", False),
     _spec(TurnEventKind.OUTPUT_GATE_STRIPPED, "output_gate_stripped", True,
           "(still_fail floor rung a — probing parts dropped, remainder "
           "re-gated and shipped; system review 2026-07-30)",
@@ -557,6 +563,9 @@ _RENDER = {
     _K.MORPH_CARD: lambda e: f"morph_card:{e.key}",
     _K.FRAME_RECORDED: lambda e: f"frame_recorded:{e.key}",
     _K.RENDER_DROPPED: lambda e: f"render_dropped:{e.key}",
+    _K.INTERNAL_ERROR: lambda e: (
+        "internal_error:" + e.key + ":" + str(e.payload.get("error") or "")
+    ),
     _K.OUTPUT_GATE_STRIPPED: lambda e: "output_gate_stripped",
     _K.OUTPUT_GATE_RECOVERED: lambda e: "output_gate_recovered",
     _K.OUTPUT_GATE_DEGRADED: lambda e: (
@@ -653,6 +662,9 @@ def _parse_tail(kind: TurnEventKind, tail: str) -> tuple[str, dict]:
     if kind is _K.INTRODUCE_LAPSED:
         key, _, reason = tail.rpartition(":")
         return key, {"reason": reason}
+    if kind is _K.INTERNAL_ERROR:
+        site, _, err = tail.partition(":")
+        return site, {"error": err}
     if kind in (_K.OUTPUT_GATE_SOFT_FAIL, _K.OUTPUT_GATE_FAIL,
                 _K.OUTPUT_GATE_STILL_FAIL, _K.OUTPUT_GATE_HELD,
                 _K.OUTPUT_GATE_DEGRADED):
