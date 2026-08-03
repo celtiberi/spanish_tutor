@@ -569,6 +569,8 @@ function renderDebugEntry(e, idx) {
         `</div>`
     )
     .join("");
+  const raw = e.response?.raw || "";
+  const planM = raw.match(/<plan>([\s\S]*?)<\/plan>/i);
   const meta = {
     model: e.model,
     ts: e.ts,
@@ -586,6 +588,16 @@ function renderDebugEntry(e, idx) {
     dbgSection(`SYSTEM BLOCKS · ${(e.system_blocks || []).length}`, sysBlocks) +
     dbgSection("TASK MESSAGE", dbgPre(e.task_message)) +
     dbgSection(`HISTORY · ${hist.length} messages`, histHtml || '<p class="muted">none</p>') +
+    (planM
+      ? dbgSection(
+          "SESSION PLAN (model-authored — learner never sees this)",
+          dbgPre(planM[1].trim())
+        )
+      : "") +
+    dbgSection(
+      `MODEL RESPONSE · raw · ${raw.length} chars`,
+      raw ? dbgPre(raw) : '<p class="muted">none</p>'
+    ) +
     dbgSection(
       "RESPONSE META",
       dbgPre(JSON.stringify(meta, null, 2)),
