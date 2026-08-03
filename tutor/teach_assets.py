@@ -51,8 +51,9 @@ def _generate_on_miss_flag() -> bool:
 GENERATE_ON_MISS = _generate_on_miss_flag()
 
 # ---------------------------------------------------------------------------
-# Pack asset sidecar (Phase 5, docs/reviews-architecture-refactor.md;
-# PEDAGOGY §1.1a).  Asset metadata lives in <pack>/asset_sidecar.json keyed
+# Domain asset sidecar (Phase 5, docs/reviews-architecture-refactor.md;
+# ENGINEERING §1.1a).  Asset metadata lives in
+# domain/spanish_a1/asset_sidecar.json (config.DEFAULT_PACK_DIR) keyed
 # by association-table keys — the sidecar may attach metadata to pack
 # concepts but must NOT invent a second concept list: every sidecar key is
 # validated against the association table plus the checked-in migration

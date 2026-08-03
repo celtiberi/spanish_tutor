@@ -347,7 +347,7 @@ def progress_milestones_fired(traj: dict, result: dict) -> list[str]:
     EXACTLY ONCE across all turn notes as progress_milestone:<kind>:<key>.
 
     Journey rail honesty (docs/design-progression-view.md, as amended;
-    PEDAGOGY §3): the milestone must fire when its code-owned evidence event
+    ENGINEERING §3): the milestone must fire when its code-owned evidence event
     lands, and an up-crossing never fires twice for one key (dedupe law).
     """
     want = list((traj.get("expect") or {}).get("progress_milestones") or [])

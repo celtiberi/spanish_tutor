@@ -2,7 +2,7 @@
 
 Design law: docs/design-progression-view.md — the Proposal AS AMENDED by
 Grok's countersign (adjudication 2026-07-28: "Grok's exact replacement
-blocks are BINDING over the original proposal text"). PEDAGOGY.md §3
+blocks are BINDING over the original proposal text"). ENGINEERING.md §3
 honesty governs: every event maps 1:1 to a code-owned evidence event that
 already fired; the display invents NOTHING. §3.2: introduction is never
 knowledge — a `planted` event records an encounter only, and this module

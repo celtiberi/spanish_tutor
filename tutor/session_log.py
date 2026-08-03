@@ -1,12 +1,22 @@
-"""Full-fidelity session logging for tutor runs (single-model or plan/realize).
+"""Full-fidelity session logging for tutor runs.
 
-Writes two artifacts per session under logs/sessions/:
-  - <id>.jsonl  — machine-readable, one JSON object per event
-  - <id>.md     — human-readable transcript for review
+Three artifacts per session under ``logs/sessions/<YYYY-MM-DD>/``:
+  - ``<id>.jsonl``          — machine-readable, one JSON object per event
+  - ``<id>.md``             — human-readable transcript for review
+  - ``<id>.requests.jsonl`` — model traffic log (full request + response)
 
-Controller turns should log: learner text, each planner attempt (raw + parsed),
-gate findings, normalized decision, executor brief, executor raw/visible reply,
-state before/after, usage, hard-fails.
+Log hygiene (USER 2026-08-03: "There were way too many. I couldn't tell
+what was going on"; full-code-audit S8):
+
+- **Lazy creation.** Nothing touches disk until the session is REAL — the
+  first user turn logged (or the first model exchange after a user turn).
+  The session_start record, the opening tutor turn, and the open turn's
+  model exchange are buffered in memory and flushed when the session
+  becomes real. A page-load probe / reload that opens a session and never
+  receives a learner turn leaves ZERO files.
+- **Date subfolders.** ``config.LOG_DIR`` stays the root; the logger
+  computes the dated dir once at creation, so one session's files always
+  share a folder (even across midnight).
 """
 
 from __future__ import annotations
@@ -58,12 +68,15 @@ class SessionLogger:
         meta: dict | None = None,
         session_id: str | None = None,
     ):
-        config.LOG_DIR.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        now = datetime.datetime.now()
+        stamp = now.strftime("%Y%m%d-%H%M%S")
         suffix = f"-{label}" if label else ""
         self.session_id = session_id or f"{stamp}-{arch}{suffix}"
-        self.jsonl_path = config.LOG_DIR / f"{self.session_id}.jsonl"
-        self.md_path = config.LOG_DIR / f"{self.session_id}.md"
+        # Dated dir computed ONCE at creation (config.LOG_DIR is the root).
+        self.log_dir = Path(config.LOG_DIR) / now.strftime("%Y-%m-%d")
+        self.jsonl_path = self.log_dir / f"{self.session_id}.jsonl"
+        self.md_path = self.log_dir / f"{self.session_id}.md"
+        self.requests_path = self.log_dir / f"{self.session_id}.requests.jsonl"
         self.arch = arch
         self.turn_index = 0
         self._meta = {
@@ -73,19 +86,44 @@ class SessionLogger:
             "started_at": _utc_now(),
             **(meta or {}),
         }
-        self._write_jsonl({
+        # Lazy creation: buffer everything until the first user turn.
+        self._real = False
+        self._pending_jsonl: list[dict] = [{
             "event": "session_start",
             "ts": self._meta["started_at"],
             **self._meta,
-        })
-        self.md_path.write_text(
+        }]
+        self._pending_md: list[str] = [
             f"# Session `{self.session_id}`\n\n"
             f"- **arch:** {arch}\n"
             f"- **started:** {self._meta['started_at']}\n"
             f"- **meta:** `{json.dumps(_jsonable(meta or {}), ensure_ascii=False)}`\n\n"
-            f"JSONL twin: `{self.jsonl_path.name}`\n\n---\n\n",
-            encoding="utf-8",
-        )
+            f"JSONL twin: `{self.jsonl_path.name}`\n\n---\n\n"
+        ]
+        self._pending_requests: list[dict] = []
+
+    @property
+    def real(self) -> bool:
+        """True once files exist on disk (first user turn seen)."""
+        return self._real
+
+    def _ensure_real(self) -> None:
+        """Create the dated dir + files and flush every buffered record.
+        Called on the first non-open write; idempotent."""
+        if self._real:
+            return
+        self._real = True
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        pending_jsonl, self._pending_jsonl = self._pending_jsonl, []
+        for record in pending_jsonl:
+            self._write_jsonl(record)
+        pending_md, self._pending_md = self._pending_md, []
+        if pending_md:
+            with self.md_path.open("a", encoding="utf-8") as f:
+                f.write("".join(pending_md))
+        pending_requests, self._pending_requests = self._pending_requests, []
+        for record in pending_requests:
+            self._write_request(record)
 
     def log_model_exchange(self, entry: dict) -> None:
         """Full outbound request + response for ONE tutor model call, one
@@ -99,7 +137,10 @@ class SessionLogger:
         ``received`` what came back.  (The ``router_shadow_NOT_SENT``
         pop-list died with the mode router, 2026-08-03 — debug entries no
         longer carry mode/reason/instructions/hard_break at all.)
-        Full text, no truncation."""
+        Full text, no truncation.
+
+        Open-turn exchanges are buffered until the session becomes real
+        (first user-turn exchange) — probes/reloads leave no files."""
         e = dict(entry)
         record = {
             "ts": e.pop("ts", None),
@@ -114,152 +155,38 @@ class SessionLogger:
             "received": e.pop("response", {}),
             **e,  # anything future entries add stays visible, unhidden
         }
-        path = config.LOG_DIR / f"{self.session_id}.requests.jsonl"
-        with path.open("a", encoding="utf-8") as f:
+        if not self._real and record.get("is_open"):
+            self._pending_requests.append(record)
+            return
+        self._ensure_real()
+        self._write_request(record)
+
+    def _write_request(self, record: dict) -> None:
+        with self.requests_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(_jsonable(record), ensure_ascii=False) + "\n")
 
     def _write_jsonl(self, record: dict) -> None:
         with self.jsonl_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(_jsonable(record), ensure_ascii=False) + "\n")
 
-    def _append_md(self, text: str) -> None:
-        with self.md_path.open("a", encoding="utf-8") as f:
-            f.write(text)
-            if not text.endswith("\n"):
-                f.write("\n")
-
-    def event(self, event: str, **payload) -> None:
-        self._write_jsonl({"event": event, "ts": _utc_now(), **payload})
-
-    def log_demo_example(
-        self,
-        name: str,
-        learner: str,
-        decision: dict | None,
-        brief: str,
-        gate_ok: bool,
-        gate_errs: list,
-        note: str = "",
-    ) -> None:
-        """Offline controller demo (no API)."""
-        self.turn_index += 1
-        i = self.turn_index
-        self._write_jsonl({
-            "event": "demo_example",
-            "ts": _utc_now(),
-            "turn": i,
-            "name": name,
-            "learner": learner,
-            "note": note,
-            "gate_ok": gate_ok,
-            "gate_errs": gate_errs,
-            "controller_decision": decision,
-            "executor_brief": brief,
-        })
-        self._append_md(
-            f"## Demo turn {i}: `{name}`\n\n"
-            + (f"*{note}*\n\n" if note else "")
-            + f"**Learner:** {learner!r}\n\n"
-            + f"**Gate:** {'PASS' if gate_ok else 'FAIL'}"
-            + (f" — {gate_errs}\n\n" if gate_errs else "\n\n")
-            + "### Controller decision\n\n```json\n"
-            + json.dumps(decision, indent=2, ensure_ascii=False)
-            + "\n```\n\n### Executor brief\n\n```yaml\n"
-            + (brief or "(none)")
-            + "\n```\n\n---\n\n"
-        )
-
-    def log_controller_turn(
-        self,
-        *,
-        learner: str,
-        state_before: dict,
-        state_after: dict,
-        visible: str,
-        extra: dict,
-        stop_reason: str = "",
-        executor_raw: str = "",
-        history_len: int = 0,
-    ) -> None:
-        """One live controller (or structured) turn with full plan/realize detail."""
-        self.turn_index += 1
-        i = self.turn_index
-        extra = extra or {}
-        record = {
-            "event": "controller_turn",
-            "ts": _utc_now(),
-            "turn": i,
-            "learner": learner,
-            "visible": visible,
-            "executor_raw": executor_raw or visible,
-            "stop_reason": stop_reason,
-            "state_before": state_before,
-            "state_after": state_after,
-            "history_len": history_len,
-            "controller_decision": extra.get("controller_decision")
-            or extra.get("directive"),
-            "executor_brief": extra.get("executor_brief"),
-            "planner_attempts": extra.get("planner_attempts"),
-            "replans": extra.get("replans", 0),
-            "gate_findings": extra.get("gate_findings"),
-            "hard_fail": extra.get("hard_fail", False),
-            "planner_usage": extra.get("planner_usage"),
-            "executor_usage": extra.get("executor_usage"),
-            "arch": extra.get("arch", self.arch),
-        }
+    def _emit_jsonl(self, record: dict) -> None:
+        """Write when real; buffer while the session has no user turn yet."""
+        if not self._real:
+            self._pending_jsonl.append(record)
+            return
         self._write_jsonl(record)
 
-        decision = record["controller_decision"]
-        attempts = record["planner_attempts"] or []
-        md = [f"## Turn {i}\n"]
-        md.append(f"**Learner:** {learner!r}\n")
-        if record["hard_fail"]:
-            md.append("**HARD FAIL** (executor not called)\n")
-        md.append(f"**Replans:** {record['replans']}\n")
-        if record["gate_findings"]:
-            md.append(f"**Gate findings:** {record['gate_findings']}\n")
-        if attempts:
-            md.append("\n### Planner attempts\n")
-            for j, att in enumerate(attempts):
-                md.append(f"\n#### Attempt {j} "
-                          f"({'ok' if att.get('gate_ok') else 'rejected'})\n")
-                if att.get("raw_text"):
-                    md.append("\n```text\n" + str(att["raw_text"])[:4000]
-                              + "\n```\n")
-                if att.get("parsed") is not None:
-                    md.append("\n```json\n"
-                              + json.dumps(att["parsed"], indent=2,
-                                           ensure_ascii=False)[:4000]
-                              + "\n```\n")
-                if att.get("gate_errs"):
-                    md.append(f"\nErrors: `{att['gate_errs']}`\n")
-                if att.get("usage"):
-                    md.append(f"\nUsage: `{att['usage']}`\n")
-        if decision is not None:
-            md.append("\n### Final controller decision\n\n```json\n")
-            md.append(json.dumps(decision, indent=2, ensure_ascii=False))
-            md.append("\n```\n")
-        if record["executor_brief"]:
-            md.append("\n### Executor brief\n\n```yaml\n")
-            md.append(str(record["executor_brief"]))
-            md.append("\n```\n")
-        md.append("\n### Executor → learner (visible)\n\n")
-        md.append(visible or "*(empty)*")
-        md.append("\n\n")
-        if executor_raw and executor_raw != visible:
-            md.append("### Executor raw (pre-state strip)\n\n```text\n")
-            md.append(executor_raw[:6000])
-            md.append("\n```\n\n")
-        md.append("### State after\n\n```json\n")
-        md.append(json.dumps(state_after, indent=2, ensure_ascii=False))
-        md.append("\n```\n\n")
-        if record["planner_usage"] or record["executor_usage"]:
-            md.append(
-                f"**Usage** planner=`{record['planner_usage']}` "
-                f"executor=`{record['executor_usage']}` "
-                f"stop=`{stop_reason}`\n\n")
-        md.append("---\n\n")
-        self._append_md("".join(md))
+    def _append_md(self, text: str) -> None:
+        if not text.endswith("\n"):
+            text += "\n"
+        if not self._real:
+            self._pending_md.append(text)
+            return
+        with self.md_path.open("a", encoding="utf-8") as f:
+            f.write(text)
+
+    def event(self, event: str, **payload) -> None:
+        self._emit_jsonl({"event": event, "ts": _utc_now(), **payload})
 
     def log_simple_turn(
         self,
@@ -270,11 +197,16 @@ class SessionLogger:
         stop_reason: str = "",
         usage: dict | None = None,
         extra: dict | None = None,
+        is_open: bool = False,
     ) -> None:
-        """Single-model turn (thin log)."""
+        """Single-model turn (thin log). ``is_open=True`` marks the opening
+        tutor turn — buffered, never file-creating on its own; the first
+        user turn (is_open=False) makes the session real and flushes it."""
         self.turn_index += 1
         i = self.turn_index
-        self._write_jsonl({
+        if not is_open:
+            self._ensure_real()
+        self._emit_jsonl({
             "event": "turn",
             "ts": _utc_now(),
             "turn": i,
@@ -293,7 +225,12 @@ class SessionLogger:
             f"{json.dumps(state, indent=2, ensure_ascii=False)}\n```\n\n---\n\n"
         )
 
-    def close(self, **summary) -> Path:
+    def close(self, **summary) -> Path | None:
+        """End the session. A session that never became real (no user turn
+        logged) writes NOTHING and returns None — open-only probe/reload
+        sessions leave zero files."""
+        if not self._real:
+            return None
         self._write_jsonl({
             "event": "session_end",
             "ts": _utc_now(),

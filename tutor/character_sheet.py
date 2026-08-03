@@ -1244,7 +1244,8 @@ def _clamp_skill_entry(
     """Merge a tool/model skills, grammar, or lexicon claim with honesty clamps.
 
     CHAR-BUG-008/009 (2026-07-29) + tool-only ability (2026-07-31) — the model
-    cannot inflate the diagnosis by claim alone (PEDAGOGY §3.2/P7, §4.5):
+    cannot inflate the diagnosis by claim alone (ENGINEERING §3.2/§4.5;
+    P7 theory in PEDAGOGY §0):
 
     - confidence is rate-limited around prev (±MAX_CONF_UP/DOWN_PER_TURN);
     - solid_uses: a tool conf **rise** mints at most +1 use this merge

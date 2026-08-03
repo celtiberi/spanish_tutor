@@ -83,7 +83,7 @@ def introduce_block(
 def introduce_scaffold_evidence(plan, reply: str, teach_images=None) -> bool:
     """Did the plan's INTRODUCE MOVE visibly happen in this reply?
 
-    Honesty rule (2026-07-28 false-planted incident, PEDAGOGY §3): mere key
+    Honesty rule (2026-07-28 false-planted incident, ENGINEERING §3): mere key
     presence is NOT an introduction — the tutor greets with «¡Buenas tardes!»
     naturally without teaching it. Evidence required per scaffold:
     - R-D gloss    → the "(≤6-word gloss)" parenthetical right after the key
@@ -163,7 +163,7 @@ def mark_introduced_if_visible(sheet: dict, plan, reply: str, *, teach_images=No
 
 # --- Progress journey rail wiring (docs/design-progression-view.md) ---------
 # Emit sites append milestone events to the code-owned progress ledger at the
-# moment the underlying evidence lands (PEDAGOGY.md §3: the display invents
+# moment the underlying evidence lands (ENGINEERING.md §3: the display invents
 # nothing). Each site is a thin call; detection + templates live in
 # tutor/progress_ledger.py. Dedupe: an up-crossing fires ONCE per (kind, key)
 # — checked against the ledger itself (has_milestone / up_keys).
@@ -1268,6 +1268,7 @@ class ConversationalSession:
             self._log_turn_result(
                 result,
                 log_learner=log_learner if log_learner is not None else learner,
+                is_open=is_open,
             )
         return result
 
@@ -1287,12 +1288,17 @@ class ConversationalSession:
         result: TurnResult,
         *,
         log_learner: str = "",
+        is_open: bool = False,
     ) -> None:
-        """Write session log with final parts (mode/plan/gate/images included)."""
+        """Write session log with final parts (plan/gate/images included).
+        ``is_open`` rides to the logger's lazy-creation gate: the opening
+        tutor turn buffers; the first USER turn creates the files
+        (log hygiene, full-code-audit S8)."""
         if not self.logger:
             return
         parts = result.parts or {}
         self.logger.log_simple_turn(
+            is_open=is_open,
             learner=log_learner,
             visible=result.reply,
             state={
@@ -1614,5 +1620,8 @@ class ConversationalSession:
         if persist_sheet:
             save_sheet(self.sheet_path, self.sheet)
         if self.logger:
-            return str(self.logger.close(mode="conversational"))
+            # None = the session never got a learner turn — the lazy logger
+            # wrote nothing (log hygiene, full-code-audit S8).
+            p = self.logger.close(mode="conversational")
+            return str(p) if p else None
         return None

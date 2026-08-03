@@ -2,7 +2,7 @@
 
 **Purpose:** Hot-path map of dual-AI reviews. Full append-only transcripts live under [`archive/reviews/`](archive/reviews/).
 
-**Process (PEDAGOGY §5.1 / §7):** propose → countersign → adjudicate → converge. A behavior change is not closed until law lands in `PEDAGOGY.md` (LAW-PROMOTION GATE).  
+**Process (ENGINEERING §5.1 / §7):** propose → countersign → adjudicate → converge. A behavior change is not closed until law lands in the right law file — `PEDAGOGY.md` for teaching, `ENGINEERING.md` for everything else (LAW-PROMOTION GATE). Rows below keep their historical "PEDAGOGY §N" pointers; post-split (2026-08-03) §1/§3–§9 resolve in `ENGINEERING.md`.  
 **Compaction (2026-07-31):** each `docs/reviews-*.md` is a short outcome stub; debate text is not deleted — it is in `docs/archive/reviews/`.
 
 ## Index
@@ -21,6 +21,7 @@
 | [`reviews-direction-not-scripts.md`](reviews-direction-not-scripts.md) | 2026-07-28 | CONVERGED — law promoted | PEDAGOGY §1.1a; §8 SCRIPTED-CONTENT DEBT |
 | [`reviews-evals-port.md`](reviews-evals-port.md) | 2026-07-26+ | SHIPPED (large build trail) | None (eval harness) |
 | [`reviews-example-bleed-double-correction.md`](reviews-example-bleed-double-correction.md) | 2026-07-28≈ | CONVERGED | Incident-backed teaching behavior (see PEDAGOGY correction/s |
+| [`reviews-full-code-audit-20260803.md`](reviews-full-code-audit-20260803.md) | 2026-08-03 | ADJUDICATED — execution stamps in-doc | ENGINEERING §1.1/§4.6/§6 + no-hide; gate→plumbing (S11); router/scenes/phases/task/corpus/focus_enrich deleted |
 | [`reviews-gemini-baseline.md`](reviews-gemini-baseline.md) | 2026-07-22+ | Historical measurement | None |
 | [`reviews-grok-baseline.md`](reviews-grok-baseline.md) | 2026-07-22+ | Historical measurement | None |
 | [`reviews-junk-audit-20260730.md`](reviews-junk-audit-20260730.md) | 2026-07-30 | COUNTERSIGNED | PEDAGOGY §6 boredom guard DELETED; process corollaries for z |
@@ -48,7 +49,7 @@
 ## Reading rule for agents
 
 1. **Do not** load `docs/archive/reviews/*` unless you are reopening a specific countersign or verifying provenance.  
-2. For product behavior, read **`PEDAGOGY.md`** then **`docs/system-overview.md`**.  
+2. For product behavior, read **`PEDAGOGY.md` + `ENGINEERING.md`** then **`docs/system-overview.md`**.  
 3. Use this index (or a single stub) when you need *why* a law exists or what shipped from a named review.
 
 ## Size

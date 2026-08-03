@@ -1,7 +1,7 @@
 """Progress journey ledger + emit wiring (docs/design-progression-view.md).
 
 The design under test is the proposal AS AMENDED by Grok's countersign
-(adjudicated 2026-07-28). Honesty laws asserted here (PEDAGOGY.md §3, §3.2):
+(adjudicated 2026-07-28). Honesty laws asserted here (ENGINEERING.md §3, §3.2):
 - append-only history; polarity=down regressions are first-class events;
 - an up-crossing fires ONCE per (kind, key);
 - NO milestone without its code-owned evidence event;

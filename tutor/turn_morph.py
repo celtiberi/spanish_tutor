@@ -5,20 +5,21 @@ morphology off mode targets' form_id / next_best.form_focus, and meta
 questions ("digo and dices... breakdown?", "Yo hacer (I am making?)")
 produce neither, so the card pinned one static can-do block all session.
 
-This module decides — in CODE (PEDAGOGY.md §1.1) — WHICH verb form the
-learner's turn engages:
+Picking WHICH verb form the learner's turn engages is code-owned DISPLAY
+bookkeeping (ENGINEERING §1.1b: peripherals render the realized exchange,
+never the agenda — the teaching itself belongs to the model, §1.1):
   1. an error-pattern hit whose catalog entry maps to a form inventory id;
   2. pronoun + bare infinitive ("Yo hacer…") — an attempted conjugation;
   3. a grammar/meta question naming a Spanish form (digo/dices → decir);
   4. an English how-do-I-say / "I am Xing?" aiming at an A1 verb.
 No engagement → None (the card keeps its existing fallback).
 
-The result is stashed onto the live mode-decision dict (same object the
-session passes to every build_focus_panel repaint), so the block persists
-for the turn and is naturally replaced with the next mode decision. The
-focus-rail LLM may only fill natural example cells afterwards — it never
-picks the form. Pack-aware: A1 present tense only, 4 person rows, no
-untaught-tense paradigm dumps.
+Consumers are projections: exchange_render's morphology projection calls
+detect_turn_morph / detect_intro_morph per settled exchange (the old
+shared-dict stash on the live mode decision died in the §1.1b settlement
+round, 2026-07-29), and turn_pipeline uses lemma_engaged_by_text for
+frames_seen ledger bookkeeping. Domain-aware: A1 present tense only, 4
+person rows, no untaught-tense paradigm dumps.
 """
 
 from __future__ import annotations

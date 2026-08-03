@@ -25,9 +25,10 @@ def _find_repo_root() -> Path:
 
 REPO_ROOT = _find_repo_root()
 # Domain-model DATA only (association table = target inventory,
-# teach-asset sidecar, scenes as domain-situated materials — never path
-# law). The prose course pack was DELETED 2026-08-03; the sheet carries
-# the domain targets + scope; the model plans from sheet + PEDAGOGY.md.
+# teach-asset sidecar, migration deprecation list — never path law). The
+# prose course pack AND the scenes JSON were DELETED 2026-08-03 (full-code
+# audit S1/S9); the sheet carries the domain targets + scope; the model
+# plans from sheet + PEDAGOGY.md.
 DEFAULT_PACK_DIR = REPO_ROOT / "domain" / "spanish_a1"
 # Tutor persona (voice/character layer, e.g. Marisol). File is the persona
 # spec; TUTOR_PERSONA=off disables without deleting the file. Persona is HOW
@@ -267,8 +268,6 @@ TUTOR_MAX_TOKENS = int(os.environ.get("TUTOR_MAX_TOKENS", "4096"))
 GEMINI_REASONING_EFFORT = (
     os.environ.get("GEMINI_REASONING_EFFORT") or ""
 ).strip().lower() or None
-# Planner only emits a small JSON decision — keep this tight for latency.
-PLANNER_MAX_TOKENS = int(os.environ.get("PLANNER_MAX_TOKENS", "768"))
 
 if MODEL.startswith("grok"):
     PROVIDER = "xai"

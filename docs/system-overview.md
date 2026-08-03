@@ -1,28 +1,28 @@
 # ml_teacher — system overview
 
 **Audience:** humans and agents working on the product  
-**Status:** living description of the *current* conversational Spanish tutor (as of 2026-07-28)  
-**Repo:** research + product prototype for **pedagogy-first** tutoring, with Spanish A1 as the first pack
+**Status:** living description of the *current* conversational Spanish tutor (as of 2026-08-03, post full-code audit `docs/reviews-full-code-audit-20260803.md`)  
+**Repo:** research + product prototype for AI-taught conversational Spanish (A1 first)
 
-**Law:** `PEDAGOGY.md` is the ONLY home of law text. This file maps **what ships today** — it must point at PEDAGOGY.md, never restate or fork law paragraphs.
+**Law:** `PEDAGOGY.md` (how to teach — theory §0 + teaching rules §2) and `ENGINEERING.md` (everything else — axioms, honesty/engineering/process laws, debt registry, enforcement map). This file maps **what ships today** — it must point at the law files, never restate or fork law paragraphs.
 
-This document supersedes older fragments where they conflict. Deeper design debates live under `docs/reviews-*` and `docs/teaching-system.md`.
+This document supersedes older fragments where they conflict. Deeper design debates live under `docs/reviews-*`.
 
 ---
 
 ## 1. One-line thesis
 
-**Conversation is the vehicle; teaching is knowing when to break, what goal is open, and whether the form landed.**
+**The model is the teacher; code is the record-keeper and auditor** (ENGINEERING §1.1).
 
-The learner experiences a warm Spanish chat. Underneath, code owns the **phase plan** and **mode**, the AI **realizes** the turn in Spanish, code **gates** the reply, and code updates the **ability sheet** (and schedule/ledger fields) from evidence. Personal facts are not captured (2026-07-28).
+The learner experiences a warm Spanish chat. The model owns every teaching decision — what to teach, when to break, how to correct. Code supplies **facts** (character sheet, session memory, due items), verifies **plumbing** (truncation, sheet leaks), records **evidence** (ledgers, logs, exposure bookkeeping), and grades only through the model's own tool calls under honesty clamps.
 
 ```text
-observe(learner, sheet, session)
-    → SessionPhaseController activity hint   # CODE — retrieval/new_input/task/free/close
-    → select_mode(...)                       # CODE — deterministic (profile arg unused)
-    → AI realize(mode, sheet + pack + stance)  # no personal-context block
-    → output_gate(turn)                      # CODE — one repair if critical
-    → hard_observer / sheet + schedule/ledger  # CODE — ability only
+PLAN turn (open / <replan/>): teaching rules + FULL sheet + history
+    → model writes its own <plan> + normal <tutor> reply
+ROUND turns: model's OWN plan + full sheet + session facts + recent window
+    → model teaches; may revise <plan> or request <replan/>
+every turn: parse tags → plumbing gate (truncated / sheet_leak)
+    → record: tool grades (clamped), first_seen exposure, ledgers, logs
 ```
 
 ---
@@ -33,11 +33,11 @@ observe(learner, sheet, session)
 |--|--------|
 | Who | Adult, boat/café life OK — **not** a kids flashcard app |
 | Level | A1 / false-beginner friendly; true zeros welcome |
-| Blank sheet | **Unknown**, not proven beginner (placement, not a Hola ladder) |
+| Blank sheet | **Unknown**, not proven beginner (diagnose in conversation, no Hola ladder) |
 | Language | Spanish-forward; English is a **lifeline**, not dual-subtitle wallpaper |
-| Agenda | AI realizes the turn; **code** owns phases, mode, ability sheet, gates, introduce/task plans |
+| Agenda | The **model** owns the teaching agenda; code keeps records and audits |
 
-**Non-goals:** personal-data capture; scripted social probe queue as the default product; chat-buddy with no teach move; pure worksheet drills.
+**Non-goals:** personal-data capture; scripted probe queues; chat-buddy with no teach move; pure worksheet drills.
 
 See `docs/product-persona.md`.
 
@@ -46,45 +46,46 @@ See `docs/product-persona.md`.
 ## 3. What the learner sees (web)
 
 **Entry:** `python -m tutor.web_app` → `http://127.0.0.1:8765`  
-**Engine:** `tutor/conv_session.py` (shared with CLI)
+**Engine:** `tutor/conv_session.py` + `tutor/turn_pipeline.py`
 
 | Surface | Role |
 |---------|------|
 | Chat | Tutor turns as structured parts (acknowledge / recast / model / try / …) |
 | Mic | STT (Chirp stream or Gemini / browser paths) |
 | Speak replies | Gemini neural TTS by default (rate **1.0**); client Voice slider 0.7–1.2; browser TTS fallback |
-| Progress score | Top header — countable progress from ability + journey ledger (`/api/progress`; legacy `compute_progress_score` still exists) |
-| **This turn** (rail) | **Live mode** for the current turn (not a stale can-do title) |
-| Morphology (rail) | Forms in play (prefer form_focus e.g. *estar*, not a random can-do); optional async `FOCUS_MODEL` |
-| **Journey** (rail) | Append-only milestone ledger + theme grouping + retractions (`tutor/progress_ledger.py`) |
-| Full sheet | Modal: skills, errors, next_best, human dump (**ability only**; identity always empty) |
-| Composer | Client `maxlength` mirrors `/api/health` `chat_max_chars` (`CHAT_MAX_CHARS=12000` on `ChatIn`) |
-| Teach images | When association / repair / concrete intro needs a referent |
+| Header score board | Can-do bands from the character sheet (`compute_progress_score`) |
+| **Grades** (left rail) | Ability grades from the model's tool calls (`/api/progress` → `grade_log.build_grades_payload`) |
+| **This turn** / Morphology (right rail) | Projections of the sheet and the **realized exchange** (`can_dos.build_focus_panel`, `exchange_render`, `turn_morph`) — never an agenda (ENGINEERING §1.1b) |
+| Full sheet | Modal: skills, errors, human dump (**ability only**; identity always empty) |
+| Composer | Client `maxlength` mirrors `/api/health` `chat_max_chars` (`CHAT_MAX_CHARS=12000`) |
+| Teach images | Cache-first referent images when an introduction anchors on one |
+| GATE FAIL banner | Plumbing faults ship visibly (no-hide) — never silently sanitized |
 | Debug (local) | In-memory request ring + `GET /api/debug/requests` |
 
-Page load starts a **new chat** but keeps the **ability sheet** on disk. “Reset learner” wipes Spanish progress (`reset_sheet`). `clear_personal` / `session.reset_profile` only **deletes leftover** `learner_profile.json` files from the capture era — nothing loads or writes personal facts.
+Page load starts a **new chat** but keeps the **ability sheet** on disk. "Reset learner" wipes Spanish progress (`reset_sheet`). `clear_personal` / `session.reset_profile` only **deletes leftover** `learner_profile.json` files from the capture era — nothing loads or writes personal facts.
 
 ---
 
 ## 4. Pedagogy
 
-**Law pointer:** theory (P1–P9), phase architecture, introduce/retrieval/correction, honesty, and enforcement map live only in `PEDAGOGY.md`. Below is the shipping map.
+**Law pointer:** the teaching rules live only in `PEDAGOGY.md` (§0 theory, §2 rules). The model **receives the rules** on plan turns (NOTES/INTERNAL spans cut — `session_plan.load_pedagogy`); code never re-implements them as runtime judgment. Whether pedagogy + prompts are working is judged by **evals over AI-student transcripts** (`evals/student_checks.py` + blind rubric), not by runtime gates.
 
-### 4.0 Pedagogy engine (shipped 2026-07-28)
+### 4.0 What ships (surviving modules)
 
 | Module | Role |
 |--------|------|
-| `tutor/session_phases.py` | Turn plan: retrieval / new_input / task / free / **close** (1-turn coda, USER-ratified 2026-07-28). Clock freezes on §2.1 guards/repairs. |
-| `tutor/retrieval_scheduler.py` | Introduced/first_seen ledger + due ladder; introduce ≠ ability bump |
-| `tutor/association_table.py` + pack `association_table.json` | 175 keys (incl. 20 false-friend slots); cluster/theme helpers |
-| `tutor/introduce_router.py` | One-target IntroducePlan; mark ledger only if key is visible in reply |
-| `tutor/task_runtime.py` | Info-gap / convergent task state on task-phase turns |
-| `tutor/output_gate.py` | incl. `gate:unscaffolded_new_item`, `gate:unscaffolded_flood`, `gate:regloss`; placement/blank_zero `english_wall` floor 0.25 |
-| `tutor/progress_ledger.py` | Journey rail milestones + retractions |
-| `tutor/signal_classifier.py` | Shadow labels `content_offer`, `self_flagged_form` (not routing authority yet) |
+| `tutor/session_plan.py` | Two-phase teacher context: PLAN turns (full rules + sheet + history) vs ROUND turns (model's own plan + sheet + facts + window) |
+| `tutor/character_sheet.py` | The sheet: domain model + learner model; honesty clamps on tool grades |
+| `tutor/retrieval_scheduler.py` | first_seen/introduced ledger + due ladder; introduce ≠ ability bump |
+| `tutor/association_table.py` + `domain/spanish_a1/association_table.json` | Target inventory (keys, themes, clusters) |
+| `tutor/introduce_router.py` | Shadow introduce planning + R-B image attach + ledger writes — telemetry and bookkeeping, no instruction text ships |
+| `tutor/output_gate.py` | Plumbing gate (`gate:truncated`, `gate:sheet_leak`) + first-exposure scan (bookkeeping) |
+| `tutor/progress_ledger.py` | Append-only milestone history (journey/grades data) |
+| `tutor/grade_log.py` | Model tool-grade ledger (`logs/sheet_grades.jsonl`) |
+| `tutor/signal_classifier.py` | Shadow intent labels (`content_offer`, `self_flagged_form`, …) — audit trail, not routing authority |
 | `tutor/costs.py` | Per-session cost ledger |
 
-Build history: `docs/build-plan-pedagogy-engine.md`. Do not copy law text from PEDAGOGY.md into this section.
+**Deleted machinery (2026-08-03 full-code audit — see `docs/reviews-full-code-audit-20260803.md`):** the mode router (`modes.py`), session phases, task runtime, scenes, the prose course pack, `corpus.py`, `focus_enrich.py`, the falsifier prompt arms, and every runtime teaching-opinion gate. Git history is the archive (ENGINEERING §4.6).
 
 ### 4.1 Learning science we optimize for
 
@@ -97,18 +98,9 @@ Build history: `docs/build-plan-pedagogy-engine.md`. Do not copy law text from P
 | **Transfer** | Same form, **new** micro-context — not re-drill the same line |
 | **Trajectory** | Teaching is multi-turn: model → try → feedback → transfer |
 
-### 4.2 Teach move (contract)
+### 4.2 Teach move
 
-Every turn must include at least one of:
-
-- **model** — Spanish they should hear  
-- **try** — one real elicit (question / invite)  
-- **recast** — clean form when they erred  
-
-Bare hangout (“¡Hola!” only) is a contract violation. Open requires **model + try**.
-
-Machine check: `tutor/pedagogy_contract.py`  
-Human write-up: `docs/pedagogy-contract.md`
+The teach-every-turn expectation (model / try / recast; open needs model + try) is **law text the model receives** (PEDAGOGY §2), checked as **eval findings** over transcripts (`evals/student_checks.check_teach_shape`), not enforced by runtime gates. `tutor/pedagogy_contract.py` keeps only mechanical helpers (`is_blank_learner`, `open_phase`, `has_teach_move`); the runtime judgment half was deleted (S11, 2026-08-03). Historical write-up: `docs/pedagogy-contract.md`.
 
 ### 4.3 Structured reply shape
 
@@ -125,89 +117,64 @@ The model writes tagged parts (learner never sees tags):
 </tutor>
 ```
 
-Parser: `tutor/tutor_response.py`.  
-**Forbidden in the reply:** character-sheet JSON, tool dumps, can-do codes, confidence blobs. That is a **gate fault** (`gate:sheet_leak`), not something to silently scrub into a “success.”
+Plus the private context tags: `<plan>…</plan>` (session plan, stripped before the learner sees anything) and `<replan/>` (request full-context re-plan).
 
-### 4.4 Modes (when to break from free chat)
+Parser: `tutor/tutor_response.py` (+ `session_plan.extract_plan`).  
+**Forbidden in the reply:** character-sheet JSON, tool dumps, can-do codes, confidence blobs. That is a **gate fault** (`gate:sheet_leak`), not something to silently scrub into a "success."
 
-Code selects mode (`tutor/modes.py`). First matching guard wins. Budgeted hard modes (`form_focus`, hard `association`) are blocked while `turns_since_hard_break < 3` after a prior hard break; **`comprehension_repair` and blank-sheet `placement` bypass the budget**, so back-to-back hard breaks are possible. “Time pressure” means sheet `affect.energy == "limited_time"` (forces conversation / soft `cf_recast`).
+### 4.4 Modes — DELETED
 
-| Mode | Intent |
-|------|--------|
-| `placement` | Blank sheet open — wide ceiling, short Spanish |
-| `conversation` | Default vehicle |
-| `cf_recast` | Soft form fix: short `<recast>` + continue chat |
-| `form_focus` | Hard break: wrong→right contrast, produce once |
-| `association` | Form ↔ image meaning (English wall or new concrete noun) |
-| `comprehension_repair` | They didn’t get our Spanish — **same idea**, re-model, re-ask (no topic jump) |
-| `transfer` | Just succeeded on a form — same form, new context |
+The code-owned mode router (`tutor/modes.py`) was deleted 2026-08-03 (full-code-audit S4): the model decides when to break, correct, or repair. Surviving wires (image attach, introduce bookkeeping, uptake flag) moved to evidence-based stages in `turn_pipeline.py`.
 
-**Routing signals (updated 2026-07-28):** English topic/activity requests set probe signal `topic_request` → `conversation` reason `learner_topic_request` (never comprehension failure). `await_comprehension` arms only on `meta_comprehension`. Grammar questions while also answering in the learner’s own Spanish (quotes + “no entiendo” stripped) → `conversation` reason `grammar_question_inline`. Topic-change / boredom phrases can set `affect.boredom_risk=high` (forces fresh-topic chat); high decays to **medium** on next session open (`clear_session_scoped_affect`), not a full clear. Topic suggestions come from `corpus.pack_topic_titles` (pack.md unit table), not a hardcoded boat/café list. **Probe-loop detection** uses the semantic **`asked_topics` registry** on session memory (not a fixed four-name list). Personal hooks / known-open name paths are **gone** (personal capture disabled). Shadow classifier may label `content_offer` / `self_flagged_form` without changing routing until promoted via evals.
+### 4.5 Scenes — DELETED
 
-`comprehension_check` exists as an enum value and a gate concept (`gate:comprehension_needs_check`), but `select_mode` never returns it today — it is not a shipping mode.
-
-Detailed break policy: `docs/teaching-system.md`.
-
-### 4.5 Scenes (open goals)
-
-JSON under `domain/spanish_a1/scenes/`. A scene is an **open goal with an exit predicate**, not a cutscene. Conversation can satisfy whichever goal the utterance touches.
+Scene JSON and its shipping path were deleted 2026-08-03 (full-code-audit S1a/S9): scripted scene lines into the teacher prompt were the forbidden class (ENGINEERING §1.1a), and goal/exit residue was still code-selected steering.
 
 ---
 
-## 5. Character sheet (ability only) + disconnected profile stub
+## 5. Character sheet (domain model + learner model)
 
-As of **2026-07-28**, the product store is Spanish **ability only**. Personal-data capture is removed by construction (PEDAGOGY §3.1; `docs/reviews-personal-data-removal.md`).
+The sheet is ONE artifact holding both the **domain model** (every target the level covers: inventory keys, grammar forms, can-dos, scope — domain data in `domain/spanish_a1/`) and the **learner model** (per-item evidence, confidence, schedule). It is **never a curriculum**: it never sequences; the model plans its own path (`session_plan.PLAN_INSTRUCTIONS`).
 
-### Ability sheet
+As of **2026-07-28**, the store is Spanish **ability only**. Personal-data capture is removed by construction (ENGINEERING §3.1; `docs/reviews-personal-data-removal.md`).
 
 **Path:** `logs/character_sheet.json` locally; on serverless the data root moves to `ML_TEACHER_DATA_DIR` or `/tmp/ml_teacher` (`config._DATA_ROOT`)  
-**Module:** `tutor/character_sheet.py`  
-**Scope:** Spanish ability only (skills, grammar, errors, lexicon schedule/ledger, next_best, affect, coverage).
+**Module:** `tutor/character_sheet.py`
 
 | Field | Meaning |
 |-------|---------|
 | `version` / `framework` | Sheet schema metadata |
 | `identity` | **Always empty** — stripped at load/normalize/`process_turn`/session open; never written |
 | `skills` | Can-dos (IP-01 …) with status / confidence / evidence |
-| `grammar` / `lexicon` | Form/word inventory + **schedule/ledger** fields (`introduced_at`, `scaffold`, `first_seen`, `next_due`, `interval_days`, …) — introduce ≠ confidence |
-| `error_patterns` | Recurring constructions (e.g. *estoy* vs *está*, *hace calor*) |
+| `grammar` / `lexicon` | Form/word inventory + **schedule/ledger** fields (`introduced_at`, `scaffold`, `first_seen`, `next_due`, `interval_days`, …) — introduce ≠ confidence (ENGINEERING §3.2) |
+| `error_patterns` | Recurring constructions (e.g. *estoy* vs *está*, *hace calor*) — shipped to the model as **facts** (label + example), never as imperatives |
 | `receptive` | Comprehension-side flags (e.g. `needs_english_scaffold`) |
-| `affect` | energy, boredom_risk — session-scoped energy clears on new open; **`boredom_risk=high` decays to `medium`** on open (not wiped) |
-| `next_best` | Longer-arc stretch (can-do and/or form focus) — **guide**, not the chat script |
+| `affect` | `energy` (session-scoped; cleared on new open). The boredom pathway was deleted 2026-07-30 (`evals/omission_ledger.jsonl`) |
+| `next_best` | UI/telemetry stretch hint only — **stripped from the model payload** (S1b, 2026-08-03) |
 | `coverage` | Topics touched |
 
-### Learner profile (reference only — hard-disabled)
-
-**Module:** `tutor/learner_profile.py` — **disconnected**. Writers no-op / raise; load does not resurrect disk files. `profile_path_for_sheet` remains only so `reset_profile` can **delete** stale `logs/learner_profile.json` from the capture era. Re-enabling any user model is USER-ONLY (PEDAGOGY §7.4), not a flip switch.
-
-| Reset | Effect |
-|-------|--------|
-| `session.reset_sheet` / “Reset learner” | Wipes ability sheet + chat memory |
-| `session.reset_profile` / API `clear_personal` | Deletes leftover personal-file if present; ability unchanged |
-
-`select_mode(..., profile=)` still accepts a profile dict for call compatibility; runtime passes `{}` and does not use personal hooks. Realization prompts do **not** inject a personal-context block.
+A corrupt sheet file is **quarantined** (renamed `<name>.corrupt-<stamp>`) with a visible error, never silently overwritten (S5.1).
 
 ### Who writes what
 
 | Writer | Role |
 |--------|------|
-| **Hard observer (sheet)** | Every turn: pattern hits, confidence bumps from learner Spanish |
+| **Model tool** `update_character_sheet` | THE ability path (`SHEET_TOOLS` default **on**). Tool grades pass honesty clamps (`_clamp_skill_entry`: rate-limited confidence, no promotion by claim — ENGINEERING §3.2/§4.5) and land in the grade ledger. Tools off → ability **freezes** (no silent regex bumps; the rules-based updater died 2026-07-31) |
 | **Retrieval scheduler** | Ledger/schedule fields only; cannot move ability confidence |
-| **Tool** `update_character_sheet` | Optional (`SHEET_TOOLS=1`); default **off** for latency; identity + schedule fields stripped from model tool path |
-| **recompute_next_best** | After evidence, sets stretch + form priority |
-| **Progress ledger** | Journey milestones (separate append-only file; not ability confidence) |
+| **First-exposure scan** | `output_gate.scan_first_exposures` → `first_seen` for every visibly-used table key (bookkeeping, not judgment) |
+| **recompute_next_best** | Sheet-file/UI stretch hint (not sent to the model) |
+| **Progress ledger** | Milestone history (separate append-only file; not ability confidence) |
 
-The AI is told the sheet is **read-only context**. It must **not** paste sheet JSON into chat. The app owns updates.
+The AI is told the sheet is **read-only context** in the reply; it must **not** paste sheet JSON into chat (gate:sheet_leak). Ability moves ride the tool call.
 
-### Sheet vs “This turn” rail
+### Learner profile (reference only — hard-disabled)
 
-| UI | Source of truth |
-|----|-----------------|
-| **This turn** | Last **mode decision** (live pedagogy) |
-| **Sheet arc** (secondary) | `next_best` (longer-term stretch) |
-| Morphology | Prefer active **form_focus**, not a mismatched can-do (e.g. names while working *estoy*) |
+`tutor/learner_profile.py` is **disconnected**. Writers no-op / raise; load does not resurrect disk files. `profile_path_for_sheet` remains only so `reset_profile` can **delete** stale `logs/learner_profile.json` from the capture era. Re-enabling any user model is USER-ONLY (ENGINEERING §7.4).
 
-Older “Focus now = IP-03 always” was misleading after modes shipped.
+| Reset | Effect |
+|-------|--------|
+| `session.reset_sheet` / "Reset learner" | Wipes ability sheet + chat memory |
+| `session.reset_profile` / API `clear_personal` | Deletes leftover personal-file if present; ability unchanged |
 
 ---
 
@@ -215,67 +182,44 @@ Older “Focus now = IP-03 always” was misleading after modes shipped.
 
 `tutor/session_memory.py`
 
-- What they already **showed** (greet, estoy, name-pattern use, …)  
-- What we already **asked** — semantic **`asked_topics` registry** (replaces fixed name-list probes for loop detection)  
-- Images shown; last tutor model/try (for comprehension repair)  
-- **Seeded from the ability sheet** on open (`seed_from_sheet(sheet, profile={})`) so a returning ability sheet is not blank placement  
+- What they already **showed** (greet, estoy, …) and what we already **asked** — the semantic **`asked_topics` registry** (feeds the executor's do-not-re-ask facts)
+- Images shown; last tutor model/try
+- **Seeded from the ability sheet** on open (`seed_from_sheet`) so a returning learner is not treated as blank
 
-Page refresh wipes **chat history** and session memory object, then **re-seeds** from the ability sheet. Web sessions: reset-race fixed 2026-07-28; idle **2h** reaper closes orphan sessions (`IDLE_REAP_SEC` in `tutor/web_app.py`).
-
----
-
-## 7. Turn pipeline (planned — the only teacher runtime)
-
-`TEACHER_MODE=planned` (default; aliases `plan|new|ai`). Any other value is a
-hard `ValueError` at session construction (E4/E4b deletion, 2026-07-28).
-
-1. **Observe** — `mode_state.tick()`, signals, error hits, blank?, next_best snapshot (`observe.py`); phase clock / activity from `SessionPhaseController`  
-2. **select_mode** — deterministic ModeDecision (`profile=` accepted, unused for personal data)  
-3. **Teach image (pre-AI)** — if mode needs concept: cache hit or **generate** (Gemini image) same-turn  
-4. **Build AI context** — ability sheet + pack + stance + mode/task/introduce blocks + session facts (**no** personal-context block)  
-5. **tutor_turn** — frontier model (default Gemini); reply budget `TUTOR_MAX_TOKENS` default **4096** (thinking tokens share this budget); classifier shadow may run in parallel  
-6. **process_tutor_raw** — first parse of tags (feeds the gate); `stop_reason=max_tokens` → truncated  
-7. **output_gate** — teach move, Spanish ratio (`english_wall`), probe loop (`asked_topics`), missing recast, **sheet_leak**, **truncated**, **unscaffolded_new_item** / flood / **regloss**  
-8. **One repair** if critical fault and `GATE_REPAIR` (re-parse + re-gate)  
-9. **process_turn** — re-parse → hard observer + schedule/ledger + next_best + progress milestones (`_finish`)  
-10. **Focus rail** — static live mode immediately; optional async `FOCUS_MODEL` enrich, scheduled **before** logging  
-11. **Teach image (post-AI)** — second pass if the turn still has no image and models are present  
-12. **Log** — `logs/sessions/*-conversational-web.{md,jsonl}` + cost notes  
-
-Former alternate paths: `TEACHER_MODE=rules` (PlanCard ladder) and the `legacy` harness were **deleted** (E4/E4b, `docs/reviews-architecture-refactor.md`, 2026-07-28) — both bypassed the gate/mode/scheduler/phase layers.
+Page refresh wipes chat history and the session memory object, then re-seeds from the sheet. Web sessions: idle **2h** reaper closes orphans (`IDLE_REAP_SEC` in `tutor/web_app.py`).
 
 ---
 
-## 8. Output gate (verify, don’t hide)
+## 7. Turn pipeline (the only teacher runtime)
 
-`tutor/output_gate.py`
+`TEACHER_MODE=planned` (default; aliases `plan|new|ai`). Any other value is a hard `ValueError` at session construction (E4/E4b deletion, 2026-07-28). Stages live in `tutor/turn_pipeline.py`; context policy in `tutor/session_plan.py`.
 
-**Critical faults** — trigger **one** rewrite instruction (when `GATE_REPAIR`, default on):
+1. **Observe** — signals, error hits, blank detection (`observe.py`); shadow classifier may run in parallel (`signal_classifier.py`)
+2. **Context build** — PLAN turn (no stored plan / `<replan/>` requested): teaching rules + full sheet + full history + plan instructions. ROUND turn: model's own plan + full sheet + session facts + due data + `ROUND_HISTORY_MESSAGES=12` window (the one sanctioned, `truncation-ok`-annotated window — ENGINEERING §3.3)
+3. **Teach image (pre-AI)** — evidence-based attach (introduce R-B / declared image): cache hit or Gemini generate same-turn
+4. **tutor_turn** — frontier model (default Gemini) with the `update_character_sheet` tool; reply budget `TUTOR_MAX_TOKENS` default **4096** (thinking tokens share it)
+5. **Plan harvest** — `<plan>` stored verbatim, `<replan/>` flagged (cleared only after a successful call); plan text lands in the audit trail
+6. **Parse** — `process_tutor_raw` tags → parts; `stop_reason=max_tokens` → `gate:truncated`
+7. **Plumbing gate** — `gate:truncated` + `gate:sheet_leak` ONLY (S11); faults ship visibly (GATE FAIL banner + notes) — no rewrite loop, no teaching opinions
+8. **Record** — tool grades through honesty clamps + grade ledger; `first_seen` exposure bookkeeping; retrieval/introduce ledgers; progress milestones; atomic sheet commit
+9. **Log** — debug ring + `logs/sessions/<YYYY-MM-DD>/<id>.{jsonl,md,requests.jsonl}` (files created lazily on the first learner turn) + cost notes
+
+---
+
+## 8. Output gate (plumbing only — verify, don't hide)
+
+`tutor/output_gate.py` — reduced to what code can actually judge (S11 ruling, 2026-08-03: "Why are you making gates for this?"):
 
 | Fault | Meaning |
 |-------|---------|
-| `pedagogy:no_teach_move` | No model/try/recast |
-| `pedagogy:open_needs_model_try` | Open without both |
-| `gate:english_wall` | Tutor turn mostly English |
-| `gate:missing_recast` | Mode required recast tag |
-| `gate:form_focus_needs_model` | Hard form break without model/contrast |
-| **`gate:sheet_leak`** | Model dumped sheet/tool JSON into the reply |
-| **`gate:truncated`** | `stop_reason=max_tokens` — reply cut mid-sentence (one-shot repair retry) |
-| **`gate:unscaffolded_new_item`** | Naked first exposure / same-theme cluster extra (r7 S3) |
+| **`gate:truncated`** | Provider cut the reply (`stop_reason=max_tokens`) |
+| **`gate:sheet_leak`** | Internal JSON / tool talk in learner-visible text |
 
-**Soft faults** — recorded in notes only, no rewrite:
+Both are critical; the raw reply still ships with a visible GATE FAIL banner + `still_fail` notes (no-hide — never sanitize a fault into a green turn). There is no repair/rewrite loop.
 
-| Fault | Meaning |
-|-------|---------|
-| `gate:regloss` | Re-gloss of an already-introduced item without same-turn retrieval failure |
-| `gate:unscaffolded_flood` | Many bare new keys in one turn (storm soften; cluster extras stay critical) |
-| `gate:probe_loop` | Re-asked a semantic topic already in `asked_topics`, or a covered social probe |
-| `gate:comprehension_needs_check` | `comprehension_check` turn lacks a real yes/no or A/B ask (unreachable today — that mode is never selected) |
-| `pedagogy:recast_without_try` | Recast given but no elicit |
+Every former teaching-opinion check (english_wall, probe_loop, unscaffolded/cluster, regloss, teach-move contracts) lives ONLY as eval findings over AI-student transcripts: `evals/student_checks.py` (severity ledger in its header). The teaching rules themselves stay in PEDAGOGY §2 — the model still receives them.
 
-**English wall floors:** default critical below spanish ratio 0.50 (with length floor). **Placement / blank_zero** use floor **0.25** so a compliant glossed true-zero open passes while ratio ≈ 0 still faults (2026-07-28 incident).
-
-Failures stay in **notes** so we can see regressions — do not silently sanitize model faults into a green turn.
+The gate module also hosts `scan_first_exposures` (+ `gloss_after_key` / `anchor_in_reply`) — first-exposure **bookkeeping** shared with the introduce ledger, not judgment.
 
 ---
 
@@ -283,9 +227,9 @@ Failures stay in **notes** so we can see regressions — do not silently sanitiz
 
 `tutor/teach_assets.py` + `tutor/image_gen.py`
 
-- **When:** association, comprehension repair, high-visual concrete intro — not every turn  
-- **How:** disk cache under `tutor/web_static/teach_assets/`; miss → Gemini `gemini-2.5-flash-image` generate → cache  
-- **Policy:** generate on miss when Gemini key present (`TEACH_IMAGE_GENERATE` auto)  
+- **When:** an introduction anchors on a referent (R-B image scaffold) or the tutor declares an image — evidence-based, not every turn
+- **How:** disk cache under `tutor/web_static/teach_assets/`; miss → Gemini `gemini-2.5-flash-image` generate → cache; metadata sidecar `domain/spanish_a1/asset_sidecar.json` (keys validated against the association table)
+- **Policy:** generate on miss when a Gemini key is present (`TEACH_IMAGE_GENERATE` auto)
 
 Images bind **referent ↔ Spanish**, not wallpaper.
 
@@ -295,7 +239,7 @@ Images bind **referent ↔ Spanish**, not wallpaper.
 
 | Path | Implementation |
 |------|----------------|
-| **TTS (default)** | Server Gemini TTS (`/api/audio/speak`), voice e.g. Sulafat; **`TTS_RATE` default 1.0** (native). Slow-style director prefix only at low rates (≤ ~0.8). Client Voice slider 0.7–1.2. |
+| **TTS (default)** | Server Gemini TTS (`/api/audio/speak`), voice e.g. Sulafat; **`TTS_RATE` default 1.0** (native). Slow-style director prefix only at low rates (≤ ~0.8). Client Voice slider 0.7–1.2 |
 | **TTS interruption** | Client `speakGeneration` token aborts stale speech loops; interruption must **not** fall back to OS voice for the cut segment; reset/open speak **model/try parts**, not the raw blob |
 | **TTS fallback** | Browser `speechSynthesis` |
 | **STT local** | Chirp streaming WebSocket when ADC/credentials ready; else Gemini / browser |
@@ -308,40 +252,35 @@ Images bind **referent ↔ Spanish**, not wallpaper.
 | Role | Default (typical) | Config |
 |------|-------------------|--------|
 | Tutor | `gemini-3.6-flash` | `TUTOR_MODEL` (read into the `config.MODEL` constant; there is no `MODEL` env var) |
-| Focus rail (optional) | `grok-3-mini` | `FOCUS_MODEL` (`off` = static only) |
+| Signal classifier (shadow) | `gemini-flash-lite-latest` | `SIGNAL_CLASSIFIER_MODEL` (`off` in CI) |
 | TTS | `gemini-2.5-flash-preview-tts` | `TTS_*` |
 | Images | `gemini-2.5-flash-image` | `TEACH_IMAGE_MODEL` |
 
-Clients: `tutor/providers.py` (OpenAI-compatible / Anthropic / Gemini adapters).
+Clients: `tutor/providers.py` (Anthropic / xAI-compat / Gemini adapters).
 
 ---
 
-## 12. Context policy (testing)
+## 12. Teacher context policy
 
-**Do not silently truncate** sheet / pack / stance / chat history fed to the teacher while testing. Premature caps made the model “forget” the sheet.
+Two-phase (TEACHER_CONTEXT=`plan`, the default): PLAN turns carry the full rules + full sheet + full history; ROUND turns carry the model's own plan + full sheet + facts + the versioned 12-message window — the ONE sanctioned window (ENGINEERING §3.3 amendment 2026-08-03). `TEACHER_CONTEXT=full` restores historical every-turn full context.
 
-| Flag | Effect |
-|------|--------|
-| `TEACHER_CONTEXT_TRUNCATE=0` (default) | Full context |
-| `=1` | Optional caps for later prod tuning |
+**Do not silently truncate** sheet / stance / history on the teacher path. No `[:N]` slices, no `history[-N:]` drops (literal or named-constant).
 
-- History store: **full session** (no `history[-24:]` drop)  
-- Send window: `config.history_for_model()` only when caps enabled  
-- Commit gate: `scripts/check_teacher_truncation.py` + `.githooks/pre-commit`  
+- Commit gate: `scripts/check_teacher_truncation.py` + `.githooks/pre-commit`
 - Policy: `docs/teacher-context-no-truncate.md`
+- `TEACHER_CONTEXT_TRUNCATE=1` enables the explicit prod-tuning caps (`*_PROMPT_CHARS`, `HISTORY_TURNS`); default off
 
 ---
 
-## 13. Course pack
+## 13. Domain data
 
-`domain/spanish_a1/` (DATA only — association table, asset sidecar, scenes; the prose course pack was DELETED 2026-08-03: the character sheet carries the curriculum)
+`domain/spanish_a1/` — the domain-model **data** for the level (no prose, no path law):
 
-- `pack.md` + `unit*.md` — legal language palette (full pack in system context; A1 fits)  
-- `scenes/*.json` — open goals  
-- `corpus.pack_topic_titles` — unit topic titles from the pack.md table (mode “change topic” palette; no hardcoded boat/café list; association fallback is lexicon-driven, not default `bote`)  
-- Can-dos / forms: `tutor/can_dos.py`, `docs/spanish-can-dos-novice.md`  
+- `association_table.json` — target inventory (~175 keys; themes, clusters, false-friend slots)
+- `asset_sidecar.json` — teach-image metadata keyed by table keys
+- `migration_deprecations.json` — retired-key escape hatch for sidecar validation
 
-No vector RAG in v0; swap seam is `tutor/corpus.py`.
+The prose course pack (`pack.md` + units), `corpus.py` (its retrieval seam), and the scenes JSON were **deleted 2026-08-03** (full-code audit S1/S2/S9): the character sheet carries the domain targets + scope, and the model plans from sheet + PEDAGOGY.md. Can-do / form inventories currently live in `tutor/can_dos.py` pending the S10 consolidation into `domain/` (see the audit doc).
 
 ---
 
@@ -350,53 +289,62 @@ No vector RAG in v0; swap seam is `tutor/corpus.py`.
 | Path | Role |
 |------|------|
 | `tutor/web_app.py` | FastAPI UI + session cookies |
-| `tutor/conv_session.py` | Session engine, planned pipeline |
-| `tutor/modes.py` | Mode selection |
-| `tutor/executor.py` | AI system + user task builders |
-| `tutor/character_sheet.py` | Ability sheet load/save, observer, next_best, schedule fields |
-| `tutor/learner_profile.py` | **Hard-disabled** personal-profile reference; delete-only path for stale files |
-| `tutor/session_phases.py` | Phase plan + close coda |
-| `tutor/retrieval_scheduler.py` | Due ladder + introduce ledger honesty |
-| `tutor/association_table.py` / `introduce_router.py` | Association inventory + IntroducePlan |
-| `tutor/task_runtime.py` | Info-gap task state |
-| `tutor/progress_ledger.py` | Journey milestones |
+| `tutor/conv_session.py` | Session engine (owns state, history, ledger wiring) |
+| `tutor/turn_pipeline.py` | Staged turn: context → model → gate → record → log |
+| `tutor/session_plan.py` | Two-phase plan/round context + `<plan>`/`<replan/>` harvest |
+| `tutor/executor.py` | AI system + user task builders (facts in, no scripts) |
+| `tutor/character_sheet.py` | The sheet: load/save/quarantine, tool-grade clamps, next_best |
+| `tutor/grade_log.py` | Tool-grade ledger + `/api/progress` payload |
+| `tutor/retrieval_scheduler.py` | Due ladder + introduce/first_seen ledger honesty |
+| `tutor/association_table.py` / `introduce_router.py` | Target inventory + shadow introduce planning/bookkeeping |
+| `tutor/output_gate.py` | Plumbing gate + first-exposure scan |
+| `tutor/progress_ledger.py` | Milestone history |
 | `tutor/costs.py` / `signal_classifier.py` | Cost ledger + shadow intent labels |
-| `tutor/output_gate.py` | Generate-then-verify (incl. unscaffolded / regloss / flood) |
 | `tutor/tutor_response.py` | Tag parse / compose |
 | `tutor/teach_assets.py` / `image_gen.py` | Images |
-| `tutor/session_memory.py` | Per-chat memory + `asked_topics` + seed from sheet |
-| `tutor/can_dos.py` | Can-dos, morphology, **This turn** rail |
-| `PEDAGOGY.md` | Sole law home |
-| `prompts/conversational_tutor.md` | Teaching stance text |
+| `tutor/session_memory.py` / `session_state.py` | Per-chat memory + aggregate session state |
+| `tutor/can_dos.py` | Can-dos, morphology, focus-panel projection |
+| `tutor/exchange_render.py` / `turn_morph.py` | Realized-exchange projections for the rail (ENGINEERING §1.1b) |
+| `tutor/session_log.py` | Lazy dated session logs + model traffic log |
+| `tutor/ai_student.py` | AI learner simulator (evals) |
+| `tutor/learner_profile.py` | **Hard-disabled** personal-profile reference; delete-only path for stale files |
+| `PEDAGOGY.md` / `ENGINEERING.md` | The law files |
+| `prompts/` | Exactly 3: `conversational_tutor.md`, `tutor_persona.md`, `ai_student.md` |
+| `domain/spanish_a1/` | Domain data (see §13) |
+| `evals/` | The promotion bar (see §16) |
 | `logs/character_sheet.json` | Durable Spanish ability |
-| `logs/sessions/` | Turn logs for debugging |
-| `tests/` | Unit tests (~526 test methods as of 2026-07-28; gate, phases, scheduler, introduce, task, progress, costs, …) |
+| `logs/sessions/<YYYY-MM-DD>/` | Session + traffic logs (lazy — first learner turn creates them) |
+| `tests/` | Unit tests (~705 as of 2026-08-03) |
 
 ---
 
-## 15. Important env vars
+## 15. Important env vars (truth source: `tutor/config.py`)
 
 | Variable | Notes |
 |----------|--------|
-| `GEMINI_API_KEY` | Tutor + TTS + images |
-| `GROK_API_KEY` | Focus model if Grok |
-| `TUTOR_MODEL` | e.g. `gemini-3.6-flash` |
-| `FOCUS_MODEL` | `grok-3-mini` or `off` |
-| `TUTOR_MAX_TOKENS` | default **4096** (was 1024; Gemini thinking shares this budget with visible text) |
+| `GEMINI_API_KEY` | Tutor + TTS + images + classifier default |
+| `GROK_API_KEY` / `ANTHROPIC_API_KEY` | Alternative tutor/classifier providers |
+| `TUTOR_MODEL` | default `gemini-3.6-flash` |
+| `TUTOR_MAX_TOKENS` | default **4096** (Gemini thinking shares this budget with visible text) |
 | `GEMINI_REASONING_EFFORT` | optional `low` / `medium` / `high` for Gemini thinking models |
-| `TEACHER_MODE` | `planned` (default; aliases `plan|new|ai` — only runtime; `rules`/`legacy` deleted E4/E4b, other values error) |
-| `SHEET_TOOLS` | default `false` |
-| `TEACHER_CONTEXT_TRUNCATE` | default off |
-| `TTS_ENABLED` / `TTS_VOICE` / `TTS_MODEL` | Server voice; model default `gemini-2.5-flash-preview-tts` |
+| `TEACHER_MODE` | `planned` (default; aliases `plan|new|ai` — the only runtime; other values error) |
+| `TEACHER_CONTEXT` | `plan` (default two-phase) or `full`; `brief` deleted 2026-08-03 |
+| `SHEET_TOOLS` | default **`true`** — model tool grading on; off = ability freezes |
+| `STRICT_ERRORS` | default off — errors visible but non-fatal; `1` re-raises (no-hide) |
+| `TUTOR_PERSONA` | default on; `off` disables the persona layer |
+| `TEACHER_CONTEXT_TRUNCATE` | default off (testing = full context); `1` enables the `*_PROMPT_CHARS` / `HISTORY_TURNS` caps |
+| `SIGNAL_CLASSIFIER_MODEL` / `_TIMEOUT_S` / `_BLOCKING` | shadow intent classifier (`off` in CI; blocking promotion gated on evals) |
+| `TTS_ENABLED` / `TTS_VOICE` / `TTS_MODEL` / `TTS_RATE` / `TTS_PREFER_BROWSER` | server voice; model default `gemini-2.5-flash-preview-tts`; rate default 1.0 |
 | `TEACH_IMAGE_GENERATE` / `TEACH_IMAGE_MODEL` | auto on with Gemini key; model default `gemini-2.5-flash-image` |
-| `GATE_REPAIR` | default `true` — one rewrite on critical gate fault (includes `gate:truncated`) |
-| `FOCUS_ASYNC` | default `true` — focus-rail LLM off the tutor latency path |
-| `FOCUS_BLOCKING` | default `false` — never block reply on focus enrich |
+| `GRADE_LOG_PATH` | override the tool-grade ledger path (evals pin it per run) |
+| `COST_PRICING_JSON` | per-model price overrides for the cost ledger |
 | `ML_TEACHER_DATA_DIR` | Override data root (sheet, sessions); serverless falls back to `/tmp/ml_teacher` |
+
+Deleted knobs (do not reintroduce): `FOCUS_MODEL`/`FOCUS_ASYNC`/`FOCUS_BLOCKING` (focus enricher), `GATE_REPAIR` (gate rewrite), `TEACHER_PROMPT_ORDER` (falsifier arms), `POLICY_PATH`, `CONTROLLER_*`, `PLANNER_MAX_TOKENS`.
 
 ---
 
-## 16. How to run and debug
+## 16. How to run, test, and debug
 
 ```bash
 # local web
@@ -404,23 +352,24 @@ cd /path/to/ml_teacher
 .venv/bin/python -m tutor.web_app
 # → http://127.0.0.1:8765
 
-# tests (sample)
-.venv/bin/python -m unittest tests.test_pedagogy_contract tests.test_output_gate \
-  tests.test_tutor_response tests.test_focus_panel tests.test_teacher_truncation_check
+# unit suite
+.venv/bin/python -m pytest tests/ -q
 
 # truncation commit check
 .venv/bin/python scripts/check_teacher_truncation.py
 git config core.hooksPath .githooks   # once per clone
 
-# behavioral gate (live model calls; the promotion bar)
-.venv/bin/python -m evals.run_conv_smoke          # all 7 conv trajectories
+# behavioral evals (live model calls; THE promotion bar — ENGINEERING §4.3)
+.venv/bin/python -m evals.run_conv_smoke          # scripted conv trajectories
 .venv/bin/python -m evals.run_conv_smoke c01      # cheapest single check
+.venv/bin/python -m evals.run_student_smoke       # AI-student sim + student_checks
 ```
 
-**Session logs:** open latest `logs/sessions/*conversational-web.md` — mode, phase/activity, gate notes, teach_images, next_best.  
-**Ability sheet:** `logs/character_sheet.json` or Full sheet modal.  
-**Journey:** `GET /api/progress` / journey rail.  
-**Debug ring:** `GET /api/debug/requests` (local).  
+**Session logs:** `logs/sessions/<YYYY-MM-DD>/<id>.md` (+ `.jsonl` twin) — created only once a session gets a learner turn; open-only page loads write nothing.  
+**Model traffic:** `logs/sessions/<YYYY-MM-DD>/<id>.requests.jsonl` — full request + response per tutor call (`sent` / `received`, no truncation).  
+**Ability sheet:** `logs/character_sheet.json` or the Full sheet modal.  
+**Grades:** `GET /api/progress` / Grades rail; ledger at `logs/sheet_grades.jsonl`.  
+**Debug ring:** `GET /api/debug/requests` (local, in-memory).  
 **Personal profile:** not a live store; `clear_personal` only removes leftover files.
 
 ---
@@ -434,20 +383,20 @@ git config core.hooksPath .githooks   # once per clone
 
 ## 18. Dual-AI collaboration
 
-- Project notes: `Claude.md`, `GROK.md`  
-- Design spars and adjudications: `docs/reviews-*.md`  
-- Standing rule: **propose → countersign → adjudicate → converge**; append, don’t rewrite history.
+- Project notes: `CLAUDE.md`, `GROK.md`  
+- Design spars and adjudications: `docs/reviews-*.md` (catalog: `docs/reviews-index.md`)  
+- Standing rule: **propose → countersign → adjudicate → converge**; append, don't rewrite history.
 
 ---
 
 ## 19. Known tensions / watch-outs
 
-1. **Mode vs next_best** — UI “This turn” must track mode; sheet arc is secondary.  
-2. **Sheet dump in chat** — model failure; gate + repair, not silent strip.  
-3. **Truncation regressions** — commit checker; keep full context in testing.  
-4. **Async focus LLM** — must not block tutor latency; live mode titles must not wait on it.  
-5. **Image gen latency** — first miss can take seconds; then cached.  
-6. **Serverless vs local** — sheet path and STT differ on Vercel.
+1. **Sheet dump in chat** — model failure; visible gate fault, not silent strip.  
+2. **Truncation regressions** — commit checker; ROUND window is the only sanctioned slice.  
+3. **Plan staleness** — the model replans rarely; revive-condition for any forced replan is a live transcript showing plan/window drift (S9 ruling — the traffic log captures the evidence).  
+4. **Image gen latency** — first miss can take seconds; then cached.  
+5. **Serverless vs local** — sheet path and STT differ on Vercel.  
+6. **`tutor/can_dos.py` content-as-code** — pending S10 consolidation into `domain/`.
 
 ---
 
@@ -455,19 +404,19 @@ git config core.hooksPath .githooks   # once per clone
 
 | Doc | Content |
 |-----|---------|
-| **`PEDAGOGY.md`** | **Sole law home** (theory + laws + debt + enforcement map) |
-| `docs/build-plan-pedagogy-engine.md` | Engine build phases + ship log |
-| `docs/teaching-system.md` | Modes, breaks, scenes design |
-| `docs/pedagogy-contract.md` | Teach-move invariants |
+| **`PEDAGOGY.md`** | Teaching law (theory §0 + rules §2) |
+| **`ENGINEERING.md`** | Engineering/honesty/process law + debt + enforcement |
+| `docs/reviews-full-code-audit-20260803.md` | The 2026-08-03 audit slate + execution stamps |
+| `docs/pedagogy-contract.md` | Teach-move invariants (historical; enforcement moved to evals) |
 | `docs/product-persona.md` | Locked persona |
-| `docs/character-sheet-deep-dive.md` | Sheet structure (may lag slightly) |
-| `docs/design-progression-view.md` | Journey rail design |
+| `docs/character-sheet-deep-dive.md` | Sheet structure (may lag) |
+| `docs/design-progression-view.md` | Grades/journey rail design |
 | `docs/reviews-personal-data-removal.md` | Personal-data removal adjudication |
 | `docs/spanish-can-dos-novice.md` | Can-do inventory |
 | `docs/teacher-context-no-truncate.md` | Context / commit gate |
 | `docs/web-and-audio.md` | Audio architecture |
 | `docs/vercel-deploy.md` | Deploy constraints |
-| `README.md` | Quick start |
+| `README.md` | Front door |
 
 ---
 

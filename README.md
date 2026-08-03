@@ -1,56 +1,68 @@
-# ml_teacher — pedagogy-first tutoring model
+# ml_teacher — conversational Spanish tutor
 
-Research project: train/align a model that is an expert in **teaching**, with subject matter supplied by pluggable course packs. Full plan: `docs/research-and-plan.md`.
+**The model is the teacher; code is the record-keeper and auditor** (ENGINEERING §1.1).
+A frontier model teaches Spanish (A1 first) in conversation. Code keeps the facts —
+character sheet, ledgers, logs — verifies plumbing, and never scripts a teaching move.
 
-**Law (sole home of teaching law text):** [`PEDAGOGY.md`](PEDAGOGY.md)  
-**Living system overview (architecture, pedagogy, ops):** [`docs/system-overview.md`](docs/system-overview.md)
+**Law:** [`PEDAGOGY.md`](PEDAGOGY.md) — how to teach (theory of acquisition §0 + teaching
+rules §2). [`ENGINEERING.md`](ENGINEERING.md) — everything else (axioms, honesty /
+engineering / process laws, debt registry, enforcement map).
+**System map:** [`docs/system-overview.md`](docs/system-overview.md).
 
-**Current product path:** conversational Spanish + living **character sheet** (Spanish ability only: can-dos, scaffold/ledger, next_best, retrieval schedule) + **pedagogy engine** (session phases → close, introduce router, association table, task runtime, output gates, progress journey). **Personal-data capture removed by construction (2026-07-28)** — `tutor/learner_profile.py` is disconnected reference code only. Plan/realize controller is tabled.
+## How it teaches
 
-```
-PEDAGOGY.md                       # sole law home (P1–P9 + HARD/BINDING laws)
-prompts/conversational_tutor.md   # teaching stance (CLT/TBLT/CI)
-course_packs/spanish_a1/          # legal language palette + association_table.json
-tutor/conv_session.py             # shared session engine
-tutor/character_sheet.py          # Spanish-ability sheet (no personal data)
-tutor/session_phases.py           # 5-phase plan (… → close)
-tutor/retrieval_scheduler.py      # spaced re-encounter ladder
-tutor/introduce_router.py         # first-exposure scaffolding
-tutor/web_app.py                  # browser UI (+ browser speech)
-```
+- **Character sheet** (`logs/character_sheet.json`) = domain model + learner model in one
+  artifact: the targets the level covers (domain data in `domain/spanish_a1/`), the
+  scope, and per-item learner evidence. The sheet never sequences — the model plans its
+  own path through it.
+- **Two-phase teacher context** (`tutor/session_plan.py`): PLAN turns (session open, or
+  when the model emits `<replan/>`) get the full picture — the teaching rules + full
+  sheet + history — and the model writes its own private `<plan>`; ROUND turns run
+  small: its plan + full sheet + session facts + a recent history window.
+- **Grades** come from the model via the `update_character_sheet` tool; code clamps and
+  records them under the honesty laws (ENGINEERING §3 — introduction is never knowledge,
+  the display invents nothing).
+- **Output gate** is plumbing only: `gate:truncated` + `gate:sheet_leak`. Teaching-quality
+  opinions live in `evals/student_checks.py`, never in the runtime.
+- **No-hide:** failures are visible (`[no-hide]` on stderr + typed internal_error
+  events), never swallowed; `STRICT_ERRORS=1` re-raises.
+- **Evals are the promotion bar** (ENGINEERING §4.3): behavior changes prove themselves
+  on AI-student transcripts (`evals/run_student_smoke.py`, `evals/run_conv_smoke.py`,
+  checks in `evals/student_checks.py` + blind rubric) — doc review never equals
+  validation.
 
-## Conversational Spanish (primary)
-
-### Web (chat + mic + spoken replies)
+## Run it (web: chat + mic + spoken replies)
 
 ```sh
 pip install -e ".[web]"
-# set GEMINI_API_KEY and/or GROK_API_KEY / ANTHROPIC_API_KEY; TUTOR_MODEL=gemini-3.6-flash
+# set GEMINI_API_KEY (and/or GROK_API_KEY / ANTHROPIC_API_KEY); TUTOR_MODEL=gemini-3.6-flash
 python -m tutor.web_app
 # open http://127.0.0.1:8765
 ```
 
-- **Type** or use the **mic** (browser speech recognition → same chat API).
-- **Speak replies** uses **Gemini neural TTS** (`/api/audio/speak`); browser TTS is fallback. Server default rate is **1.0** (native); the UI Voice slider is **0.7–1.2**.
-- Right rail: **This turn** (live mode) + **Morphology** (static pack + optional cheap async `FOCUS_MODEL`) + **Progress journey** (append-only milestone ledger).
-- Character sheet panel = ability sheet only (no name/personal store).
-- Server-side STT/TTS notes: `docs/web-and-audio.md`.
+Type or use the mic (browser / Chirp / Gemini STT); replies speak via Gemini neural TTS
+with browser fallback. Audio notes: `docs/web-and-audio.md`.
 
-```sh
-# optional: cheap Grok for side-rail personalization (default)
-export FOCUS_MODEL=grok-3-mini   # or off / static
-export GROK_API_KEY=...          # needed if FOCUS_MODEL is a grok-* id
-export TUTOR_MODEL=gemini-3.6-flash
+## Directory map
+
+```
+PEDAGOGY.md                  # teaching law (the model receives the rules on plan turns)
+ENGINEERING.md               # engineering / honesty / process law
+prompts/                     # exactly 3: conversational_tutor, tutor_persona, ai_student
+domain/spanish_a1/           # domain data: association_table.json (target inventory),
+                             #   asset_sidecar.json, migration_deprecations.json
+tutor/web_app.py             # FastAPI UI + session cookies
+tutor/conv_session.py        # session engine
+tutor/turn_pipeline.py       # staged turn: context → model → gate → record → log
+tutor/session_plan.py        # two-phase plan/round teacher context
+tutor/character_sheet.py     # the sheet: domain + learner model, honesty clamps
+tutor/output_gate.py         # plumbing gate (truncated, sheet_leak) + exposure bookkeeping
+evals/                       # promotion bar: AI-student smoke, transcript checks, blind rubric
+docs/system-overview.md      # canonical product / architecture map
 ```
 
-Session logs: `logs/sessions/*.jsonl`. Ability sheet: `logs/character_sheet.json`. Cost ledger: `logs/costs.jsonl` (when written). Stale `logs/learner_profile.json` from the pre-2026-07-28 capture era is deleted by reset/clear paths only — nothing loads or writes personal facts.
-
-## Legacy single-model pack tutor
-
-Deleted 2026-07-28 (`tutor/cli.py` + planner/controller stack; git history is the archive).
-
-### Design notes
-
-- **No vector RAG in v0** — the whole pack sits in the cached system prefix (an A1 pack is small; caching makes repeat turns ~90% cheaper). `tutor/corpus.py` is the seam where a retriever slots in when corpora outgrow context.
-- **Student state** is maintained by the model itself in a `<session_state>` block at the end of each reply; the harness strips it, persists it, and re-injects it as a mid-conversation system message.
-- **Misconception IDs** (`M-x.y`) in the pack double as gold labels for the diagnostic-accuracy rubric dimension.
+Artifacts on disk (`logs/`): `character_sheet.json` (durable Spanish ability),
+`sessions/<YYYY-MM-DD>/<id>.{jsonl,md,requests.jsonl}` (session + model-traffic logs —
+created only once a session gets a learner turn; open-only page loads write nothing),
+`costs.jsonl`, `progress.jsonl`, `sheet_grades.jsonl`. Personal-data capture is disabled
+by construction (2026-07-28) — the sheet is Spanish ability only.

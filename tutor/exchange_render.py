@@ -1,6 +1,6 @@
 """Exchange settlement — peripherals render projections, never the agenda.
 
-PEDAGOGY §1.1b (2026-07-29, café/me-llamo incidents;
+ENGINEERING §1.1b (2026-07-29, café/me-llamo incidents;
 docs/design-exchange-settlement.md, Grok-countersigned): every
 learner-visible artifact outside the chat text that claims to be about
 THIS turn must be confirmed against a projection of the REALIZED

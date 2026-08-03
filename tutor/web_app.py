@@ -128,7 +128,9 @@ def _close_meta(meta: dict, *, persist_sheet: bool = True) -> None:
 
 def _purge_stale() -> None:
     """Reap idle sessions: no activity for IDLE_REAP_SEC → close (writes
-    session_end) and drop. Guard against orphan leaks (2026-07-28)."""
+    session_end IF the session ever logged a learner turn — open-only
+    probe sessions leave zero files, full-code-audit S8) and drop.
+    Guard against orphan leaks (2026-07-28)."""
     now = time.time()
     dead = [
         sid for sid, meta in _sessions.items()
@@ -556,7 +558,8 @@ def create_app() -> FastAPI:
         """Debug box (local app, no auth): the current session's last
         outbound tutor requests + responses, NEWEST FIRST, from the
         in-memory ring buffer.  The same entries are mirrored to
-        logs/sessions/<session_id>.requests.jsonl (model traffic log).
+        logs/sessions/<YYYY-MM-DD>/<session_id>.requests.jsonl (model
+        traffic log; files appear once the session has a learner turn).
         No session → empty list (valid JSON always)."""
         sid = request.cookies.get(COOKIE)
         if not sid or sid not in _sessions:

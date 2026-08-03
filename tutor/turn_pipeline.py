@@ -1315,6 +1315,7 @@ def stage_log_turn(session, ctx: TurnContext) -> None:
         log_learner=ctx.log_learner if ctx.log_learner is not None else (
             "(session open)" if ctx.is_open else (ctx.learner or "")
         ),
+        is_open=ctx.is_open,
     )
 
 
