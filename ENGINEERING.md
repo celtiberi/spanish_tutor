@@ -95,6 +95,11 @@ Editing web_static/app.js or styles.css REQUIRES bumping their ?v= in index.html
 ### 4.5 Enforcement over instruction (BINDING — pattern law)
 When a rule matters, prefer, in order: capability removal (the tool cannot express the violation — e.g., identity stripped from the tool schema) → mechanical gate/lint (output gate faults, commit hooks) → review-prompt check (judgment half, fixed output schema) → prompt text (weakest; never the only layer for a HARD LAW).
 
+
+### 4.6 Dead code is deleted, not archived (HARD LAW — USER directive 2026-08-03: "I never want old or dead code to survive. Do not hold onto code in some stupid archive. We have git history if we need to look back.")
+Code that no longer influences behavior is DELETED in the same change that obsoletes it — never commented out, never moved to an archive dir, never demoted to "shadow" as a way to avoid deciding. Git history is the only code archive. The omission ledger records the DECISION (what/why/revive condition, one entry) — never the code. This supersedes the §1.1 supersession clause's "may run as shadow telemetry" allowance: shadow status is a measured, time-boxed comparison with a named consumer, not a retirement home.
+**Incident:** router "shadow" instructions (SESSION PHASE scripts, modes.py) leaked into the operator's request log 2026-08-03 and read as shipped prompt text — dead machinery isn't neutral; it manufactures false signals.
+
 ---
 
 ## §5. Process laws
@@ -193,6 +198,7 @@ Adding a debt requires: name, date, what full compliance would be, retirement co
 | §3.1 no personal data | identity stripped at load/normalize/process_turn; tool schema lacks identity; writers raise | eval sheet_evolution leak check (all trajectories) |
 | §3.2 ledger honesty | scheduler allowlist + apply_delta strip | — |
 | §1.2/§6 phase mix | eval phase_adherence, due_elicit_fired, introduce_scaffolded, task_goal_offered | transcript review |
+| §4.6 no dead code | full-code audit 2026-08-03 (docs/reviews-full-code-audit) + omission ledger | USER directive; deletions execute on audit verdicts |
 | §4.3 promotion bar | evals/run_conv_smoke.py trajectories c01–c11 | pre-registered gate referee |
 | §4.4 cache/version | /api/health stale_code; buildStamp in UI | — |
 
