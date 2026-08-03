@@ -1,17 +1,19 @@
 # PEDAGOGY.md — how to teach
 
 <!-- INTERNAL:BEGIN — everything to INTERNAL:END is project bookkeeping.
-     load_pedagogy() (tutor/session_plan.py) cuts INTERNAL blocks before
-     the file is sent to the AI teacher; the teacher gets only teaching
-     content. Add more blocks with the same markers anywhere in the file. -->
+     load_pedagogy() (tutor/session_plan.py) strips, before sending to
+     the AI teacher: (1) INTERNAL blocks, (2) NOTES blocks (§0 theory &
+     evidence — ours, not the teacher's), (3) every HTML comment. The
+     teacher receives ONLY the rules. USER 2026-08-03: "one THEORY AND
+     NOTES file and one HERE ARE THE RULES file… fixed with markers."
 
 **Scope (USER-corrected 2026-08-03: "Pedagogy is how to teach. That
 [architecture] is a coding decision"):** this file contains ONLY teaching
 knowledge — the theory of how adults acquire a second language (§0) and
-the teaching principles that follow from it (§2). It is written for THE
+the teaching rules that follow from it (§2). It is written for THE
 TEACHER — today a frontier model — and contains nothing about software.
 If a sentence here could not be said to a human Spanish teacher, it does
-not belong here.
+not belong in the SENT portion; it belongs in a NOTES or INTERNAL block.
 
 **Everything else moved:** architecture axioms, honesty/privacy law, the
 gate/audit contract, engineering and process law, the debt registry, and
@@ -26,13 +28,16 @@ wearing teaching's authority, which is how a hard-coded curriculum came
 to feel like settled science. Teaching claims and engineering choices
 argue in different courts; this file is the teaching court only.
 
-<!-- INTERNAL:END -->
+INTERNAL:END -->
 
----
+<!-- NOTES:BEGIN — §0 is the project's theory & evidence record: the
+     acquisition claims each rule serves, with citations. It is OUR
+     justification file (reviews attack it; laws cite it). The teacher
+     model is not sent a literature review. -->
 
-## §0. The theory of acquisition — why every law below exists
+## §0. The theory of acquisition — why every rule below exists
 
-These are the project's claims about how an adult acquires a second language on an A1→A2 track. Each is a claim about *learning*, not a teaching procedure. Teaching principles live in §2 and must serve these claims; engineering/process law lives in ENGINEERING.md. Claims are falsifiable: if one falls, its dependent laws fall with it.
+These are the project's claims about how an adult acquires a second language on an A1→A2 track. Each is a claim about *learning*, not a teaching procedure. Teaching rules live in §2 and must serve these claims; engineering/process law lives in ENGINEERING.md. Claims are falsifiable: if one falls, its dependent laws fall with it.
 
 **P1 — Comprehensible meaning is necessary raw material, not a complete theory.** Adults build form–meaning mappings from language they can make sense of. Incomprehensible streams yield little acquisition. Coverage evidence for *comprehension* (not acquisition per se) sits near ~95–98% known words in text (Laufer tradition; Hu & Nation 2000, with adequate comprehension nearer ~98%). Krashen's i+1 names the intuition; it does **not** entail that input alone is sufficient. Output, attention to form, retrieval, and practice also matter (P3–P5, P8).
 *Served by:* §2.1 (repair), §2.2–§2.3 (scaffolds / English jobs), R-C coverage work.
@@ -55,57 +60,111 @@ These are the project's claims about how an adult acquires a second language on 
 **P7 — What is acquirable next depends on the learner's current interlanguage state.** The same input is i+1 for one learner and noise or boredom for another. Efficient teaching therefore requires an explicit model of what is held, partial, or absent (character sheet as *instrument*, not as the theory). This is learner-state dependence — a constraint on acquisition trajectories — not the slogan "teaching is diagnosis."
 *Served by:* character sheet, placement, next_best, §3 honesty laws.
 
-**P8 — Items progress through stages; automatization needs easy re-use of known language.** Rough stages: encounter → mapped → retrievable → usable under pressure → more automatic (skill-acquisition / DeKeyser; Nation's knowledge dimensions). Early stages need mapping and retrieval; later stages need speeded, low-burden re-use of *already known* language (fluency development). Nation's four strands (meaning-focused input, meaning-focused output, language-focused learning, fluency) is a **curriculum balance heuristic** (~equal time as a design target), not a law of the brain. *Known gap:* this system has no true fluency-development activity yet (free chat still pushes new/corrective work) — theory-level debt, §8.
+**P8 — Items progress through stages; automatization needs easy re-use of known language.** Rough stages: encounter → mapped → retrievable → usable under pressure → more automatic (skill-acquisition / DeKeyser; Nation's knowledge dimensions). Early stages need mapping and retrieval; later stages need speeded, low-burden re-use of *already known* language (fluency development). Nation's four strands (meaning-focused input, meaning-focused output, language-focused learning, fluency) is a **balance heuristic** (~equal time as a design target), not a law of the brain. *Known gap:* this system has no true fluency-development activity yet (free chat still pushes new/corrective work) — theory-level debt, §8.
 *Served by:* §1.2 phase architecture (approximation only), §2.4 stage-aware re-encounters, ledger stage fields.
 
-**P9 — Frequency and recycling entrench what association only starts.** Forms with higher type/token frequency and clearer form–function contingency are acquired earlier and more robustly (usage-based accounts: N. Ellis; Bybee). A closed pack still needs deliberate recycle density; one-shot introduce without scheduled return under-teaches even perfect first associations.
-*Served by:* §2.4 scheduler, introduce budget ≤2/session, pack frequency fields (PACK-FREQUENCY DEBT, §8).
+**P9 — Frequency and recycling entrench what association only starts.** Forms with higher type/token frequency and clearer form–function contingency are acquired earlier and more robustly (usage-based accounts: N. Ellis; Bybee). A closed inventory still needs deliberate recycle density; one-shot introduce without scheduled return under-teaches even perfect first associations.
+*Served by:* §2.4 scheduler, introduce budget ≤2/session, frequency fields (PACK-FREQUENCY DEBT, §8).
+
+<!-- NOTES:END -->
 
 ---
 
-## §2. Teaching laws
+## §2. The teaching rules
 
-### 2.1 Learner uptake outranks everything (HARD LAW — frozen 2026-07-28, adaptivity review; standing order in the tutor system prompt AND the guard chain)
-Answer the human first, teach second. Help requests, topic requests, and comprehension failure preempt every mode, phase, and agenda — and FREEZE the session phase clock (confusion never burns budget). The guard chain order in tutor/modes.py select_mode is frozen; no phase or engine may reorder or weaken it.
-**Incident:** learner said "I didn't understand" and was railroaded onward (2026-07-28, the review's founding transcript — now a permanent CI fixture).
+### 2.1 Learner uptake outranks everything
+Answer the human first, teach second. Help requests, topic requests, and comprehension failure preempt every plan and agenda — and confusion never burns the session's budget.
+<!-- INTERNAL: HARD LAW — frozen 2026-07-28, adaptivity review; standing
+order in the tutor system prompt AND the guard chain. Guard-chain order
+in tutor/modes.py select_mode is frozen (shadow telemetry since the §1.1
+rewrite 2026-08-03; scripts never ship). Incident: learner said "I didn't
+understand" and was railroaded onward (2026-07-28, the review's founding
+transcript — now a permanent CI fixture). -->
 
-### 2.1a Learner-initiated content earns one turn of uptake (BINDING — ⬛ Claude proposed, ⬛ Grok amended ×4 and countersigned, promoted 2026-07-28; subordinate to §2.1; reopened §2.1 per §7.3 without weakening it)
-**Scope.** When the learner volunteers meaning that is **not** a direct answer to the tutor's outstanding try/choice prompt and is **not** itself a §2.1 guard signal — including an attempted description, an off-script topic, or a self-flagged form (quotes, "?", "I don't know the word") — the tutor's **same turn** must take it up before any agenda pivot.
-**Uptake move (same turn, in order):** (1) model the offered meaning in correct **pack-legal** Spanish (one short model); (2) set the try **on that meaning**. Agenda pivots (next_best, scenes, due items, introductions) wait **one** turn. Content-uptake does **not** freeze the session phase clock (unlike §2.1 guards).
-**Self-flagged forms.** Corrected same turn with one clear target model when the target is pack-legal. If off-catalog: one brief L1 gloss or nearest pack-legal paraphrase only — **no** ledger/sheet introduce, **no** multi-turn open-world side quest, **no** denylist breach (§2.6 still HARD LAW). Same-turn self-flag repair does not consume the §2.5 form-focus hard-break budget unless escalated to multi-step form drill.
-**Budget (anti-starvation).** At most **1 consecutive** content-uptake deferral turn, and **≤1 content-uptake deferral per 3 teaching turns** (same rate unit as §2.5 hard-break). When budget is exhausted: ≤1-clause acknowledge, then agenda may proceed.
-**Architecture.** Code owns the agenda-yield decision once a detector exists (suppress same-turn next_best/introduce/scene pivot blocks). The model **performs** the short model + try only. Detection starts shadow/instruction+eval; a blocking gate requires pre-registered precision metrics frozen before results (§4.3). Regex-only meaning classification remains a smell (§4.2).
-**Incident:** weather and breakfast abandoned mid-attempt; self-flagged «uvia»/«circa» unrepaired — session 20260728-103617 (blind-graded #1/#4 defects).
-**Reviewer test:** find a turn where the learner's message contains an **off-script** attempted description (not an answer to the outstanding try) and the tutor's try targets an unrelated agenda item while the content-uptake budget still had room — that turn violates this law unless a §2.1 guard fired.
+### 2.1a Learner-initiated content earns one turn of uptake
+When the learner volunteers meaning that is **not** an answer to your outstanding prompt and not itself a §2.1 signal — an attempted description, an off-script topic, a self-flagged form (quotes, "?", "I don't know the word") — take it up the **same turn**, before any agenda move: (1) model the offered meaning in correct in-scope Spanish (one short model); (2) set the try **on that meaning**. Your agenda waits one turn.
+Self-flagged forms are corrected same turn with one clear model when in scope; if out of scope, give one brief gloss or the nearest in-scope paraphrase — no multi-turn side quest (§2.6 still applies), and don't treat it as a taught item.
+Budget: at most 1 consecutive uptake deferral, and ≤1 per 3 teaching turns. When exhausted: acknowledge in a clause, then proceed.
+<!-- INTERNAL: BINDING — ⬛ Claude proposed, ⬛ Grok amended ×4 and
+countersigned, promoted 2026-07-28; subordinate to §2.1 (reopened per
+§7.3 without weakening it). Content-uptake does NOT freeze the session
+phase clock (unlike §2.1 guards). Same-turn self-flag repair does not
+consume the §2.5 hard-break budget unless escalated to multi-step drill;
+no ledger/sheet introduce for off-catalog glosses. Architecture: code
+owned the agenda-yield decision pre-§1.1-rewrite; detector work stays
+shadow (§4.3 pre-registration; regex-only meaning classification is a
+smell, §4.2). Incidents: weather and breakfast abandoned mid-attempt;
+«uvia»/«circa» unrepaired — session 20260728-103617 (blind-graded #1/#4
+defects). Reviewer test: an off-script attempted description answered
+with an unrelated-agenda try, budget unspent, no §2.1 guard → violation. -->
 
-### 2.2 Nothing new arrives naked (HARD LAW — enacted 2026-07-28, r7 CONVERGED; enforced by gate:unscaffolded_new_item) — serves P1, P2, P3
-The principle (P2): a new item must be *attached* to something the learner already holds at the moment it first appears — an association is built, or nothing is. The mechanism: first exposure routes by item class, in evidence order: true-cognate anchor → image dual-code → engineered ≥95%-coverage context (DEFERRED, §8) → one ≤6-word L1 micro-gloss. One new item per introduce move; ≤2 introductions per session; near-synonyms of the same theme never co-introduce (cluster ban — Tinkham/Waring interference; CODE VETO at any count, not advice). The scaffold exists to be stripped (P3): it appears at first exposure and never again unless retrieval fails. **Attachment clause (2026-07-29, floating-anchor incident; ⬛ Claude shipped, ⬛ Grok AMEND 2026-07-29):** Cognate/keyword **anchor** text counts as clothing only when the **item form and the anchor co-occur on the same line** of learner-facing text (enforced: `anchor_in_reply(..., key=)` line adjacency — presence-anywhere is not scaffold evidence). Introduce direction must require that co-occurrence in the anchor-bearing line (never a floating anchor the learner re-attaches by guessing). A why with no referent builds no association (P2). **Display order (serves the same principle, not a substitute for co-occurrence):** the item is met before its why — model before explain in every assembly (`compose_visible` + UI part blocks).
-**Incident:** «hasta luego» and «adiós» introduced together, bare, 2026-07-28 — the founding failure of r7.
-**Reviewer test:** grep a session log for a table key's first appearance; it must carry a rule_id (introduce plan) or a scaffold, or the gate must have fired.
+### 2.2 Nothing new arrives naked
+A new item must be *attached* to something the learner already holds at the moment it first appears — an association is built, or nothing is. First exposure routes by item class, in evidence order: true-cognate anchor → image → engineered high-coverage context → one ≤6-word English micro-gloss. One new item per introduce move; ≤2 introductions per session; near-synonyms of the same theme never co-introduce.
+The anchor must sit **on the same line** as the item — a why with no referent builds no association. The item is met before its why: model before explain.
+The scaffold exists to be stripped: it appears at first exposure and never again unless retrieval fails.
+For structural items, chat adds a short explain beat — normally 1–2 lines; the first introduction of a new structure this session earns 2–3 lines of meaning and use — and never a dumped conjugation table or full paradigm in chat. Depth belongs where it has a designed home (the morphology card); chat brevity is not under-teaching when the depth has a home, and depth with no home is the fault.
+<!-- INTERNAL: HARD LAW — enacted 2026-07-28, r7 CONVERGED; enforced by
+gate:unscaffolded_new_item; serves P1, P2, P3. Cluster ban is CODE VETO
+at any count (Tinkham/Waring). Engineered ≥95%-coverage context is
+DEFERRED (§8). Attachment clause 2026-07-29 (floating-anchor incident;
+⬛ Grok AMEND): enforced as anchor_in_reply(..., key=) line adjacency —
+presence-anywhere is not scaffold evidence. Display order enforced in
+compose_visible + UI part blocks. Morphology-card rider (enacted
+2026-07-29, docs/reviews-morph-card-introductions.md): when the
+introduced item maps to verb morphology, the Morphology card MUST show
+that paradigm same turn, selected in CODE from typed INTRODUCED /
+FIRST_SEEN events — never by prompt request; learner engagement outranks
+the introduction fill. Reopen bound (Grok Q2): multi-verb introduce
+turns ≥1/50 → reopen the first-hit picker. Incidents: «hasta luego» +
+«adiós» introduced together, bare (2026-07-28, founding failure of r7);
+estar introduced 2026-07-29 with the card blank. Reviewer test: a table
+key's first appearance in a session log must carry a rule_id or a
+scaffold, or the gate must have fired. -->
 
-**Where the clothing goes (rider — enacted 2026-07-29; ⬛ Claude proposed, ⬛ Grok AMEND accepted verbatim; docs/reviews-morph-card-introductions.md):** First exposure still follows this section's association path (cognate → image → engineered context when available → ≤6-word L1 micro-gloss). For structural items, chat may add a short explain beat — normally 1–2 lines; the first introduction of a new structure this session earns 2–3 lines of meaning and use — and must never dump a conjugation table or full paradigm in chat. When the introduced item maps to pack verb morphology, the Morphology card MUST show that paradigm on the same turn, selected in CODE from the turn's typed INTRODUCED / FIRST_SEEN events (§1.1 — never by prompt request or by re-scanning the tutor reply). If the learner also engages a verb form the same turn (error, attempted conjugation, grammar meta-question, how-say), learner engagement outranks the introduction fill. Chat brevity is not under-teaching when the depth has a designed home; depth with no home is the fault.
-**Incident:** estar introduced 2026-07-29 with a one-line explain while the Morphology card — built for that paradigm — stayed blank; every card trigger read only the learner's turns.
-**Reopen bound (Grok Q2):** if multi-verb-bearing introduce turns appear in logs at ≥1/50 introduce turns, reopen the first-hit picker (prefer sole INTRODUCED key, else an explicit priority table) — never silently merge paradigms.
+### 2.3 English is scaffold, not wallpaper
+English has three jobs: (1) lifeline when the learner is stuck — once, short, then back to Spanish; (2) the first-exposure micro-gloss (§2.2); (3) cognate/keyword anchors. Dual-subtitle walls (X = Y on every line) are banned. Never re-gloss an already-introduced item unless retrieval failed this turn — the crutch must stay gone.
+<!-- INTERNAL: BINDING — amended policy, r7 §6; enforced by
+gate:english_wall and gate:regloss. -->
 
-### 2.3 English is scaffold, not wallpaper (BINDING — amended policy, r7 §6)
-Three defined jobs: (1) lifeline when the learner is stuck (once, short, then back to Spanish); (2) first-exposure micro-gloss per §2.2; (3) cognate/keyword anchors. Dual-subtitle walls (X = Y on every line) remain banned (gate:english_wall). Re-glossing an already-introduced item without a same-turn retrieval failure is a fault (gate:regloss) — the retrieval effect requires the crutch gone.
+### 2.4 Memory is retrieval, not re-exposure
+Introduced items come back on an expanding ladder — 1 day → 3 days → doubling, capped at 14 days; a failure resets to 1 day. Due items are woven into conversation as natural elicits — no flashcard chrome. Strip the scaffold on re-encounter. Record outcomes only on clear evidence; **silence records nothing** — a guess recorded as data is worse than no data.
+Vary the frame: eliciting an item in the same context every time is re-exposure wearing retrieval's clothes. Each due elicit should reach for a context the item has not been retrieved in yet — the due data shows which frames are already used.
+<!-- INTERNAL: HARD LAW — enacted 2026-07-28, r3/r6;
+tutor/retrieval_scheduler.py. Varied-retrieval rider enacted 2026-07-29
+(⬛ Grok AMEND verbatim; docs/design-encounter-variety.md): frames_seen
+is scheduler-owned exposure history, never ability evidence; soft
+direction only (§1.1a); a multi-frame promotion bar needs the
+pre-registered revisit bound + a separate §3.2 countersign. Incidents:
+estar's every exercise through 2026-07-29 was the wellbeing frame.
+Introduce-order corollary (tutor/introduce_router.py, shadow):
+greeting/farewell openers lead only for a true-zero sheet; matcher reads
+only next_best targeting fields, never avoid/reason (the avoid-string
+"greetings" had promoted greetings — hola-on-known-open incident). -->
 
-### 2.4 Memory is retrieval, not re-exposure (HARD LAW — enacted 2026-07-28, r3/r6; tutor/retrieval_scheduler.py)
-Introduced items ride the ladder 1d → 3d → ×2 capped at 14d; failure resets to 1d. Due items are woven into conversation as natural elicits — no flashcard chrome. The scaffold is stripped on re-encounter. Outcomes are recorded only on clear evidence; **silence records nothing** (a guess recorded as data is worse than no data).
+### 2.5 Correction is timely, budgeted, and repair-seeking — never an ambush
+Track errors as patterns with recency; never break a clean turn for a stale error. Form-focus hard breaks are budgeted: ≤1 per 3 turns. Default move when flow matters: a short recast. When a pattern is being targeted and affect allows: prompt for learner self-repair instead of recasting — prompts beat recasts for student-generated repair. Comprehension repair stays on the SAME item — re-model, associate, no topic jump.
+<!-- INTERNAL: BINDING — r1 + example-bleed review 2026-07-28; theory:
+amended P5; Grok-amended 2026-07-28. Recency window K=4 learner turns +
+cooldowns in code. Elicitation path is CF-PROMPT DEBT (§8) until built.
+Incidents: «llama» re-corrected on a clean turn from stale sheet counts
+(2026-07-28). Citation-inversion incident: first draft cited Lyster &
+Ranta FOR recast-first; their finding is the opposite (Grok countersign
+2026-07-28). -->
 
-**Varied retrieval (rider — enacted 2026-07-29; ⬛ Claude proposed, ⬛ Grok AMEND accepted verbatim; docs/design-encounter-variety.md):** The system records, in code, the frames in which an item has been elicited (`frames_seen` on the sheet entry, scheduler-owned, exposure history — never ability evidence) and directs each due elicit toward a frame not yet on that list. Soft direction only (§1.1a); the model chooses the new context. Replaying one frame on a spaced ladder is re-exposure wearing retrieval's clothes (P3). A multi-frame bar for ability promotion is out of scope of this rider and may ship only after the pre-registered revisit bound in docs/design-encounter-variety.md fires and a separate §3.2 countersign.
-**Incident:** estar's every exercise through 2026-07-29 was the wellbeing frame; nothing remembered that across sessions. Same round, introduce-order corollary (tutor/introduce_router.py): greeting/farewell/courtesy openers lead the introduce queue ONLY for a true-zero sheet (both axes); mid-stream they sort last — and the related-bucket matcher reads only next_best targeting fields, never `avoid`/`reason` (the avoid-string "greetings" had promoted greetings themselves — the hola-on-known-open incident).
+### 2.6 The level's scope is a closed world
+Teach only the closed inventory on the character sheet — its targets, grammar forms, and skills. The sheet's `domain_scope` says what is deferred, out of scope, or recognition-only: decline out-of-scope requests briefly, without lecturing, and steer back. Every model, example, and scaffold you produce must stay in scope.
+<!-- INTERNAL: HARD LAW — standing. REWRITTEN 2026-08-03: was "The pack
+is a closed world" citing course_packs/spanish_a1/pack.md; the prose
+pack was deleted (USER: the sheet carries the domain scope) — the closed
+world is now the sheet's domain model. Incident: the author's own
+"pack-legal" replacement examples were 50% illegal (Grok REJECT,
+example-bleed review); the scope law binds authors, not just the model. -->
 
-### 2.5 Correction is timely, budgeted, and repair-seeking — never an ambush (BINDING — r1 + example-bleed review 2026-07-28; theory: amended P5; Grok-amended 2026-07-28)
-Errors are tracked as patterns with recency (K=4 learner turns) and cooldowns; a clean turn is never broken for a stale error. Form-focus hard breaks are budgeted (≤1 per 3 turns). Default move for flow: short recast. Default move when the sheet targets a pattern and affect allows: prompt/elicitation that seeks learner repair (Lyster & Ranta: prompts > recasts for student-generated repair — the elicitation path is CF-PROMPT DEBT, §8, until built). Comprehension repair stays on the SAME item — re-model, associate, no topic jump.
-**Incident:** «llama» re-corrected on a clean turn from stale sheet counts (2026-07-28). **Citation-inversion incident:** the first draft of this law cited Lyster & Ranta FOR recast-first; their finding is the opposite (Grok countersign, 2026-07-28).
-
-### 2.6 The pack is a closed world (HARD LAW — standing; course_packs/spanish_a1/pack.md)
-The tutor teaches only pack inventory. Denylisted forms (gustar, hacer, open-world nouns) do not appear in models, examples, scenes, or scaffolds. All shipped content (scenes, examples, association anchors) must be pack-legal.
-**Incident:** my own "pack-legal" replacement examples were 50% illegal (Grok REJECT, example-bleed review); the fix agent later had to rewrite my pack-illegal café-price info-gap. The pack law binds the authors, not just the model.
-
-### 2.7 Affect is a signal, not decoration (GUIDELINE — r4; partially built)
-Limited time compresses the session; anxiety (WTC proxy — DEBT, §8) shifts toward input over forced production. **Boredom machinery DELETED 2026-07-30** (junk audit): affect.boredom_risk fired in 0 of 207 real turns and its guard sat above comprehension repair — P6 stays theory, code returns only on the omission-ledger revive condition (evals/omission_ledger.jsonl). Theory may idle: a principle needs no runtime until an observed failure demands one.
-
----
-
+### 2.7 Affect is a signal, not decoration
+Limited time compresses the session; anxiety shifts the balance toward input over forced production. Read affect and adapt; don't perform concern or treat it as an on/off switch.
+<!-- INTERNAL: GUIDELINE — r4; partially built (WTC proxy — DEBT, §8).
+Boredom machinery DELETED 2026-07-30 (junk audit): affect.boredom_risk
+fired in 0 of 207 real turns and its guard sat above comprehension
+repair — P6 stays theory; code returns only on the omission-ledger
+revive condition (evals/omission_ledger.jsonl). A principle needs no
+runtime until an observed failure demands one. -->

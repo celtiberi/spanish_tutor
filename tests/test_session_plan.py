@@ -84,10 +84,12 @@ class TestExtractPlan:
 def test_pedagogy_loads_teaching_content():
     text = load_pedagogy()
     assert text, "PEDAGOGY.md missing or unreadable"
-    # The split (2026-08-03) left ONLY teaching law here; the plan turn
-    # must hand the teacher the real guide, not the engineering file.
-    assert "§0" in text or "theory" in text.lower()
-    assert "§2" in text
+    # The sent copy is the RULES file: every §2 rule present.
+    for rule in ("2.1 Learner uptake", "2.2 Nothing new arrives naked",
+                 "2.3 English is scaffold", "2.4 Memory is retrieval",
+                 "2.5 Correction is timely", "2.6 The level's scope",
+                 "2.7 Affect is a signal"):
+        assert rule in text, f"rule missing from teacher copy: {rule}"
 
 
 def test_pedagogy_internal_blocks_cut():
@@ -100,11 +102,14 @@ def test_pedagogy_internal_blocks_cut():
         "PEDAGOGY.md lost its internal-block markers"
     )
     sent = load_pedagogy()
-    assert "INTERNAL" not in sent
+    assert "INTERNAL" not in sent and "<!--" not in sent
     assert "How this file got confused" not in sent
-    assert "ENGINEERING.md" not in sent.split("§0")[0], (
-        "bookkeeping preamble leaked into the teacher copy"
-    )
+    # Theory & evidence (§0) is OUR notes file, never sent.
+    assert "Roediger" not in sent and "§0" not in sent
+    # Bookkeeping vocabulary stays out of the teacher copy.
+    for word in ("HARD LAW", "BINDING", "Incident:", "Reviewer test",
+                 "countersign", "ENGINEERING.md"):
+        assert word not in sent, f"bookkeeping leaked: {word}"
 
 
 # ---------------------------------------------------------------------------

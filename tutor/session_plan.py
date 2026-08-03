@@ -8,7 +8,8 @@ context that is fed for the future rounds unless something changes and
 we need a new plan."
 
 PLAN turns (session open, or whenever a re-plan is needed) get the FULL
-picture: PEDAGOGY.md verbatim (it is written for the teacher), the
+picture: the PEDAGOGY.md rules (NOTES/INTERNAL spans cut — see
+load_pedagogy), the
 character sheet — domain model + learner state in one artifact: targets,
 scope, per-item evidence — and history. The model writes its own session
 plan in a private <plan> block before its normal <tutor> reply.
@@ -18,8 +19,8 @@ sheet + session facts + due data + a recent history window. No pedagogy
 file — the plan already digested it.
 
 The model revises its plan any turn by emitting a new <plan> block, and
-requests a full-context re-plan with <replan/> when it needs the pack or
-pedagogy again (learner steered somewhere the plan didn't cover, plan
+requests a full-context re-plan with <replan/> when it needs the
+teaching rules again (learner steered somewhere the plan didn't cover, plan
 exhausted, etc.). Code never writes or edits a plan (§1.1: facts,
 honesty, audit only).
 
@@ -77,22 +78,27 @@ _PLAN_RE = re.compile(r"<plan>\s*(.*?)\s*</plan>", re.S | re.I)
 _REPLAN_RE = re.compile(r"<replan\s*/?>", re.I)
 
 
-_INTERNAL_RE = re.compile(
-    r"<!--\s*INTERNAL:BEGIN\b.*?INTERNAL:END\s*-->", re.S
+# Marked spans: INTERNAL (bookkeeping) and NOTES (§0 theory & evidence)
+# stay in the FILE for us; the teacher receives only the rules.
+_CUT_SPANS_RE = re.compile(
+    r"<!--\s*(?:INTERNAL|NOTES):BEGIN\b.*?(?:INTERNAL|NOTES):END\s*-->",
+    re.S,
 )
+_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
 
 
 def load_pedagogy() -> str:
-    """PEDAGOGY.md for the teacher, with INTERNAL blocks cut (USER
-    2026-08-03: bookkeeping stays in the file for us, marked so we know
-    where to cut; the AI model gets only the teaching content).
-    Missing file → "" (visible: the plan prompt then simply lacks the
-    guide; no silent substitute)."""
+    """PEDAGOGY.md for the teacher: NOTES/INTERNAL spans and every HTML
+    comment cut (USER 2026-08-03: "one THEORY AND NOTES file and one
+    HERE ARE THE RULES file" — realized with markers; the sent copy IS
+    the rules file). Missing file → "" (visible: the plan prompt then
+    simply lacks the guide; no silent substitute)."""
     try:
         raw = PEDAGOGY_PATH.read_text(encoding="utf-8")
     except OSError:
         return ""
-    cut = _INTERNAL_RE.sub("", raw)
+    cut = _CUT_SPANS_RE.sub("", raw)
+    cut = _HTML_COMMENT_RE.sub("", cut)
     # Collapse the blank runs the cuts leave behind.
     return re.sub(r"\n{3,}", "\n\n", cut).strip()
 
