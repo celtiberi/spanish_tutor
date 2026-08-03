@@ -988,16 +988,34 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
     ctx.system = build_ai_tutor_system(
         pack_palette=load_pack(session.pack_dir),
     )
+    # §1.1 REWRITE (USER 2026-08-03): the model gets FACTS, never the
+    # routers' scripted opinions. Due items ride as data (key + gloss +
+    # frames already used) so the model can schedule review by judgment;
+    # mode/phase/introduce machinery still runs as SHADOW telemetry
+    # (notes/debug show what code would have said) but ships nothing.
+    from .retrieval_scheduler import due_items, frames_seen_of
+
+    table = getattr(session, "association_table", None) or {}
+    due_facts = [
+        {
+            "key": d.key,
+            "kind": d.kind,
+            "gloss": str((table.get(d.key) or {}).get("gloss_en") or ""),
+            "frames_already_used": list(
+                frames_seen_of(session.sheet, d.key, d.kind)
+            ),
+        }
+        for d in due_items(session.sheet, max_due=5)
+    ]
     ctx.task = build_ai_tutor_user_message(
         learner=ctx.learner,
         is_open=ctx.is_open,
         session_memory=session.pedagogy_memory.snapshot(),
-        observations=ctx.obs,
         teach_images=ctx.teach_images,
         blank_sheet=ctx.blank,
-        mode_decision=ctx.decision.as_dict(),
         open_scene_hints=scene_hints_for_prompt(ctx.open_scenes),
         sheet_summary=format_sheet_for_prompt(session.sheet),
+        teaching_data={"due_for_review": due_facts},
     )
     if ctx.is_open:
         ctx.messages = [{"role": "user", "content": ctx.task}]

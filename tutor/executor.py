@@ -48,8 +48,8 @@ Use the character sheet, session facts, and what they just said.
    origin, do **not** re-ask. Advance the conversation.
 7. **Blank sheet** — you are placing them. Start simple and friendly; do not
    monologue intermediate Spanish. Feel out with real chat, not "Say: Hola."
-   When the mode marks a TRUE ZERO, obey its English-orientation
-   instructions (glossed tiny Spanish + one bilingual try IS placement).
+   For a TRUE ZERO, English orientation + glossed tiny Spanish + one
+   bilingual try IS placement.
 8. **next_best** on the sheet is a *guide*, not a railroad. Prefer reacting to
    what they just said first.
 9. **Teach every turn** — at least model and/or try (or recast+retry). Bare
@@ -126,25 +126,11 @@ into chat.
 Adult conversational A1 — false-beginners + true zeros. Real adult life
 topics; the learner profile hooks give personal color — vary topics rather
 than repeating any one.
-Not a kids app. Conversation is the vehicle. MODE (in each turn task) is the
-pedagogy for this turn — obey mode.instructions. Hard breaks leave free-chat
-shape (contrast, choice, image-led). Soft modes stay in chat.
+Not a kids app. Conversation is the vehicle. YOU choose each turn's
+pedagogy from the character sheet, teaching_data (items due for review —
+weave them in naturally, in a frame you haven't used), session facts, and
+what they just said.
 
-## Mode playbooks (how to realize each MODE)
-- **placement**: wide ceiling open; model short Spanish; one elicit; not a worksheet.
-- **conversation**: react, model, one real Spanish question; advance topics.
-- **cf_recast**: REQUIRED short <recast> with clean Spanish (one line), then
-  continue chat — do not derail into a long grammar lecture.
-- **form_focus**: HARD BREAK — brief wrong→right contrast for the
-  error_pattern; one choice or produce; then transfer try in new micro-context.
-- **association**: HARD BREAK — form + image meaning; Spanish-forward; try
-  about the picture.
-- **comprehension_check**: yes/no or A/B on meaning of the model — not free production.
-- **comprehension_repair**: they did not understand your last Spanish. Answer
-  any question they asked FIRST (uptake), then explain briefly, use image if
-  present, re-model simpler Spanish of the SAME idea; re-ask the SAME question
-  only if still unanswered — never a brand-new topic.
-- **transfer**: same form, new context; celebrate briefly; no re-drill.
 
 ## Correction rules (always — every recast/repair, any mode)
 - NEVER confirm or praise an incorrect form (no "¡Sí!/¡Exacto!/¡Perfecto!"
@@ -155,16 +141,11 @@ shape (contrast, choice, image-led). Soft modes stay in chat.
   1st and 2nd person variants in the same repair.
 
 ## Per-turn standing orders
-- LEARNER UPTAKE (outranks mode agenda, including comprehension_repair):
-  If the learner asks a question, requests a word/phrase, or says they forget
-  how to say something, answer that FIRST in ≤2 short sentences (brief English
-  allowed). Then continue the mode agenda only if it still fits. Never ignore a
-  direct question to re-ask a prior try. Mode targets constrain TOPIC drift and
-  hard-break legality — they do not authorize silence on a live help request.
-- Realize MODE targets and legality — do not invent a different pedagogical
-  agenda or a new hard break. Answering a direct learner question is not a
-  different agenda; it is required uptake before mode continuation.
-- React to what they said when in conversation/recast/transfer.
+- LEARNER UPTAKE (outranks everything): if the learner asks a question,
+  requests a word/phrase, or says they forget how to say something, answer
+  that FIRST in ≤2 short sentences (brief English allowed). Never ignore a
+  direct question to re-ask a prior try.
+- React to what they said. Your agenda is YOURS — adapt it to them.
 - Mostly Spanish. No flashcard ladder. No re-asking covered probes.
 - Open scene goals are optional quests — close them opportunistically if natural.
 - If an image is attached in the turn task, associate it with the Spanish you
@@ -252,13 +233,14 @@ def build_ai_tutor_user_message(
     learner: str = "",
     is_open: bool = False,
     session_memory: dict | None = None,
-    observations: dict | None = None,
+    observations: dict | None = None,  # accepted, no longer injected (§1.1)
     teach_images: list | None = None,
     blank_sheet: bool = False,
-    mode_decision: dict | None = None,
+    mode_decision: dict | None = None,  # accepted, no longer injected (§1.1)
     open_scene_hints: list | None = None,
     sheet_summary: str = "",
     personal_context: str = "",
+    teaching_data: dict | None = None,
 ) -> str:
     """User-turn task: code-selected mode + facts; AI realizes the turn.
 
@@ -268,10 +250,7 @@ def build_ai_tutor_user_message(
     for the entire chat history behind it. Cost decision, content unchanged.
     """
     mem = session_memory or {}
-    obs = observations or {}
-    mode = mode_decision or {}
-    nb = obs.get("next_best") or {}
-    active_err = obs.get("active_errors") or []
+    mode = mode_decision or {}  # kept for the falsifier arms below only
     payload = {
         "turn": {
             "learner_said": (
@@ -281,16 +260,12 @@ def build_ai_tutor_user_message(
             "is_open": is_open,
             "blank_character_sheet": blank_sheet,
         },
-        "mode": {
-            "name": mode.get("mode") or "conversation",
-            "reason": mode.get("reason") or "",
-            "hard_break": bool(mode.get("hard_break")),
-            "targets": mode.get("targets") or {},
-            "instructions": mode.get("instructions") or "",
-            "image_concept": mode.get("image_concept"),
-            "scene_ids": mode.get("scene_ids") or [],
-        },
+        # §1.1 REWRITE (USER 2026-08-03): the mode/phase/introduce routers'
+        # instruction blocks NO LONGER SHIP — the model is the teacher and
+        # plans from the facts below. Router output stays visible in
+        # notes/debug as shadow telemetry only.
         "open_scene_goals": open_scene_hints or [],
+        "teaching_data": teaching_data or None,
         "student_character_sheet": {
             "note": (
                 "Spanish ABILITIES. Adapt teaching from this; prefer "
@@ -315,14 +290,9 @@ def build_ai_tutor_user_message(
             "turn_index": mem.get("turns") or 0,
             "from_character_sheet": mem.get("sheet_seeded") or False,
         },
-        "hard_observations": {
-            "probe_signals": obs.get("signals") or [],
-            "form_error_hits": obs.get("error_hits") or [],
-            "active_error_patterns_on_sheet": active_err,
-            "next_best_can_do": nb,
-        },
-        # Mode playbooks, product persona, and standing orders live in the
-        # STATIC system prompt (cache-stable) — only per-turn facts ride here.
+        # hard_observations DROPPED (§1.1 rewrite): regex probe signals and
+        # next_best were code's opinion of the lesson; the model reads the
+        # learner's actual words and the sheet itself.
         "visual": {
             "attached_this_turn": [
                 {
@@ -344,7 +314,7 @@ def build_ai_tutor_user_message(
     #                   pinned to the tail (~200 tokens)
     order = getattr(config, "TEACHER_PROMPT_ORDER", "legacy")
     if order == "p1_reorder":
-        tail_keys = ("session_facts", "hard_observations", "mode")
+        tail_keys = ("session_facts", "teaching_data")
         payload = {
             **{k: v for k, v in payload.items() if k not in tail_keys},
             **{k: payload[k] for k in tail_keys if k in payload},
@@ -352,7 +322,6 @@ def build_ai_tutor_user_message(
     elif order == "p2_structured":
         payload["FINAL_CONSTRAINTS_check_before_replying"] = {
             "do_not_re_ask_these_frames": mem.get("asked_topics") or [],
-            "mode_instructions": mode.get("instructions") or "",
             "hard_rules": [
                 "no A/B or yes/no English-meaning quiz on known material",
                 "never re-ask any do_not_re_ask frame (any person/formality "

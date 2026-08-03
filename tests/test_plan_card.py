@@ -47,8 +47,12 @@ class TestAiTutorContext(unittest.TestCase):
             blank_sheet=False,
         )
         self.assertIn("session_facts", msg)
-        self.assertIn("hard_observations", msg)
-        self.assertIn("mode", msg)
+        # §1.1 rewrite (USER 2026-08-03): the routers' opinions no longer
+        # ship — the model plans from facts. No mode block, no regex
+        # observations, no next_best opinion.
+        self.assertNotIn("hard_observations", msg)
+        self.assertNotIn("mode_instructions", msg)
+        self.assertNotIn("next_best_can_do", msg)
         # Must not ship a scripted next-card ladder
         self.assertNotIn("chat_ask_name", msg)
         self.assertNotIn("origin_to_gusta", msg)
@@ -56,9 +60,11 @@ class TestAiTutorContext(unittest.TestCase):
         # the per-turn task carries only facts.
         from tutor.executor import AI_TUTOR_SYSTEM
 
-        self.assertIn("Realize MODE targets and legality", AI_TUTOR_SYSTEM)
+        # §1.1 rewrite (2026-08-03): no mode playbooks, no MODE targets —
+        # the model owns its agenda; uptake stays a standing order.
         self.assertIn("LEARNER UPTAKE", AI_TUTOR_SYSTEM)
-        self.assertIn("Mode playbooks", AI_TUTOR_SYSTEM)
+        self.assertNotIn("Mode playbooks", AI_TUTOR_SYSTEM)
+        self.assertNotIn("obey mode.instructions", AI_TUTOR_SYSTEM)
 
     def test_correction_rules_in_system_prompt(self):
         # Amended §2.5 (blind-grade defect #3, 2026-07-28): prompt-level

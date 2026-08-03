@@ -294,7 +294,7 @@ def test_golden_comprehension_repair(tutor_session_factory):
 
 def _arc_view(ctx, s, result, req_index) -> dict:
     """Compact per-turn view for the multi-turn budget-arc golden."""
-    instr = ctx.fake.task_payload(req_index)["mode"]["instructions"]
+    payload = ctx.fake.task_payload(req_index)
     return {
         "mode": (result.parts or {}).get("mode"),
         "notes": note_families(result.notes),
@@ -310,12 +310,10 @@ def _arc_view(ctx, s, result, req_index) -> dict:
             "turns_in_phase": s.phase_state.turns_in_phase,
             "frozen_turns": s.phase_state.frozen_turns,
         },
+        # §1.1 rewrite (2026-08-03): router scripts no longer ship — the
+        # pin is their ABSENCE from the payload (shadow notes carry them).
         "instructions": {
-            "new_input_prefix": "SESSION PHASE: NEW INPUT" in instr,
-            "budget_exhausted_line": "introduce budget EXHAUSTED" in instr,
-            "introduce_block": "INTRODUCE (one item" in instr,
-            "task_block": "TASK (single convergent exit" in instr,
-            "uptake_block": "UPTAKE (§2.1a)" in instr,
+            "scripts_shipped": "mode" in payload,
         },
         "requests_so_far": len(ctx.fake.requests),
     }
@@ -368,9 +366,9 @@ def test_golden_budget_arc(tutor_session_factory):
     assert t3.error is None
     assert not any(n.startswith("introduce_planned:") for n in t3.notes)
     assert not any(n.startswith("introduced:") for n in t3.notes)
-    instr3 = ctx.fake.task_payload(3)["mode"]["instructions"]
-    assert "introduce budget EXHAUSTED (0 left)" in instr3
-    assert "INTRODUCE (one item" not in instr3
+    # §1.1 rewrite: the budget refusal is shadow telemetry (notes above);
+    # no script ships either way.
+    assert "mode" not in ctx.fake.task_payload(3)
     views.append(_arc_view(ctx, s, t3, 3))
 
     # t4 — new_input exhausted → task phase binds the first task-capable
@@ -439,18 +437,10 @@ def test_golden_close_phase(tutor_session_factory):
     # introduced keys, resolved error patterns, skills shown — invents
     # nothing; no task line when no task was bound).
     assert "close_phase_offered" in turn.notes
-    instr = ctx.fake.task_payload(-1)["mode"]["instructions"]
-    assert "SESSION PHASE: CLOSE" in instr
-    summary = next(
-        line for line in instr.splitlines()
-        if line.startswith("SESSION SUMMARY")
-    )
-    assert summary == (
-        "SESSION SUMMARY (data for your ONE short English close line): "
-        "new items introduced: hola; errors resolved: weather_hace; "
-        "skills shown: greet, spanish_ok."
-    )
-    assert "task " not in summary
+    # §1.1 rewrite: the close offer is shadow telemetry (note above); the
+    # model decides how to close from session_facts. No script, no
+    # code-authored SESSION SUMMARY line, ships.
+    assert "mode" not in ctx.fake.task_payload(-1)
 
     # CHAR_PIN: the close turn consumes the 1-turn close budget; the clock
     # walks off the plan end and the session continues in "free".
@@ -469,7 +459,6 @@ def test_golden_close_phase(tutor_session_factory):
         sheet_keys=(("lexicon", "adiós"),),
     )
     obs["learner"] = "Muy bien, gracias."
-    obs["close_summary_line"] = summary
     check_golden("golden_close_phase", obs)
 
 

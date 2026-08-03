@@ -9,11 +9,7 @@
   "turns": [
     {
       "instructions": {
-        "budget_exhausted_line": false,
-        "introduce_block": true,
-        "new_input_prefix": true,
-        "task_block": false,
-        "uptake_block": false
+        "scripts_shipped": false
       },
       "intro_budget_remaining": 2,
       "introduced_this_session": [],
@@ -50,11 +46,7 @@
     },
     {
       "instructions": {
-        "budget_exhausted_line": false,
-        "introduce_block": true,
-        "new_input_prefix": true,
-        "task_block": false,
-        "uptake_block": true
+        "scripts_shipped": false
       },
       "intro_budget_remaining": 1,
       "introduced_this_session": [
@@ -96,11 +88,7 @@
     },
     {
       "instructions": {
-        "budget_exhausted_line": false,
-        "introduce_block": true,
-        "new_input_prefix": true,
-        "task_block": false,
-        "uptake_block": false
+        "scripts_shipped": false
       },
       "intro_budget_remaining": 0,
       "introduced_this_session": [
@@ -143,11 +131,7 @@
     },
     {
       "instructions": {
-        "budget_exhausted_line": true,
-        "introduce_block": false,
-        "new_input_prefix": true,
-        "task_block": false,
-        "uptake_block": false
+        "scripts_shipped": false
       },
       "intro_budget_remaining": 0,
       "introduced_this_session": [
@@ -186,11 +170,7 @@
     },
     {
       "instructions": {
-        "budget_exhausted_line": false,
-        "introduce_block": false,
-        "new_input_prefix": false,
-        "task_block": true,
-        "uptake_block": true
+        "scripts_shipped": false
       },
       "intro_budget_remaining": 0,
       "introduced_this_session": [

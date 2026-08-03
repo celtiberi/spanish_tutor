@@ -296,11 +296,12 @@ def test_golden_blank_open_and_zero_register_turn(tutor_session_factory):
     # TRUE-ZERO register overlay + NEW INPUT phase flavor + INTRODUCE plan.
     assert turn.parts["mode"] == "conversation"
     assert "mode_reason=default_conversation" in turn.notes
-    instructions = ctx.fake.task_payload()["mode"]["instructions"]
-    assert "TRUE-ZERO REGISTER" in instructions
-    assert "SESSION PHASE: NEW INPUT" in instructions
-    assert "INTRODUCE (one item, rule R-E)" in instructions
-    assert "**hola**" in instructions
+    # §1.1 rewrite (2026-08-03): the routers still COMPUTE (shadow notes
+    # above prove it) but their scripts never reach the model.
+    payload = ctx.fake.task_payload()
+    assert "mode" not in payload
+    assert "hard_observations" not in payload
+    assert "teaching_data" in payload
     # CHAR_PIN: reply omitted the planned key → no introduce ledger write,
     # budget unconsumed (mere plan is not exposure).
     assert not any(n.startswith("introduced:") for n in turn.notes)
@@ -365,9 +366,11 @@ def test_golden_due_elicit_turn(tutor_session_factory):
     assert "mode_reason=known_open_from_sheet" in open_res.notes
     assert "activity=retrieval" in open_res.notes
     assert "due_elicit_offered:agua,pan" in open_res.notes
-    open_instr = ctx.fake.task_payload(0)["mode"]["instructions"]
-    assert "DUE RE-ENCOUNTERS" in open_instr
-    assert "«agua»" in open_instr and "«pan»" in open_instr
+    # §1.1 rewrite: due items ship as FACTS, not a scripted DUE block.
+    open_payload = ctx.fake.task_payload(0)
+    assert "mode" not in open_payload
+    due_keys = {d["key"] for d in open_payload["teaching_data"]["due_for_review"]}
+    assert {"agua", "pan"} <= due_keys
     obs_open = _observe(
         ctx, open_res, save_slice=slice(0, n_open),
         sheet_keys=(("lexicon", "pan"), ("lexicon", "agua")),
@@ -399,8 +402,9 @@ def test_golden_due_elicit_turn(tutor_session_factory):
     assert pan["status"] == "fragile"
     # CHAR_PIN: the still-due item rides the new turn's DUE block alone.
     assert "due_elicit_offered:agua" in turn.notes
-    turn_instr = ctx.fake.task_payload()["mode"]["instructions"]
-    assert "«agua»" in turn_instr and "«pan»" not in turn_instr
+    turn_payload = ctx.fake.task_payload()
+    turn_due = {d["key"] for d in turn_payload["teaching_data"]["due_for_review"]}
+    assert "agua" in turn_due and "pan" not in turn_due
     agua = s.sheet["lexicon"]["agua"]
     assert agua["successive_successes"] == 0  # silence records nothing
 
