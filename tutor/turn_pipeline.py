@@ -967,6 +967,7 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
     from .corpus import load_pack
     from .executor import build_ai_tutor_system, build_ai_tutor_user_message
     from .scenes import scene_hints_for_prompt
+    from .turn_events import TurnEventKind as EV
 
     if getattr(config, "TEACHER_CONTEXT", "full") == "brief":
         from .lesson_brief import assemble_lesson_brief
@@ -1007,6 +1008,16 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
         }
         for d in due_items(session.sheet, max_due=5)
     ]
+    # Two-phase context (USER architecture 2026-08-03; default): PLAN
+    # turns carry everything (pedagogy + pack + sheet + history) and the
+    # model writes its own session plan; ROUND turns carry the model's
+    # plan + sheet + facts + a recent window. TEACHER_CONTEXT=full keeps
+    # the historical every-turn-everything path for comparison.
+    plan_mode = getattr(config, "TEACHER_CONTEXT", "plan") == "plan"
+    needs_plan = plan_mode and (
+        getattr(session, "session_plan", None) is None
+        or getattr(session, "replan_requested", False)
+    )
     ctx.task = build_ai_tutor_user_message(
         learner=ctx.learner,
         is_open=ctx.is_open,
@@ -1016,11 +1027,55 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
         open_scene_hints=scene_hints_for_prompt(ctx.open_scenes),
         sheet_summary=format_sheet_for_prompt(session.sheet),
         teaching_data={"due_for_review": due_facts},
+        session_plan=(
+            None if (not plan_mode or needs_plan)
+            else getattr(session, "session_plan", None)
+        ),
     )
+    if plan_mode:
+        from .session_plan import (
+            PLAN_INSTRUCTIONS,
+            ROUND_HISTORY_MESSAGES,
+            ROUND_NOTE,
+            load_pedagogy,
+        )
+
+        if needs_plan:
+            # PLAN turn: full picture. Pedagogy + plan instructions ride
+            # as additional cache-stable system blocks after the pack.
+            pedagogy = load_pedagogy()
+            extra = []
+            if pedagogy:
+                extra.append({
+                    "type": "text",
+                    "text": "# The teaching guide (yours)\n\n" + pedagogy,
+                })
+            extra.append({"type": "text", "text": PLAN_INSTRUCTIONS})
+            ctx.system = list(ctx.system) + extra
+            session.replan_requested = False
+            ctx.ev.emit(EV.SESSION_PLAN, key="requested", stage="plan")
+            history = session.history
+        else:
+            # ROUND turn: drop the 50k pack palette + pedagogy from the
+            # system; the model's plan already digested them.
+            from .executor import build_ai_tutor_system
+
+            ctx.system = build_ai_tutor_system(pack_palette=None)
+            ctx.system = list(ctx.system) + [
+                {"type": "text", "text": ROUND_NOTE}
+            ]
+            # truncation-ok: plan-mode ROUND window — USER architecture
+            # 2026-08-03, not a silent latency slice. PLAN turns carry
+            # full history; the model escapes to full context any turn
+            # with <replan/>.
+            history = session.history[-ROUND_HISTORY_MESSAGES:]  # truncation-ok: plan-mode round window (see above)
+    else:
+        history = session.history
+
     if ctx.is_open:
         ctx.messages = [{"role": "user", "content": ctx.task}]
     else:
-        ctx.messages = config.history_for_model(session.history) + [
+        ctx.messages = config.history_for_model(history) + [
             {"role": "user", "content": ctx.task}
         ]
 
@@ -1054,7 +1109,21 @@ def stage_model_call(session, ctx: TurnContext) -> None:
         )
         return
     ctx.final = final
-    ctx.raw = raw
+    # Two-phase context (2026-08-03): harvest the model's OWN <plan> /
+    # <replan/> from the raw reply BEFORE anything parses it, so plan
+    # text can never leak into the learner-visible message. Code stores
+    # the plan verbatim — never writes or edits one (§1.1).
+    from .session_plan import extract_plan
+    from .turn_events import TurnEventKind as EV_
+
+    _plan, _replan, _cleaned = extract_plan(raw)
+    if _plan is not None:
+        session.session_plan = _plan
+        ctx.ev.emit(EV_.SESSION_PLAN, key="updated", stage="plan")
+    if _replan:
+        session.replan_requested = True
+        ctx.ev.emit(EV_.SESSION_PLAN, key="replan_requested", stage="plan")
+    ctx.raw = _cleaned if (_plan is not None or _replan) else raw
     ctx.tool_delta = tool_delta
     ctx.usage = usage
 

@@ -58,6 +58,15 @@ HIGH_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
         re.compile(r"(?:self\.)?history\s*=\s*.*\[\s*-\s*\d+\s*:\s*\]"),
     ),
     (
+        # Named-constant windows (history[-SOME_CONST:]) are the same drop
+        # wearing a variable; require an explicit truncation-ok marker
+        # (plan-mode ROUND turns carry one — USER architecture 2026-08-03).
+        "hard history window via named constant",
+        re.compile(
+            r"history\s*=\s*(?:\w+\.)?history\s*\[\s*-\s*[A-Za-z_]\w*\s*:\s*\]"
+        ),
+    ),
+    (
         "history length gate that drops turns",
         re.compile(r"len\s*\(\s*(?:self\.)?history\s*\)\s*>\s*\d+"),
     ),

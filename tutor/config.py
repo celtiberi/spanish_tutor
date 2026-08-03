@@ -110,8 +110,12 @@ TEACHER_PROMPT_ORDER = (
 #                     scripts/check_completeness.py)
 # Non-default until the pre-registered referee (arms A/P1/P2/B0/B1) passes.
 # Orthogonal to TEACHER_PROMPT_ORDER (the P1/P2 falsifier knob above).
+# "plan" (default, USER-directed 2026-08-03): teacher writes its own
+# session plan with full context at open; rounds run small (plan + sheet
+# + facts + recent window). "full": historical every-turn full context.
+# "brief": retired B0 code-brief (dormant).
 TEACHER_CONTEXT = (
-    os.environ.get("TEACHER_CONTEXT", "full") or "full"
+    os.environ.get("TEACHER_CONTEXT", "plan") or "plan"
 ).strip().lower()
 
 PLANNED_TEACHER_MODES = ("planned", "plan", "new", "ai")

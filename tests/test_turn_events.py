@@ -71,7 +71,7 @@ def test_catalog_count_published_number():
     # +1 = FRAME_RECORDED, 2026-07-29 encounter-variety round;
     # +1 = RENDER_DROPPED, 2026-07-29 §1.1b settlement round;
     # +2 = OUTPUT_GATE_STRIPPED/HELD, 2026-07-30 still_fail floor).
-    assert len(NOTE_CATALOG) == 70
+    assert len(NOTE_CATALOG) == 71
 
 
 def test_stability_classes_are_the_measured_vocabulary():
@@ -136,6 +136,7 @@ ROUND_TRIP = [
     (EV.OUTPUT_GATE_STILL_FAIL, "output_gate_still_fail:gate:missing_recast"),
     (EV.OUTPUT_GATE_ERROR, "output_gate_error:ValueError"),
     (EV.INTERNAL_ERROR, "internal_error:progress_note:KeyError: 'x'"),
+    (EV.SESSION_PLAN, "session_plan:updated"),
     (EV.INTRODUCED, "introduced:hola"),
     (EV.INTRODUCE_LAPSED, "introduce_lapsed:buenos días:no_scaffold"),
     (EV.FIRST_SEEN, "first_seen:mucho gusto"),

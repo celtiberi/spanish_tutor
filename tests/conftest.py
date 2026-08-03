@@ -25,6 +25,11 @@ Nothing here is autouse — the existing 553 leaf tests are untouched.
 
 from __future__ import annotations
 
+import os  # noqa: E402  (env clamp must precede any tutor import)
+
+# Goldens characterize the historical FULL path; plan-mode tests opt in.
+os.environ.setdefault("TEACHER_CONTEXT", "full")
+
 import copy
 import datetime
 import json
@@ -206,15 +211,44 @@ def assert_full_teacher_context(ctx) -> None:
     assert config.STANCE_PROMPT_CHARS == 0
     assert config.SHEET_PROMPT_CHARS == 0
 
-    pack_text = _full_pack_text(session.pack_dir)
-    for i, req in enumerate(fake.requests):
-        blob = "\n".join(
+    from tutor.session_plan import ROUND_HISTORY_MESSAGES
+
+    def _blob(req):
+        return "\n".join(
             str(b.get("text") or "") if isinstance(b, dict) else str(b)
             for b in (req["system"] or [])
         )
-        assert pack_text in blob, (
-            f"request {i}: course pack was truncated/absent in system blocks"
-        )
+
+    def _is_round(req):
+        # Plan-mode ROUND turns (USER architecture 2026-08-03) carry the
+        # model's own plan instead of pack/pedagogy — a different contract,
+        # asserted below, not an exemption from this guard.
+        return "## Working from your plan" in _blob(req)
+
+    pack_text = _full_pack_text(session.pack_dir)
+    for i, req in enumerate(fake.requests):
+        blob = _blob(req)
+        if _is_round(req):
+            assert pack_text not in blob, (
+                f"request {i}: ROUND turn must not carry the pack palette"
+            )
+            content_i = req["messages"][-1]["content"]
+            assert (
+                isinstance(content_i, str)
+                and '"your_session_plan"' in content_i
+            ), (
+                f"request {i}: ROUND turn task lacks your_session_plan — "
+                "small context without the model's plan is a B0 regression"
+            )
+        else:
+            assert pack_text in blob, (
+                f"request {i}: course pack was truncated/absent in "
+                "system blocks"
+            )
+            if "## Your session plan (required on this turn)" in blob:
+                assert "# The teaching guide (yours)" in blob, (
+                    f"request {i}: PLAN turn missing the pedagogy guide"
+                )
         # The per-turn task embeds the sheet as a complete JSON dump; a
         # [:N] slice would break the parse or drop trailing fields.
         content = req["messages"][-1]["content"]
@@ -236,13 +270,22 @@ def assert_full_teacher_context(ctx) -> None:
     hist = session.history
     if len(hist) >= 2:
         expect = hist[:-2]  # history before the most recent exchange
-        got = fake.requests[-1]["messages"]
+        last = fake.requests[-1]
+        if _is_round(last):
+            # ROUND law: exactly the declared window, tail-aligned — a
+            # window that silently shrank or drifted fails here.
+            expect = expect[-ROUND_HISTORY_MESSAGES:]
+        got = last["messages"]
         assert len(got) >= len(expect) + 1, (
             "last request dropped history messages"
         )
         assert got[:len(expect)] == expect, (
             "last request history diverges from full session history"
         )
+        if _is_round(last):
+            assert len(got) == len(expect) + 1, (
+                "ROUND turn carried more history than its declared window"
+            )
 
 
 # ---------------------------------------------------------------------------

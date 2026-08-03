@@ -121,6 +121,7 @@ class TurnEventKind(str, Enum):
     OUTPUT_GATE_STILL_FAIL = "output_gate_still_fail"
     OUTPUT_GATE_ERROR = "output_gate_error"
     INTERNAL_ERROR = "internal_error"
+    SESSION_PLAN = "session_plan"
     OUTPUT_GATE_STRIPPED = "output_gate_stripped"
     OUTPUT_GATE_RECOVERED = "output_gate_recovered"
     OUTPUT_GATE_DEGRADED = "output_gate_degraded"
@@ -339,6 +340,11 @@ NOTE_CATALOG: dict[TurnEventKind, NoteSpec] = {s.kind: s for s in [
           "a hidden problem — every catch surfaces or re-raises under "
           "STRICT_ERRORS)",
           ["conv_session._oops (swallow sites)"], [], "log-only", False),
+    _spec(TurnEventKind.SESSION_PLAN, "session_plan:", False,
+          "requested|updated|replan_requested (two-phase context "
+          "2026-08-03 — the model writes/revises its own session plan)",
+          ["turn_pipeline stage_prompt_build/stage_model_call"],
+          [], "log-only", False),
     _spec(TurnEventKind.OUTPUT_GATE_STRIPPED, "output_gate_stripped", True,
           "(still_fail floor rung a — probing parts dropped, remainder "
           "re-gated and shipped; system review 2026-07-30)",
@@ -566,6 +572,7 @@ _RENDER = {
     _K.INTERNAL_ERROR: lambda e: (
         "internal_error:" + e.key + ":" + str(e.payload.get("error") or "")
     ),
+    _K.SESSION_PLAN: lambda e: f"session_plan:{e.key}",
     _K.OUTPUT_GATE_STRIPPED: lambda e: "output_gate_stripped",
     _K.OUTPUT_GATE_RECOVERED: lambda e: "output_gate_recovered",
     _K.OUTPUT_GATE_DEGRADED: lambda e: (

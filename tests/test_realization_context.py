@@ -255,12 +255,14 @@ class TestFullPathUnchanged(unittest.TestCase):
             )
         return expected_system, expected_task
 
-    def test_default_is_full(self):
-        # TEACHER_CONTEXT unset → "full" (dual-path is NON-DEFAULT until
-        # the pre-registered referee passes — §3.3 enactment condition iv).
-        self.assertEqual(
-            (config.TEACHER_CONTEXT or "full"), config.TEACHER_CONTEXT)
-        self.assertIn(config.TEACHER_CONTEXT, ("full", "brief"))
+    def test_default_is_plan(self):
+        # USER-directed 2026-08-03: two-phase plan context is the DEFAULT
+        # (model writes its own plan; rounds run small). The retired B0
+        # "brief" stays reachable but dormant. Source-pinned so the env
+        # clamp in conftest can't mask the shipped default.
+        src = (Path(config.__file__).read_text(encoding="utf-8"))
+        self.assertIn('os.environ.get("TEACHER_CONTEXT", "plan")', src)
+        self.assertIn(config.TEACHER_CONTEXT, ("full", "brief", "plan"))
 
     def test_full_path_byte_identical_to_historical_prompt(self):
         history = [

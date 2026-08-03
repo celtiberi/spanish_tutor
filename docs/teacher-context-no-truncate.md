@@ -47,11 +47,30 @@ snippet = text[:80]  # truncation-ok: sheet storage evidence only
 SKIP_TRUNCATION_CHECK=1 git commit -m "..."
 ```
 
+## Plan-mode rounds (the ONE sanctioned window — USER architecture 2026-08-03)
+
+`TEACHER_CONTEXT=plan` (the default) is two-phase: **PLAN turns** (session
+open, or after the model emits `<replan/>`) send the FULL context —
+PEDAGOGY.md verbatim + full pack + full sheet + full history — and the
+model writes its own private `<plan>` block. **ROUND turns** send the
+model's OWN plan + full sheet + session facts + the last
+`ROUND_HISTORY_MESSAGES` (=12, `tutor/session_plan.py`) messages, no pack.
+
+This window is not a latency slice and is not silent: the line carries a
+`# truncation-ok:` marker, the checker gained a **named-constant-window
+pattern** (`history[-SOME_CONST:]` now blocks without the marker), and the
+characterization guard (`tests/conftest.py::assert_full_teacher_context`)
+asserts the round CONTRACT — no pack, `your_session_plan` present,
+tail-aligned window of exactly K — instead of exempting round turns.
+ENGINEERING.md §3.3 amendment is the law text.
+
 ## Agent rule (Claude / Grok / commit tools)
 
 When editing teacher-path code:
 
 1. Do **not** add `[:N]` on sheet/pack/stance/history sent to the model.
-2. Do **not** assign `self.history = self.history[-N:]`.
+2. Do **not** assign `self.history = self.history[-N:]` — with a literal
+   OR a named constant; the plan-mode round window in `turn_pipeline.py`
+   is the one sanctioned, marker-annotated instance.
 3. Prefer full `format_sheet_for_prompt` + `load_pack` + `history_for_model`.
 4. Run `python scripts/check_teacher_truncation.py` before committing.

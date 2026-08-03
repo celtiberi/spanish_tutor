@@ -809,6 +809,11 @@ class ConversationalSession:
         # (display-only, never snapshotted; cleared on new_chat/reset in
         # open_session and reset_sheet).
         self.last_turn_render = None
+        # Two-phase context (2026-08-03): the model's OWN session plan.
+        # Code stores it verbatim; a missing plan makes the next turn a
+        # full-context PLAN turn. Reset with the session.
+        self.session_plan: str | None = None
+        self.replan_requested = False
         self.teacher_mode = (config.TEACHER_MODE or "planned").strip().lower()
         # E4/E4b deletion (docs/reviews-architecture-refactor.md, 2026-07-28):
         # the TEACHER_MODE=rules PlanCard runtime and the legacy harness were
@@ -1719,6 +1724,8 @@ class ConversationalSession:
         # progress_session_id are untouched.
         self.state.reset("new_chat", sheet=self.sheet)
         self.last_turn_render = None  # §1.1b: render record is per-chat
+        self.session_plan = None      # new chat → new plan turn
+        self.replan_requested = False
 
         # New chat ≠ new learner: seed session memory from durable sheet
         try:
@@ -1830,6 +1837,8 @@ class ConversationalSession:
         # The on-disk COST ledger is append-only forever (continuity ruling).
         self.state.reset("sheet_reset", sheet=self.sheet)
         self.last_turn_render = None  # §1.1b: render record dies with reset
+        self.session_plan = None
+        self.replan_requested = False
         return self.sheet
 
     def sheet_human(self) -> str:

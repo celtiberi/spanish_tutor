@@ -241,6 +241,7 @@ def build_ai_tutor_user_message(
     sheet_summary: str = "",
     personal_context: str = "",
     teaching_data: dict | None = None,
+    session_plan: str | None = None,
 ) -> str:
     """User-turn task: code-selected mode + facts; AI realizes the turn.
 
@@ -266,6 +267,9 @@ def build_ai_tutor_user_message(
         # notes/debug as shadow telemetry only.
         "open_scene_goals": open_scene_hints or [],
         "teaching_data": teaching_data or None,
+        # The model's OWN session plan (two-phase context, 2026-08-03) —
+        # code stores and replays it verbatim, never edits it (§1.1).
+        "your_session_plan": session_plan or None,
         "student_character_sheet": {
             "note": (
                 "Spanish ABILITIES. Adapt teaching from this; prefer "
