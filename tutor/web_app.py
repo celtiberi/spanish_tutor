@@ -230,6 +230,8 @@ def create_app() -> FastAPI:
             "ok": True,
             "model": config.MODEL,
             "teacher_mode": getattr(config, "TEACHER_MODE", "planned"),
+            # plan = two-phase (model-authored session plan, §3.3 amendment)
+            "teacher_context": getattr(config, "TEACHER_CONTEXT", "plan"),
             "teach_image_cache": teach_cache,
             "pack": config.DEFAULT_PACK_DIR.name,
             "chat_max_chars": CHAT_MAX_CHARS,
