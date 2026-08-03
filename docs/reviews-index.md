@@ -58,3 +58,4 @@
 | reviews-* files | ~15.7k lines | ~35 stubs × ~20 lines ≈ **0.7k lines** |
 | Full transcripts | (same) | `docs/archive/reviews/` (~15.7k lines, load on demand) |
 - [Sheet as curriculum](reviews-sheet-as-curriculum.md) — 2026-08-03: course pack deleted; sheet carries targets/scope/misconceptions; B0 arm deleted
+- [Sheet vocabulary ruling](reviews-sheet-vocabulary.md) — 2026-08-03: sheet = domain model + learner model, never 'curriculum'; domain_scope/domain_targets keys; curriculum/ → domain/

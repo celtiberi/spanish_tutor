@@ -176,7 +176,7 @@ FORM_INVENTORY: dict[str, dict] = {
     },
     # Absorbed from the deleted course pack's frozen form inventories
     # (2026-08-03, USER: "the character sheet IS the course pack") — the
-    # target forms the sheet must measure to carry the curriculum.
+    # target forms the sheet must measure (domain-model grammar targets).
     "ser_estar_contrast": {
         "supports": ["IP-04", "IP-07"],
         "priority": "high",

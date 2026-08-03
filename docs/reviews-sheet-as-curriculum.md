@@ -1,5 +1,12 @@
 # Review: the character sheet IS the course pack (2026-08-03)
 
+> **Vocabulary correction (same day, Grok-countersigned —
+> docs/reviews-sheet-vocabulary.md):** this doc's title/keys predate the
+> terminology ruling. The sheet is a DOMAIN MODEL + LEARNER MODEL, never
+> called a curriculum; payload keys shipped as `domain_scope` /
+> `domain_targets_not_yet_touched`; data dir is `domain/spanish_a1/`.
+> Filename kept for the audit trail.
+
 **USER directive:** "The character sheet IS THE COURSE PACK. It contains
 everything that we are trying to measure about the student's ability…
 if we can show the AI what we want the student to learn it can generate

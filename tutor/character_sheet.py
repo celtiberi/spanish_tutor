@@ -580,7 +580,7 @@ def load_sheet(path: Path) -> dict:
     # Ensure all can-dos / forms exist
     for cid, entry in default_skills_block().items():
         merged["skills"].setdefault(cid, entry)
-    # numbers_0_20 → numbers_0_100 (2026-08-03 curriculum absorb: the
+    # numbers_0_20 → numbers_0_100 (2026-08-03 domain absorb: the
     # deleted pack's law was 0–100; carry the learner's state across).
     gr = merged.setdefault("grammar", {})
     if "numbers_0_20" in gr and "numbers_0_100" not in gr:
@@ -682,11 +682,16 @@ def compute_progress_score(sheet: dict | None) -> dict:
     }
 
 
-# Curriculum scope absorbed from the deleted course pack (2026-08-03,
-# USER: "the character sheet IS the course pack").  Rides in the sheet
-# payload so the model can plan the course from the sheet alone —
-# without it, nothing stops out-of-scope drift (past tense etc.).
-CURRICULUM_SCOPE: dict = {
+# Domain scope absorbed from the deleted prose pack (2026-08-03).  The
+# sheet is a composite artifact: DOMAIN MODEL (what exists at this level
+# slice — targets, scope, misconception vocabulary) co-located with the
+# LEARNER MODEL (measured state per item).  It is NOT a curriculum: the
+# sheet carries content SELECTION; sequence/path belongs solely to the
+# teacher model's session plan (vocabulary ruling 2026-08-03,
+# docs/reviews-sheet-vocabulary.md).  Rides in the sheet payload so the
+# model can plan from one artifact — without it, nothing stops
+# out-of-scope drift (past tense etc.).
+DOMAIN_SCOPE: dict = {
     "level": (
         "CEFR A1 grammar-core slice (absolute beginner). Latin American "
         "Spanish default; note European forms only where they differ. "
@@ -723,9 +728,11 @@ CURRICULUM_SCOPE: dict = {
 
 
 def _untouched_targets(lex: dict) -> dict:
-    """Target inventory the learner has NOT touched yet, by theme —
-    "key — gloss" lines from the association table (the curriculum's
-    closed vocabulary).  Unavailability is VISIBLE, never silent."""
+    """Domain targets the learner has NOT touched yet, by theme —
+    "key — gloss" lines from the association table (the level slice's
+    closed vocabulary; lexicon-table residue, NOT full ability coverage —
+    skills/grammar lag independently).  Unavailability is VISIBLE,
+    never silent."""
     try:
         from .association_table import cached_default_table
 
@@ -767,13 +774,13 @@ def format_sheet_for_prompt(sheet: dict, *, max_lex: int | None = None) -> str:
     payload = {
         "now": now_iso(),
         # Personal-data capture disabled 2026-07-28: identity is omitted.
-        # USER 2026-08-03 ("the character sheet IS the course pack"): the
-        # sheet carries the full target inventory — what we want the
-        # learner to learn — so the model can plan the course from the
-        # sheet alone. Untouched targets ride compactly by theme; touched
-        # ones already appear in lexicon/grammar with learner state.
-        "curriculum_scope": CURRICULUM_SCOPE,
-        "curriculum_targets_not_yet_touched": _untouched_targets(lex),
+        # The sheet carries the full target inventory (domain model) plus
+        # learner state, so the model can write its session plan from one
+        # artifact (USER 2026-08-03). Untouched targets ride compactly by
+        # theme; touched ones already appear in lexicon/grammar with
+        # learner state. Selection lives here; SEQUENCE never does.
+        "domain_scope": DOMAIN_SCOPE,
+        "domain_targets_not_yet_touched": _untouched_targets(lex),
         "next_best": sheet.get("next_best"),
         "active_error_focus": active_error_patterns(sheet),
         "error_patterns": errors,

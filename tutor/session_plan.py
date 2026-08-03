@@ -9,8 +9,8 @@ we need a new plan."
 
 PLAN turns (session open, or whenever a re-plan is needed) get the FULL
 picture: PEDAGOGY.md verbatim (it is written for the teacher), the
-character sheet — which IS the curriculum (USER 2026-08-03): targets,
-scope, learner state — and history. The model writes its own session
+character sheet — domain model + learner state in one artifact: targets,
+scope, per-item evidence — and history. The model writes its own session
 plan in a private <plan> block before its normal <tutor> reply.
 
 ROUND turns get the small context: the model's OWN plan + the character
@@ -44,10 +44,11 @@ ROUND_HISTORY_MESSAGES = 12
 PLAN_INSTRUCTIONS = """## Your session plan (required on this turn)
 
 You have the full teaching guide in this request — later turns will NOT
-include it, only the plan you write now. The character sheet is the
-curriculum: `curriculum_targets_not_yet_touched` + `grammar` +
-`skills` are everything this learner is meant to learn, `curriculum_scope`
-is what to defer or decline, and the per-item state shows where they are.
+include it, only the plan you write now. The character sheet carries
+everything you need: `domain_targets_not_yet_touched` + `grammar` +
+`skills` are everything this learner is meant to learn, `domain_scope`
+is what to defer or decline, and the per-item state shows where they
+are. The path through it is YOURS — the sheet never sequences.
 Before your normal `<tutor>` reply, write a session plan the future you
 can teach from:
 

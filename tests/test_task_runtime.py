@@ -17,7 +17,7 @@ from tutor.task_runtime import (
 
 # ---------------------------------------------------------------------------
 # Hand-derived pack-legal allowlist for evidence_any tokens, accent-folded.
-# Source: curriculum/spanish_a1/pack.md closed inventories + unit files.
+# Source: domain/spanish_a1/pack.md closed inventories + unit files.
 # The section each word comes from is documented inline. gustar and hacer are
 # denylisted by pack.md "Scope boundaries" and must never appear here.
 # ---------------------------------------------------------------------------

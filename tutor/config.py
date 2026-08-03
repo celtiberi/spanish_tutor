@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 def _find_repo_root() -> Path:
-    """Locate curriculum + prompts (dev tree, installed wheel, or Vercel)."""
+    """Locate domain + prompts (dev tree, installed wheel, or Vercel)."""
     here = Path(__file__).resolve().parent
     candidates = [
         here.parent,  # normal: repo_root/tutor/config.py
@@ -16,20 +16,20 @@ def _find_repo_root() -> Path:
     for c in candidates:
         if not c or str(c) == ".":
             continue
-        if (c / "curriculum").is_dir() and (c / "prompts").is_dir():
+        if (c / "domain").is_dir() and (c / "prompts").is_dir():
             return c
-        if (c / "tutor").is_dir() and (c / "curriculum").is_dir():
+        if (c / "tutor").is_dir() and (c / "domain").is_dir():
             return c
     return here.parent
 
 
 REPO_ROOT = _find_repo_root()
 POLICY_PATH = REPO_ROOT / "prompts" / "teaching_policy.md"
-# Curriculum DATA only (association table = target inventory, teach-asset
-# sidecar, scenes). The prose course pack was DELETED 2026-08-03 (USER:
-# "the character sheet IS the course pack") — the sheet carries the
-# curriculum targets; the model plans from sheet + PEDAGOGY.md alone.
-DEFAULT_PACK_DIR = REPO_ROOT / "curriculum" / "spanish_a1"
+# Domain-model DATA only (association table = target inventory,
+# teach-asset sidecar, scenes as domain-situated materials — never path
+# law). The prose course pack was DELETED 2026-08-03; the sheet carries
+# the domain targets + scope; the model plans from sheet + PEDAGOGY.md.
+DEFAULT_PACK_DIR = REPO_ROOT / "domain" / "spanish_a1"
 # Tutor persona (voice/character layer, e.g. Marisol). File is the persona
 # spec; TUTOR_PERSONA=off disables without deleting the file. Persona is HOW
 # the tutor talks — the gate always outranks it.

@@ -20,7 +20,7 @@ from tutor.association_table import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-PACK_DIR = ROOT / "curriculum" / "spanish_a1"
+PACK_DIR = ROOT / "domain" / "spanish_a1"
 
 # tutor/corpus.py has no MWU parser (only topic titles / planner index), so
 # the unit01 greeting/farewell/courtesy multiword formulas are hand-listed
