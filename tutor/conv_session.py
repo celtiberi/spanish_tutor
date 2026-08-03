@@ -428,6 +428,8 @@ def build_debug_entry(
     stop_reason: str = "",
     turn: int = 0,
     is_open: bool = False,
+    raw: str = "",
+    reply: str = "",
 ) -> dict:
     """One debug ring-buffer entry (JSON-safe; full text, no truncation)."""
     import datetime as _dt
@@ -468,6 +470,10 @@ def build_debug_entry(
         "history": history,
         "task_message": task or "",
         "response": {
+            # What was RECEIVED: raw = untouched provider text (incl. any
+            # <plan> block before harvest); reply = learner-visible text.
+            "raw": raw or "",
+            "reply": reply or "",
             "usage": {
                 "input_tokens": int(u.get("input_tokens") or 0),
                 "output_tokens": int(u.get("output_tokens") or 0),
@@ -1009,11 +1015,15 @@ class ConversationalSession:
         notes=None,
         stop_reason: str = "",
         is_open: bool = False,
+        raw: str = "",
+        reply: str = "",
     ) -> None:
-        """Append one entry to the in-memory debug ring buffer (never raises,
-        never touches disk)."""
+        """Append one entry to the in-memory debug ring buffer and, when
+        session logging is on, mirror it verbatim to the on-disk model
+        traffic log (``<session_id>.requests.jsonl`` — USER 2026-08-03:
+        "I want to see what is being sent and received").  Never raises."""
         try:
-            self.debug_requests.append(build_debug_entry(
+            entry = build_debug_entry(
                 model=self.model,
                 system=system,
                 messages=messages,
@@ -1026,9 +1036,18 @@ class ConversationalSession:
                 stop_reason=stop_reason,
                 turn=self.pedagogy_memory.turns,
                 is_open=is_open,
-            ))
+                raw=raw,
+                reply=reply,
+            )
+            self.debug_requests.append(entry)
         except Exception as e:
             self._oops("debug_capture", e)
+            return
+        try:
+            if self.logger is not None:
+                self.logger.log_model_exchange(entry)
+        except Exception as e:
+            self._oops("traffic_log", e)
 
     def _sheet_for_focus(self) -> dict:
         """Ability sheet for the focus rail (no personal-name injection —

@@ -1,0 +1,60 @@
+"""Model traffic log (USER 2026-08-03: "I want to see what is being sent
+and received").
+
+Every tutor model call's full request + response — system blocks, task,
+history window, raw provider text (pre <plan>-harvest), visible reply,
+usage — mirrors from the debug ring to
+``logs/sessions/<session_id>.requests.jsonl`` when session logging is on.
+Full text, no truncation.
+"""
+
+from __future__ import annotations
+
+import json
+
+from tutor import config
+from tutor.conv_session import build_debug_entry
+from tutor.session_log import SessionLogger
+
+
+def test_debug_entry_carries_raw_and_reply():
+    entry = build_debug_entry(
+        model="fake",
+        system=[{"type": "text", "text": "stance"}],
+        messages=[{"role": "user", "content": "task"}],
+        task="task",
+        decision_dict=None,
+        activity=None,
+        usage={"input_tokens": 10, "output_tokens": 5},
+        raw="<plan>secret</plan><tutor>hola</tutor>",
+        reply="hola",
+    )
+    assert entry["response"]["raw"] == "<plan>secret</plan><tutor>hola</tutor>"
+    assert entry["response"]["reply"] == "hola"
+    assert entry["system_blocks"][0]["text"] == "stance"
+
+
+def test_log_model_exchange_writes_full_entry(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "LOG_DIR", tmp_path)
+    logger = SessionLogger(arch="conversational", label="traffictest")
+    entry = build_debug_entry(
+        model="fake",
+        system=[{"type": "text", "text": "S" * 5000}],  # no truncation
+        messages=[],
+        task="T",
+        decision_dict=None,
+        activity=None,
+        usage=None,
+        raw="RAW",
+        reply="VISIBLE",
+    )
+    logger.log_model_exchange(entry)
+    logger.log_model_exchange(entry)  # appends, one JSON line each
+
+    path = tmp_path / f"{logger.session_id}.requests.jsonl"
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 2
+    got = json.loads(lines[0])
+    assert got["system_blocks"][0]["text"] == "S" * 5000
+    assert got["response"]["raw"] == "RAW"
+    assert got["response"]["reply"] == "VISIBLE"

@@ -87,6 +87,17 @@ class SessionLogger:
             encoding="utf-8",
         )
 
+    def log_model_exchange(self, entry: dict) -> None:
+        """Full outbound request + response for ONE tutor model call, one
+        JSON line, sibling file ``<session_id>.requests.jsonl`` (USER
+        2026-08-03: "I want to see what is being sent and received").
+        Full text, no truncation — system blocks, task, history window,
+        raw model text, visible reply, usage.  Separate from the main
+        jsonl so turn-result logs stay readable."""
+        path = config.LOG_DIR / f"{self.session_id}.requests.jsonl"
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(_jsonable(entry), ensure_ascii=False) + "\n")
+
     def _write_jsonl(self, record: dict) -> None:
         with self.jsonl_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(_jsonable(record), ensure_ascii=False) + "\n")

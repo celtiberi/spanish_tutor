@@ -537,9 +537,10 @@ def create_app() -> FastAPI:
     @app.get("/api/debug/requests")
     def debug_requests(request: Request):
         """Debug box (local app, no auth): the current session's last
-        outbound tutor requests + response metadata, NEWEST FIRST. Served
-        from the in-memory ring buffer only — these payloads are never
-        written to disk logs. No session → empty list (valid JSON always)."""
+        outbound tutor requests + responses, NEWEST FIRST, from the
+        in-memory ring buffer.  The same entries are mirrored to
+        logs/sessions/<session_id>.requests.jsonl (model traffic log).
+        No session → empty list (valid JSON always)."""
         sid = request.cookies.get(COOKIE)
         if not sid or sid not in _sessions:
             return {"entries": [], "count": 0, "session": False}

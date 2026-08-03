@@ -190,6 +190,8 @@ class TurnContext:
     realization_artifact: Any = None
     final: Any = None                               # provider response obj
     raw: str = ""                                   # raw model text
+    model_raw: str = ""                             # untouched provider text
+    #   (pre <plan>-strip — what was RECEIVED, for the traffic log)
     tool_delta: Any = None                          # sheet tool blocks
     usage: dict | None = None                       # token usage (merged)
     error_result: Any = None                        # TurnResult on call error
@@ -1116,6 +1118,7 @@ def stage_model_call(session, ctx: TurnContext) -> None:
     from .session_plan import extract_plan
     from .turn_events import TurnEventKind as EV_
 
+    ctx.model_raw = raw
     _plan, _replan, _cleaned = extract_plan(raw)
     if _plan is not None:
         session.session_plan = _plan
@@ -1871,9 +1874,10 @@ RECORDER_STAGES: tuple = (
 
 def stage_debug_capture(session, ctx: TurnContext) -> None:
     """Debug ring buffer (web debug box): the outbound request + response
-    metadata for this tutor call.  In-memory only — a ring of the last
-    DEBUG_RING_SIZE calls served by GET /api/debug/requests; these payloads
-    are never written to disk logs."""
+    for this tutor call — a ring of the last DEBUG_RING_SIZE calls served
+    by GET /api/debug/requests.  When session logging is on, each entry is
+    also mirrored verbatim to ``<session_id>.requests.jsonl`` (USER
+    2026-08-03: "I want to see what is being sent and received")."""
     session._capture_debug_request(
         system=ctx.system,
         messages=ctx.messages,
@@ -1885,6 +1889,8 @@ def stage_debug_capture(session, ctx: TurnContext) -> None:
         notes=ctx.result.notes,
         stop_reason=getattr(ctx.final, "stop_reason", "") or "",
         is_open=ctx.is_open,
+        raw=ctx.model_raw or ctx.raw,
+        reply=getattr(ctx.result, "reply", "") or "",
     )
     # B0 brief path (§3.3 amended): mirror the completeness_v1 artifact
     # into the ring entry just captured — the lint's logged evidence.
