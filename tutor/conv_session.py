@@ -263,6 +263,7 @@ def build_debug_entry(
     is_open: bool = False,
     raw: str = "",
     reply: str = "",
+    tool_delta: dict | None = None,
 ) -> dict:
     """One debug ring-buffer entry (JSON-safe; full text, no truncation).
 
