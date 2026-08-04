@@ -157,18 +157,9 @@ def build_focus_panel(sheet: dict) -> dict:
         }
         morph.append(b)
 
-    lex_items = []
-    for lemma, meta_l in list((sheet.get("lexicon") or {}).items())[:12]:
-        if not isinstance(meta_l, dict):
-            continue
-        if float(meta_l.get("confidence") or 0) >= 0.1 or meta_l.get("status") not in (
-            None, "unknown",
-        ):
-            lex_items.append({
-                "form": lemma.replace("_", " "),
-                "status": meta_l.get("status"),
-                "confidence": meta_l.get("confidence"),
-            })
+    # lexicon_focus DELETED (USER 2026-08-04 "remove 'in your lexicon'"):
+    # the Morphology panel is paradigms-only; word progress lives in the
+    # grades rail (§4.6 — no dead payload).
 
     # Sheet arc (background) — may disagree with this turn; show separately
     sheet_statement = (
@@ -208,7 +199,6 @@ def build_focus_panel(sheet: dict) -> dict:
             "error_focus": err_summary,
         },
         "morphology": morph,
-        "lexicon_focus": lex_items[:8],
         "error_patterns_active": active_errs,
     }
 

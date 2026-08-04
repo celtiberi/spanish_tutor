@@ -1730,7 +1730,6 @@ class ConversationalSession:
         # learner's own grammar record (2026-08-04) — never agenda.
         panel_morph = panel.get("morphology") if isinstance(panel, dict) else []
         morph = ([self.last_morph] if self.last_morph else []) + list(panel_morph or [])
-        lex = panel.get("lexicon_focus") if isinstance(panel, dict) else []
         from .costs import ledger_report
 
         try:
@@ -1761,7 +1760,6 @@ class ConversationalSession:
             "human": format_sheet_human(self.sheet),
             "focus": focus or {},
             "morphology": morph or [],
-            "lexicon_focus": lex or [],
             "error_patterns": self.sheet.get("error_patterns") or {},
             "error_patterns_active": (
                 panel.get("error_patterns_active")
