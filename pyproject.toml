@@ -38,5 +38,6 @@ build-backend = "hatchling.build"
 packages = ["tutor"]
 # Non-Python content needed at runtime (not under tutor/)
 [tool.hatch.build.targets.wheel.force-include]
-"course_packs" = "course_packs"
+"domain" = "domain"
 "prompts" = "prompts"
+"PEDAGOGY.md" = "PEDAGOGY.md"
