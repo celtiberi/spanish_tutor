@@ -64,8 +64,18 @@ class TestFocusPanel(unittest.TestCase):
         self.assertNotIn("mode_decision", sig.parameters)
 
     def test_sheet_public_merges_model_card(self):
-        """sheet_public shows the teacher's <morph> card; none → empty."""
-        sess = ConversationalSession(log=False)
+        """sheet_public shows the teacher's <morph> card; none → empty.
+
+        Isolated sheet path — building on the default path reads the
+        OPERATOR'S live sheet (the 2026-07-28 pollution class; caught
+        2026-08-04 when the record projection made it visible)."""
+        import tempfile
+        from pathlib import Path
+
+        tmp = tempfile.mkdtemp()
+        sess = ConversationalSession(
+            log=False, sheet_path=Path(tmp) / "sheet.json"
+        )
         pub = sess.sheet_public()
         self.assertIn("focus", pub)
         self.assertEqual(pub.get("morphology"), [])  # blank sheet, no card
