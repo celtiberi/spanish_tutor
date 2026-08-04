@@ -1357,9 +1357,9 @@ async function startSession() {
  * @param {{ alreadyLocked?: boolean }} [opts]
  */
 
-// ——— Model-led game widgets (2026-08-04): the teacher calls show_game;
-// we render a distinct card; the result auto-sends as the next learner
-// message so the teacher grades it as evidence. ———
+// ——— Model-led game widgets (2026-08-04; Grok game-feel countersign
+// docs/reviews-game-widgets.md — per-item commit, micro-motion, on-card
+// feedback, explicit send with idle auto-send) ———
 
 function normEs(s) {
   return (s || "")
@@ -1370,15 +1370,109 @@ function normEs(s) {
     .trim();
 }
 
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+const KIND_LABEL = {
+  match: "Match",
+  choose: "Choose",
+  type: "Type",
+  order: "Order",
+  gist: "Gist",
+};
+
+function ensureProgress(card, total) {
+  let row = card.querySelector(".game-progress");
+  if (!row) {
+    row = document.createElement("div");
+    row.className = "game-progress";
+    const anchor = card.querySelector(".game-instructions") ||
+      card.querySelector(".game-head");
+    anchor.after(row);
+  }
+  while (row.children.length < total)
+    row.appendChild(document.createElement("i"));
+  return row;
+}
+
+function updateGameProgress(card, n) {
+  const row = card.querySelector(".game-progress");
+  if (!row) return;
+  [...row.children].forEach((dot, i) => dot.classList.toggle("on", i < n));
+}
+
 function gameDone(card, kind, title, right, total, missed) {
-  card.classList.add("game-done");
+  card.classList.add("game-finished");
+  if (right === total) card.classList.add("game-all-ok");
   const missTxt = missed.length ? `; missed: ${missed.join(", ")}` : "";
   const summary = `[game: ${kind} "${title}" — ${right}/${total} correct${missTxt}]`;
   const note = document.createElement("p");
-  note.className = "game-result";
-  note.textContent = `${right}/${total} — sending result to the tutor…`;
+  note.className = "game-result" + (right === total ? " perfect" : "");
+  note.innerHTML =
+    `<strong>${right}/${total}</strong>` +
+    `<span>${right === total ? "Nice." : ""}</span>`;
   card.appendChild(note);
-  setTimeout(() => sendMessage(summary), 600);
+  if (missed.length) {
+    const ul = document.createElement("ul");
+    ul.className = "game-miss-list";
+    missed.forEach((m) => {
+      const li = document.createElement("li");
+      li.textContent = m;
+      ul.appendChild(li);
+    });
+    card.appendChild(ul);
+  }
+  let sent = false;
+  const send = () => {
+    if (sent) return;
+    sent = true;
+    card.classList.add("game-done");
+    btn.textContent = "Sent to tutor";
+    sendMessage(summary);
+  };
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "btn game-check";
+  btn.textContent = "Send result to tutor";
+  const idle = setTimeout(send, 8000);
+  btn.onclick = () => {
+    clearTimeout(idle);
+    send();
+  };
+  card.appendChild(btn);
+}
+
+function gameChoiceQuestion(card, container, prompt, options, answer, onCommit) {
+  const q = document.createElement("div");
+  q.className = "game-q";
+  if (prompt) q.innerHTML = `<p class="game-prompt">${esc(prompt)}</p>`;
+  for (const opt of options || []) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "game-tile game-opt-btn";
+    b.textContent = opt;
+    b.onclick = () => {
+      if (q.dataset.locked) return;
+      q.dataset.locked = "1";
+      const ok = opt === (answer || "");
+      b.classList.add(ok ? "ok" : "bad", ok ? "pop" : "shake");
+      if (!ok) {
+        [...q.querySelectorAll(".game-opt-btn")].forEach((x) => {
+          if (x.textContent === answer) x.classList.add("ok", "reveal");
+        });
+      }
+      q.querySelectorAll(".game-opt-btn").forEach((x) => (x.disabled = true));
+      onCommit(ok);
+    };
+    q.appendChild(b);
+  }
+  container.appendChild(q);
 }
 
 function renderGameWidget(game) {
@@ -1391,16 +1485,19 @@ function renderGameWidget(game) {
   card.className = "bubble game-card";
   const items = game.items || [];
   card.innerHTML =
-    `<div class="game-head"><span class="game-kind">${esc(game.kind)}</span>` +
+    `<div class="game-head">` +
+    `<span class="game-kind">${esc(KIND_LABEL[game.kind] || game.kind)}</span>` +
     `<span class="game-title">${esc(game.title || "Quick game")}</span></div>` +
     (game.instructions
       ? `<p class="game-instructions">${esc(game.instructions)}</p>`
       : "");
   const missed = [];
   let right = 0;
+  let answered = 0;
 
   if (game.kind === "match") {
     const pairs = items.filter((i) => i && i.es && i.en);
+    ensureProgress(card, pairs.length);
     const wrap = document.createElement("div");
     wrap.className = "match-wrap";
     const left = document.createElement("div");
@@ -1409,7 +1506,6 @@ function renderGameWidget(game) {
     rightCol.className = "match-col";
     let sel = null;
     let solved = 0;
-    const enShuffled = [...pairs].sort(() => Math.random() - 0.5);
     for (const p of pairs) {
       const b = document.createElement("button");
       b.type = "button";
@@ -1423,7 +1519,7 @@ function renderGameWidget(game) {
       };
       left.appendChild(b);
     }
-    for (const p of enShuffled) {
+    for (const p of shuffle(pairs)) {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "game-tile";
@@ -1433,18 +1529,25 @@ function renderGameWidget(game) {
         if (sel.pair.en === p.en) {
           sel.btn.disabled = true;
           b.disabled = true;
-          sel.btn.classList.add("ok");
-          b.classList.add("ok");
+          sel.btn.classList.add("ok", "pop");
+          b.classList.add("ok", "pop");
           right += 1;
           solved += 1;
           sel = null;
+          updateGameProgress(card, solved);
           if (solved === pairs.length)
             gameDone(card, "match", game.title, right, pairs.length, missed);
         } else {
-          b.classList.add("bad");
-          if (!missed.includes(`${sel.pair.es}→?`))
-            missed.push(`${sel.pair.es}→?`);
-          setTimeout(() => b.classList.remove("bad"), 500);
+          b.classList.add("bad", "shake");
+          sel.btn.classList.add("shake");
+          if (!missed.includes(`${sel.pair.es}→${p.en}`))
+            missed.push(`${sel.pair.es}→${p.en}`);
+          const leftBtn = sel.btn;
+          sel = null;
+          setTimeout(() => {
+            b.classList.remove("bad", "shake");
+            leftBtn.classList.remove("sel", "shake");
+          }, 280);
         }
       };
       rightCol.appendChild(b);
@@ -1452,129 +1555,151 @@ function renderGameWidget(game) {
     wrap.appendChild(left);
     wrap.appendChild(rightCol);
     card.appendChild(wrap);
+  } else if (game.kind === "choose") {
+    ensureProgress(card, items.length);
+    for (const it of items) {
+      gameChoiceQuestion(card, card, it.prompt, it.options, it.answer, (ok) => {
+        if (ok) right += 1;
+        else missed.push(`${(it.prompt || "").slice(0, 24)}→${it.answer}`);
+        answered += 1;
+        updateGameProgress(card, answered);
+        if (answered === items.length)
+          gameDone(card, "choose", game.title, right, items.length, missed);
+      });
+    }
   } else if (game.kind === "gist") {
-    const qs = [];
-    for (const [gi, it] of items.entries()) {
+    let totalQ = 0;
+    for (const it of items) totalQ += (it.questions || []).length;
+    ensureProgress(card, totalQ);
+    for (const it of items) {
       const passage = document.createElement("blockquote");
       passage.className = "game-passage";
       passage.textContent = it.text || "";
       card.appendChild(passage);
-      for (const [qi, qq] of (it.questions || []).entries()) {
-        const q = document.createElement("div");
-        q.className = "game-q";
-        q.innerHTML = `<p class="game-prompt">${esc(qq.q || "")}</p>`;
-        for (const opt of qq.options || []) {
-          const lbl = document.createElement("label");
-          lbl.className = "game-opt";
-          lbl.innerHTML =
-            `<input type="radio" name="gg${gi}-${qi}" value="${esc(opt)}"> ${esc(opt)}`;
-          q.appendChild(lbl);
-        }
-        card.appendChild(q);
-        qs.push(() => {
-          const v = q.querySelector("input:checked")?.value || "";
-          const ok = v === (qq.answer || "");
-          if (!ok) missed.push(`${(qq.q || "").slice(0, 28)}→${qq.answer}`);
-          return ok;
+      for (const qq of it.questions || []) {
+        gameChoiceQuestion(card, card, qq.q, qq.options, qq.answer, (ok) => {
+          if (ok) right += 1;
+          else missed.push(`${(qq.q || "").slice(0, 28)}→${qq.answer}`);
+          answered += 1;
+          updateGameProgress(card, answered);
+          if (answered === totalQ)
+            gameDone(card, "gist", game.title, right, totalQ, missed);
         });
       }
     }
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn game-check";
-    btn.textContent = "Check";
-    btn.onclick = () => {
-      btn.disabled = true;
-      right = qs.reduce((n, f) => n + (f() ? 1 : 0), 0);
-      gameDone(card, "gist", game.title, right, qs.length, missed);
-    };
-    card.appendChild(btn);
-  } else if (game.kind === "choose" || game.kind === "type" || game.kind === "order") {
-    const qs = [];
-    for (const [qi, it] of items.entries()) {
+  } else if (game.kind === "type") {
+    ensureProgress(card, items.length);
+    for (const it of items) {
       const q = document.createElement("div");
       q.className = "game-q";
-      if (game.kind === "choose") {
-        q.innerHTML = `<p class="game-prompt">${esc(it.prompt || "")}</p>`;
-        for (const opt of it.options || []) {
-          const lbl = document.createElement("label");
-          lbl.className = "game-opt";
-          lbl.innerHTML =
-            `<input type="radio" name="g${qi}" value="${esc(opt)}"> ${esc(opt)}`;
-          q.appendChild(lbl);
+      q.innerHTML = `<p class="game-prompt">${esc(it.en || "")}</p>`;
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.className = "game-input";
+      inp.placeholder = "escribe en español…";
+      q.appendChild(inp);
+      const hint = document.createElement("p");
+      hint.className = "game-hint";
+      hint.hidden = true;
+      q.appendChild(hint);
+      const commit = () => {
+        if (inp.dataset.locked) return;
+        inp.dataset.locked = "1";
+        const ok = normEs(inp.value) === normEs(it.answer || "");
+        inp.classList.add(ok ? "ok" : "bad", ok ? "pop" : "shake");
+        inp.readOnly = true;
+        if (ok) right += 1;
+        else {
+          missed.push(`${it.en}→${it.answer}`);
+          hint.hidden = false;
+          hint.textContent = it.answer || "";
         }
-        qs.push(() => {
-          const v = q.querySelector("input:checked")?.value || "";
-          const ok = v === (it.answer || "");
-          if (!ok) missed.push(`${(it.prompt || "").slice(0, 24)}→${it.answer}`);
-          return ok;
-        });
-      } else if (game.kind === "type") {
-        q.innerHTML = `<p class="game-prompt">${esc(it.en || "")}</p>`;
-        const inp = document.createElement("input");
-        inp.type = "text";
-        inp.className = "game-input";
-        inp.placeholder = "escribe en español…";
-        q.appendChild(inp);
-        qs.push(() => {
-          const ok = normEs(inp.value) === normEs(it.answer || "");
-          if (!ok) missed.push(`${it.en}→${it.answer}`);
-          inp.classList.add(ok ? "ok" : "bad");
-          return ok;
-        });
-      } else {
-        const tiles = [...(it.tiles || [])].sort(() => Math.random() - 0.5);
-        const build = document.createElement("p");
-        build.className = "game-build";
-        const tileRow = document.createElement("div");
-        tileRow.className = "game-tilerow";
-        const chosen = [];
-        for (const w of tiles) {
-          const b = document.createElement("button");
-          b.type = "button";
-          b.className = "game-tile";
-          b.textContent = w;
-          b.onclick = () => {
-            if (b.disabled) return;
-            b.disabled = true;
-            chosen.push(w);
-            build.textContent = chosen.join(" ");
-          };
-          tileRow.appendChild(b);
+        answered += 1;
+        updateGameProgress(card, answered);
+        if (answered === items.length)
+          gameDone(card, "type", game.title, right, items.length, missed);
+      };
+      inp.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          commit();
         }
-        const clear = document.createElement("button");
-        clear.type = "button";
-        clear.className = "game-tile game-clear";
-        clear.textContent = "↺";
-        clear.onclick = () => {
-          chosen.length = 0;
-          build.textContent = "";
-          tileRow.querySelectorAll("button").forEach((b) => {
-            if (b !== clear) b.disabled = false;
-          });
-        };
-        tileRow.appendChild(clear);
-        q.appendChild(tileRow);
-        q.appendChild(build);
-        qs.push(() => {
-          const ok = normEs(chosen.join(" ")) === normEs(it.answer || "");
-          if (!ok) missed.push(`→${it.answer}`);
-          build.classList.add(ok ? "ok" : "bad");
-          return ok;
-        });
-      }
+      });
+      const ok = document.createElement("button");
+      ok.type = "button";
+      ok.className = "game-tile game-commit";
+      ok.textContent = "✓";
+      ok.onclick = commit;
+      q.appendChild(ok);
       card.appendChild(q);
     }
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn game-check";
-    btn.textContent = "Check";
-    btn.onclick = () => {
-      btn.disabled = true;
-      right = qs.reduce((n, f) => n + (f() ? 1 : 0), 0);
-      gameDone(card, game.kind, game.title, right, qs.length, missed);
-    };
-    card.appendChild(btn);
+  } else if (game.kind === "order") {
+    ensureProgress(card, items.length);
+    for (const it of items) {
+      const q = document.createElement("div");
+      q.className = "game-q";
+      const tiles = shuffle(it.tiles || []);
+      const build = document.createElement("p");
+      build.className = "game-build";
+      const tileRow = document.createElement("div");
+      tileRow.className = "game-tilerow";
+      const chosen = [];
+      for (const w of tiles) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "game-tile";
+        b.textContent = w;
+        b.onclick = () => {
+          if (b.disabled || q.dataset.locked) return;
+          b.disabled = true;
+          b.classList.add("used");
+          chosen.push(w);
+          build.textContent = chosen.join(" ");
+        };
+        tileRow.appendChild(b);
+      }
+      const undo = document.createElement("button");
+      undo.type = "button";
+      undo.className = "game-tile game-clear";
+      undo.textContent = "⌫";
+      undo.title = "Undo last";
+      undo.onclick = () => {
+        if (q.dataset.locked) return;
+        const last = chosen.pop();
+        if (last == null) return;
+        build.textContent = chosen.join(" ");
+        for (const btn of tileRow.querySelectorAll(
+          "button.game-tile:not(.game-clear)"
+        )) {
+          if (btn.disabled && btn.textContent === last) {
+            btn.disabled = false;
+            btn.classList.remove("used");
+            break;
+          }
+        }
+      };
+      tileRow.appendChild(undo);
+      const check = document.createElement("button");
+      check.type = "button";
+      check.className = "game-tile game-commit";
+      check.textContent = "✓";
+      check.onclick = () => {
+        if (q.dataset.locked || !chosen.length) return;
+        q.dataset.locked = "1";
+        const ok = normEs(chosen.join(" ")) === normEs(it.answer || "");
+        build.classList.add(ok ? "ok" : "bad");
+        if (ok) right += 1;
+        else missed.push(`→${it.answer}`);
+        answered += 1;
+        updateGameProgress(card, answered);
+        if (answered === items.length)
+          gameDone(card, "order", game.title, right, items.length, missed);
+      };
+      tileRow.appendChild(check);
+      q.appendChild(tileRow);
+      q.appendChild(build);
+      card.appendChild(q);
+    }
   }
   els.messages.appendChild(card);
   els.messages.scrollTop = els.messages.scrollHeight;
