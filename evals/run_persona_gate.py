@@ -27,6 +27,11 @@ def main() -> None:
         "--personas", default=",".join(DEFAULT_PERSONAS),
         help="comma-separated persona ids",
     )
+    ap.add_argument(
+        "--model", default=None,
+        help="tutor model override (candidate-model gate runs, e.g. "
+             "a gemini round-model trial — 2026-08-04)",
+    )
     args = ap.parse_args()
     personas = [p.strip() for p in args.personas.split(",") if p.strip()]
 
@@ -45,10 +50,13 @@ def main() -> None:
 
     procs = {}
     for p in personas:
+        cmd = [sys.executable, "-m", "evals.run_student_smoke",
+               "--turns", str(args.turns), "--n", "1", "--persona", p,
+               "--quiet"]
+        if args.model:
+            cmd += ["--model", args.model]
         procs[p] = subprocess.Popen(
-            [sys.executable, "-m", "evals.run_student_smoke",
-             "--turns", str(args.turns), "--n", "1", "--persona", p,
-             "--quiet"],
+            cmd,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
         )
     failed = []
