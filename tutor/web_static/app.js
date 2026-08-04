@@ -299,9 +299,12 @@ function renderMorphology(sheet) {
   for (const b of blocks) {
     // §1.1b honesty carve-out: agenda-sourced blocks render only as
     // labeled "up next" — never silently as this-turn engagement.
+    const known = b.learner && b.learner.status === "known";
     const upNext =
       b.live === false
-        ? ` <span class="muted" title="a form your sheet shows in progress — reference table, not this turn's focus">· working on</span>`
+        ? known
+          ? ` <span class="muted" title="a form your sheet shows you know — reference table, not this turn's focus">· you know this</span>`
+          : ` <span class="muted" title="a form your sheet shows in progress — reference table, not this turn's focus">· working on</span>`
         : "";
     const learner = b.learner
       ? ` · you: ${b.learner.status || "?"} (${pct(b.learner.confidence)})`

@@ -21,6 +21,14 @@ from tutor.teach_assets import (
 )
 
 
+def _stance_text() -> str:
+    """The stance block as actually shipped (single-source since the
+    2026-08-04 dual-prompt merge)."""
+    from tutor.executor import build_ai_tutor_system
+
+    return build_ai_tutor_system()[0]["text"]
+
+
 class TestObserve(unittest.TestCase):
     def test_probe_signals_name(self):
         s = probe_signals("Me llamo Patrick")
@@ -53,46 +61,48 @@ class TestAiTutorContext(unittest.TestCase):
         self.assertNotIn("chat_ask_name", msg)
         self.assertNotIn("origin_to_gusta", msg)
         # Standing orders moved to the STATIC system prompt (cache-stable);
-        # the per-turn task carries only facts.
-        from tutor.executor import AI_TUTOR_SYSTEM
+        # the per-turn task carries only facts. Asserted on the assembled
+        # stance block — the single prompt source since the 2026-08-04
+        # dual-prompt merge (inline AI_TUTOR_SYSTEM deleted, §4.6).
+        stance = _stance_text()
 
         # §1.1 rewrite (2026-08-03): no mode playbooks, no MODE targets —
         # the model owns its agenda; uptake stays a standing order.
-        self.assertIn("LEARNER UPTAKE", AI_TUTOR_SYSTEM)
-        self.assertNotIn("Mode playbooks", AI_TUTOR_SYSTEM)
-        self.assertNotIn("obey mode.instructions", AI_TUTOR_SYSTEM)
+        self.assertIn("LEARNER UPTAKE", stance)
+        self.assertNotIn("Mode playbooks", stance)
+        self.assertNotIn("obey mode.instructions", stance)
+        # Dual-prompt merge invariants: exactly ONE output-shape contract,
+        # no resurrected <continue> slot, no app-owned morphology claim.
+        self.assertEqual(stance.count("<tutor>"), 1)
+        self.assertNotIn("<continue>", stance)
+        self.assertIn("<morph", stance)
 
     def test_correction_rules_in_system_prompt(self):
         # Amended §2.5 (blind-grade defect #3, 2026-07-28): prompt-level
         # correction rules — never confirm an incorrect form; one
         # grammatical person per repair.
-        from tutor.executor import AI_TUTOR_SYSTEM
+        stance = _stance_text()
 
+        self.assertIn("NEVER confirm or praise an incorrect form", stance)
+        self.assertIn("¡Sí!/¡Exacto!/¡Perfecto!", stance)
+        self.assertIn("ONE grammatical person per repair", stance)
         self.assertIn(
-            "NEVER confirm or praise an incorrect form", AI_TUTOR_SYSTEM
-        )
-        self.assertIn("¡Sí!/¡Exacto!/¡Perfecto!", AI_TUTOR_SYSTEM)
-        self.assertIn("ONE grammatical person per repair", AI_TUTOR_SYSTEM)
-        self.assertIn(
-            "1st and 2nd person variants in the same repair",
-            AI_TUTOR_SYSTEM,
+            "1st and 2nd person variants in the same repair", stance
         )
 
     def test_true_zero_english_exception_in_system_prompt(self):
         # Incident 2026-07-28: reset beginner got zero English. The lifeline
         # stance must carry an explicit true-zero exception (PEDAGOGY P1,
         # §2.3) while keeping the English-wall ban intact.
-        from tutor.executor import AI_TUTOR_SYSTEM
+        stance = _stance_text()
 
-        self.assertIn("English is a lifeline only", AI_TUTOR_SYSTEM)
+        self.assertIn("English is a lifeline only", stance)
         self.assertIn(
-            "EXCEPTION — true-zero learner (blank sheet)", AI_TUTOR_SYSTEM
+            "EXCEPTION — true-zero learner (blank sheet)", stance
         )
-        self.assertIn(
-            "gloss on every Spanish item until the", AI_TUTOR_SYSTEM
-        )
+        self.assertIn("gloss on every Spanish item until the", stance)
         # Wall ban stays
-        self.assertIn("walls stay banned", AI_TUTOR_SYSTEM.lower())
+        self.assertIn("walls stay banned", stance.lower())
 
 
 class TestSessionMemory(unittest.TestCase):

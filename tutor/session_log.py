@@ -151,6 +151,7 @@ class SessionLogger:
                 "system_blocks": e.pop("system_blocks", []),
                 "history": e.pop("history", []),
                 "task_message": e.pop("task_message", ""),
+                "tools": e.pop("tools_sent", []),
             },
             "received": e.pop("response", {}),
             **e,  # anything future entries add stays visible, unhidden

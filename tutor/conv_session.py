@@ -265,6 +265,7 @@ def build_debug_entry(
     raw: str = "",
     reply: str = "",
     tool_delta: dict | None = None,
+    tools_sent: list | None = None,
 ) -> dict:
     """One debug ring-buffer entry (JSON-safe; full text, no truncation).
 
@@ -301,6 +302,10 @@ def build_debug_entry(
         ],
         "history": history,
         "task_message": task or "",
+        # Which tools the model could call this turn (games-never-fired
+        # forensics 2026-08-04: the log showed sent/received but not the
+        # offered tools, so "did show_game even ship?" was unanswerable).
+        "tools_sent": list(tools_sent or []),
         "response": {
             # What was RECEIVED: raw = untouched provider text (incl. any
             # <plan> block before harvest); reply = learner-visible text;
@@ -649,6 +654,8 @@ class ConversationalSession:
         # full-context PLAN turn. Reset with the session.
         self.session_plan: str | None = None
         self.plan_cycle_start = 0  # history index where the current plan cycle began
+        self._plan_persisted: str | None = None  # last plan written to plan_store
+        self.grade_log_path: str | None = None  # per-session ledger (multi-user)
         self.last_morph: dict | None = None  # model-authored rail card
         self.replan_requested = False
         self.teacher_mode = (config.TEACHER_MODE or "planned").strip().lower()
@@ -862,6 +869,11 @@ class ConversationalSession:
                 raw=raw,
                 reply=reply,
                 tool_delta=tool_delta,
+                tools_sent=[
+                    t.get("name")
+                    for t in (getattr(self, "tools", None) or [])
+                    if isinstance(t, dict)
+                ] if getattr(config, "SHEET_TOOLS", False) else [],
             )
             self.debug_requests.append(entry)
         except Exception as e:
@@ -1249,6 +1261,7 @@ class ConversationalSession:
             learner,
             composed,
             tool_delta=tool_delta,
+            grade_log_path=self.grade_log_path,
             event_sink=sheet_events,
             session_id=getattr(self, "progress_session_id", "") or "",
         )
@@ -1479,6 +1492,36 @@ class ConversationalSession:
         self.replan_requested = False
         self.last_morph = None        # new chat → fresh morphology card
 
+        # Plan reuse (USER 2026-08-04: precreate the blank plan; store the
+        # returning user's plan). A hit turns the expensive open PLAN turn
+        # into a cheap ROUND turn. Both caches self-invalidate on server
+        # update (code fingerprint); a miss just means the normal plan
+        # turn runs. The model can still <replan/> a restored plan it
+        # disagrees with — reuse is a starting point, never a cage.
+        try:
+            from .pedagogy_contract import is_blank_learner
+            from .plan_cache import get_cached_blank_plan
+            from .plan_store import load_plan
+
+            plan_source = None
+            if is_blank_learner(self.sheet):
+                cached = get_cached_blank_plan()
+                if cached:
+                    self.session_plan = cached
+                    plan_source = "cached_blank"
+            else:
+                stored = load_plan(self.sheet_path)
+                if stored:
+                    self.session_plan = stored
+                    plan_source = "restored"
+            if plan_source:
+                session_event_log(self).emit(
+                    EV.SESSION_PLAN, key=plan_source, stage="plan",
+                )
+        except Exception as e:
+            # Falls back to a normal plan turn — visible, never fatal.
+            self._oops("open_session.plan_reuse", e)
+
         # New chat ≠ new learner: seed session memory from durable sheet
         try:
             self.pedagogy_memory.seed_from_sheet(self.sheet, self.profile)
@@ -1503,6 +1546,7 @@ class ConversationalSession:
                 "parts": result.parts,
             },
         ]
+        self._persist_plan()
         return result
 
     def user_turn(
@@ -1534,7 +1578,19 @@ class ConversationalSession:
             "input_mode": "text",
             "parts": result.parts,
         })
+        self._persist_plan()
         return result
+
+    def _persist_plan(self) -> None:
+        """Store the model's current plan for this learner's next visit
+        (USER 2026-08-04). Only on change — the common turn writes nothing."""
+        plan = self.session_plan
+        if not plan or plan == getattr(self, "_plan_persisted", None):
+            return
+        from .plan_store import save_plan
+
+        save_plan(self.sheet_path, plan)
+        self._plan_persisted = plan
 
     def reset_profile(self) -> dict:
         """Delete any personal-data file left over from the capture era.
@@ -1566,6 +1622,15 @@ class ConversationalSession:
                 self.sheet_path.unlink()
         except OSError as e:
             self._oops("reset_sheet.unlink", e)
+        # The stored plan describes the learner being wiped — it dies with
+        # the sheet (a fresh learner restored onto it would be fiction).
+        try:
+            from .plan_store import delete_plan
+
+            delete_plan(self.sheet_path)
+            self._plan_persisted = None
+        except Exception as e:
+            self._oops("reset_sheet.plan_delete", e)
         self.sheet = default_sheet()
         self.sheet_path.parent.mkdir(parents=True, exist_ok=True)
         save_sheet(self.sheet_path, self.sheet)

@@ -133,11 +133,18 @@ def build_focus_panel(sheet: dict) -> dict:
     for fid, g in grammar_state.items():
         if not isinstance(g, dict):
             continue
-        if g.get("status") in ("emerging", "fragile") and fid in MORPHOLOGY_BY_FORM:
-            working.append((float(g.get("confidence") or 0.0), fid, g))
-    working.sort(key=lambda x: x[0])
+        # In-progress forms first; KNOWN forms are the fallback tier so the
+        # panel never goes blank the moment the learner succeeds (USER
+        # 2026-08-04: "its blank only showing lexicon" — both live entries
+        # had graduated to known and vanished).
+        status = g.get("status")
+        if status in ("emerging", "fragile") and fid in MORPHOLOGY_BY_FORM:
+            working.append((0, float(g.get("confidence") or 0.0), fid, g))
+        elif status == "known" and fid in MORPHOLOGY_BY_FORM:
+            working.append((1, -float(g.get("confidence") or 0.0), fid, g))
+    working.sort(key=lambda x: (x[0], x[1]))
     morph: list = []
-    for conf, fid, g in working[:3]:
+    for _tier, _key, fid, g in working[:3]:
         b = dict(MORPHOLOGY_BY_FORM[fid])
         b["paradigm"] = [dict(r) for r in (b.get("paradigm") or [])]
         b["id"] = fid
