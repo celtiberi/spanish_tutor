@@ -631,6 +631,20 @@ def stage_model_call(session, ctx: TurnContext) -> None:
     # Always the stripped text: an EMPTY <plan></plan> yields _plan=None
     # but must still never leak tags to the learner (audit D finding 1).
     ctx.raw = _cleaned
+    # Model-authored Morphology card (USER 2026-08-03): harvested like the
+    # plan — never learner-visible in chat; the rail renders it.
+    from .turn_morph import extract_morph
+
+    _card, _mcleaned = extract_morph(ctx.raw)
+    if _card is not None:
+        session.last_morph = _card
+        ctx.ev.emit(
+            EV_.MORPH_CARD,
+            key=(_card.get("label") or "card")[:60],
+            payload={"source": "model", "rows": len(_card.get("paradigm") or [])},
+            stage="model",
+        )
+    ctx.raw = _mcleaned
     ctx.tool_delta = tool_delta
     ctx.usage = usage
 
@@ -939,29 +953,10 @@ def stage_settle_chrome(session, ctx: TurnContext) -> None:
     (single-assignment; replaced whole next turn), and does the
     confirmed-display bookkeeping (P-3): note_image / image costs fire
     HERE, for what the learner actually sees — never at attach."""
-    from .exchange_render import (
-        PROJECTION_EVENT_ALLOWLIST,
-        TurnRender,
-        card_engagement,
-    )
-    from .turn_events import TurnEventKind as EV
-    from .tutor_response import process_tutor_raw as _ptr
+    from .exchange_render import TurnRender
 
-    visible, _parts = _ptr(ctx.raw or "")
-    events = tuple(
-        (e.kind.value, e.key)
-        for e in ctx.ev.events
-        if e.kind.value in PROJECTION_EVENT_ALLOWLIST
-    )
-    card = card_engagement(
-        ctx.learner if not ctx.is_open else "", visible, events
-    )
-    if card:
-        ctx.ev.emit(
-            EV.MORPH_CARD, key=card.get("lemma") or card.get("form_id") or "",
-            payload={"engaged_by": card.get("engaged_by") or ""},
-            stage="settle",
-        )
+    # Card detection DELETED 2026-08-03 (USER: the card is model-authored,
+    # harvested in stage_model_call like the plan and the grades).
     for img in ctx.teach_images or []:
         concept = (img or {}).get("concept")
         if concept:
@@ -969,7 +964,6 @@ def stage_settle_chrome(session, ctx: TurnContext) -> None:
     session._note_image_costs(ctx.teach_images)
     session.last_turn_render = TurnRender(
         images=tuple(ctx.teach_images or []),
-        card=card,
         drops=tuple(ctx.render_drops),
     )
 

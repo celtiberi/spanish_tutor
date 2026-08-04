@@ -88,6 +88,54 @@ def settle_images(
     return confirmed, drops
 
 
+@dataclass(frozen=True)
+class ExchangeSurface:
+    """The realized exchange — the ONLY ground truth peripherals may
+    render against. learner is "" on a session-open turn (confirmation
+    then rests on the reply alone)."""
+
+    learner: str
+    reply: str
+
+
+def exchange_surface(learner: str, reply: str) -> ExchangeSurface:
+    return ExchangeSurface(learner=str(learner or ""), reply=str(reply or ""))
+
+
+def concept_present(surface: ExchangeSurface, concept: str) -> bool:
+    """ONE text-presence primitive for all projections (Grok drift AMEND:
+    duplicate fold/boundary logic is a future café-class bug). Delegates
+    to teach_assets.concept_in_text — boundary-safe, alias/accent-aware,
+    the same matcher the declared-image path always used."""
+    from .teach_assets import concept_in_text
+
+    return concept_in_text(concept, surface.learner) or concept_in_text(
+        concept, surface.reply
+    )
+
+
+def settle_images(
+    images: list[dict], surface: ExchangeSurface
+) -> tuple[list[dict], list[tuple[str, str]]]:
+    """Confirm image candidates against the exchange; drop the rest.
+
+    Returns (confirmed, drops) where drops are (concept, reason) pairs.
+    Candidates are agenda-shaped inputs — legal HERE only (input law).
+    Nothing may lead pixels: a candidate whose concept the realized
+    exchange never surfaces does not render (OQ1 resolution — the model
+    may be led by instructions; the learner may not be shown orphans).
+    """
+    confirmed: list[dict] = []
+    drops: list[tuple[str, str]] = []
+    for img in images or []:
+        concept = str((img or {}).get("concept") or "")
+        if concept and concept_present(surface, concept):
+            confirmed.append(img)
+        else:
+            drops.append((concept or "?", "unconfirmed"))
+    return confirmed, drops
+
+
 def card_engagement(
     learner: str,
     reply: str,
@@ -126,12 +174,12 @@ class TurnRender:
     never mutates confirmed images or the engaged card (OQ5)."""
 
     images: tuple = ()
-    card: dict | None = None
+
     drops: tuple = ()
 
     def as_dict(self) -> dict:
         return {
             "images": [dict(i) for i in self.images],
-            "card": dict(self.card) if isinstance(self.card, dict) else None,
+
             "drops": [list(d) for d in self.drops],
         }

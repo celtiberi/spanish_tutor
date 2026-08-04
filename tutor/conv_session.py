@@ -620,6 +620,7 @@ class ConversationalSession:
         # Code stores it verbatim; a missing plan makes the next turn a
         # full-context PLAN turn. Reset with the session.
         self.session_plan: str | None = None
+        self.last_morph: dict | None = None  # model-authored rail card
         self.replan_requested = False
         self.teacher_mode = (config.TEACHER_MODE or "planned").strip().lower()
         # E4/E4b deletion (docs/reviews-architecture-refactor.md, 2026-07-28):
@@ -1446,6 +1447,7 @@ class ConversationalSession:
         self.last_turn_render = None  # §1.1b: render record is per-chat
         self.session_plan = None      # new chat → new plan turn
         self.replan_requested = False
+        self.last_morph = None        # new chat → fresh morphology card
 
         # New chat ≠ new learner: seed session memory from durable sheet
         try:
@@ -1582,7 +1584,10 @@ class ConversationalSession:
         panel = self._focus_panel or build_focus_panel(self._sheet_for_focus())
 
         focus = panel.get("focus") if isinstance(panel, dict) else {}
-        morph = panel.get("morphology") if isinstance(panel, dict) else []
+        # Morphology is MODEL-AUTHORED (2026-08-03): the teacher emits a
+        # <morph> card with its reply when a form table helps; the rail
+        # shows the latest one. No agenda paradigms.
+        morph = [self.last_morph] if self.last_morph else []
         lex = panel.get("lexicon_focus") if isinstance(panel, dict) else []
         from .costs import ledger_report
 

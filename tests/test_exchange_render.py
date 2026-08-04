@@ -14,7 +14,6 @@ from pathlib import Path
 from tutor.exchange_render import (
     PROJECTION_EVENT_ALLOWLIST,
     TurnRender,
-    card_engagement,
     concept_present,
     exchange_surface,
     settle_images,
@@ -31,7 +30,7 @@ class TestProjectionPurity(unittest.TestCase):
             "session", "sheet", "next_best", "decision", "scene", "phase",
             "mode_decision", "targets",
         }
-        for fn in (card_engagement, concept_present, settle_images,
+        for fn in (concept_present, settle_images,
                    exchange_surface):
             params = set(inspect.signature(fn).parameters)
             self.assertFalse(
@@ -117,19 +116,18 @@ class TestPixelSettlement(unittest.TestCase):
 
 class TestTurnRenderContract(unittest.TestCase):
     def test_frozen_single_assignment(self):
-        tr = TurnRender(images=({"concept": "cafe"},), card=None, drops=())
+        tr = TurnRender(images=({"concept": "cafe"},), drops=())
         with self.assertRaises(Exception):
             tr.images = ()
 
     def test_as_dict_round_trip_shape(self):
         tr = TurnRender(
             images=({"concept": "sol"},),
-            card={"lemma": "estar", "paradigm": []},
             drops=(("image", "cafe", "unconfirmed"),),
         )
         d = tr.as_dict()
         self.assertEqual(d["images"][0]["concept"], "sol")
-        self.assertEqual(d["card"]["lemma"], "estar")
+        self.assertNotIn("card", d)  # card died with code detection 2026-08-03
         self.assertEqual(d["drops"], [["image", "cafe", "unconfirmed"]])
 
 

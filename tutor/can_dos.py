@@ -93,48 +93,6 @@ def default_grammar_block() -> dict:
     return {fid: default_form_entry(fid) for fid in FORM_INVENTORY}
 
 
-def morphology_blocks_for_can_do(can_do_id: str | None) -> list[dict]:
-    """Morphology cards to show for the current stretch can-do."""
-    blocks: list[dict] = []
-    seen: set[str] = set()
-    if can_do_id and can_do_id in MORPHOLOGY_BY_CANDO:
-        b = dict(MORPHOLOGY_BY_CANDO[can_do_id])
-        b["id"] = f"cando:{can_do_id}"
-        blocks.append(b)
-        seen.add(b["id"])
-    if can_do_id and can_do_id in CAN_DOS:
-        for fid in CAN_DOS[can_do_id].get("form_hooks") or []:
-            if fid in MORPHOLOGY_BY_FORM:
-                bid = f"form:{fid}"
-                if bid not in seen:
-                    b = dict(MORPHOLOGY_BY_FORM[fid])
-                    b["id"] = bid
-                    b["form_id"] = fid
-                    blocks.append(b)
-                    seen.add(bid)
-    # Always offer at least a light default if empty
-    if not blocks and "IP-01" in MORPHOLOGY_BY_CANDO:
-        b = dict(MORPHOLOGY_BY_CANDO["IP-01"])
-        b["id"] = "cando:IP-01"
-        blocks.append(b)
-    return blocks
-
-
-# (_MODE_TITLES + _live_focus_from_mode DELETED 2026-08-03 with the mode
-# router — full-code-audit S4: the rail is a sheet projection now; there
-# is no code-owned "this-turn mode" to display.)
-
-
-def morphology_blocks_for_form(form_id: str | None) -> list[dict]:
-    """Morphology cards for a grammar form id (e.g. present_estar_person)."""
-    if not form_id or form_id not in MORPHOLOGY_BY_FORM:
-        return []
-    b = dict(MORPHOLOGY_BY_FORM[form_id])
-    b["id"] = f"form:{form_id}"
-    b["form_id"] = form_id
-    return [b]
-
-
 def build_focus_panel(sheet: dict) -> dict:
     """Right-rail: sheet arc + morphology/lexicon projection.
 
@@ -164,52 +122,10 @@ def build_focus_panel(sheet: dict) -> dict:
             "examples": top.get("last_examples") or [],
         }
 
-    # Morphology: form on sheet — not a stale can-do paradigm
-    form_id = nb.get("form_focus")
-    morph = morphology_blocks_for_form(
-        form_id if form_id in MORPHOLOGY_BY_FORM else None
-    )
-    if not morph and nb.get("form_focus") in MORPHOLOGY_BY_FORM:
-        morph = morphology_blocks_for_form(nb.get("form_focus"))
-    if not morph:
-        morph = morphology_blocks_for_can_do(can_do if isinstance(can_do, str) else None)
-
-    # §1.1b (design-exchange-settlement.md, 2026-07-29): the ONLY lawful
-    # live master of the card is the settled TurnRender's card view — the
-    # _turn_morph shared-dict stash is dead. Everything above (mode
-    # targets' form_id / next_best form_focus / can-do block) is AGENDA:
-    # it may render only as labeled "up next" chrome, never as this-turn
-    # engagement (honesty carve-out; the me-llamo pin incident).
-    for b in morph:
-        b["live"] = False
-        b["engaged_by"] = b.get("engaged_by") or "up_next"
-    turn_block = None
-    tr = sheet.get("_last_turn_render")
-    if isinstance(tr, dict):
-        card = tr.get("card")
-        if isinstance(card, dict) and card.get("paradigm"):
-            turn_block = dict(card)
-            turn_block["live"] = True
-    if turn_block:
-        rest = [
-            b for b in morph
-            if b.get("id") != turn_block.get("id")
-            and (
-                not turn_block.get("form_id")
-                or b.get("form_id") != turn_block.get("form_id")
-            )
-        ]
-        morph = [turn_block] + rest[:1]
-
-    grammar = sheet.get("grammar") or {}
-    for block in morph:
-        fid = block.get("form_id")
-        if fid and fid in grammar:
-            g = grammar[fid]
-            block["learner"] = {
-                "status": g.get("status"),
-                "confidence": g.get("confidence"),
-            }
+    # Morphology card is MODEL-AUTHORED (2026-08-03) and merged by
+    # conv_session.sheet_public from session.last_morph — the panel no
+    # longer assembles agenda paradigms.
+    morph: list = []
 
     lex_items = []
     for lemma, meta_l in list((sheet.get("lexicon") or {}).items())[:12]:

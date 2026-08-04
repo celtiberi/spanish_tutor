@@ -77,8 +77,7 @@
         "plan_source=model",
         "teacher_mode=planned",
         "mem_shown=greet,spanish_ok",
-        "mem_asked=—",
-        "morph_card:ser"
+        "mem_asked=—"
       ],
       "requests_so_far": 3
     },

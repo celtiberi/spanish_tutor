@@ -286,8 +286,8 @@ function renderMorphology(sheet) {
   const lex = sheet?.lexicon_focus || [];
   if (!blocks.length && !lex.length) {
     els.morphBody.innerHTML =
-      '<p class="muted">No morphology target yet — chat a bit and the stretch will fill in.</p>';
-    els.morphPill.textContent = "waiting";
+      '<p class="muted">The tutor puts a verb table here when a form matters — none yet this chat.</p>';
+    els.morphPill.textContent = "—";
     return;
   }
   els.morphPill.textContent =
@@ -316,9 +316,12 @@ function renderMorphology(sheet) {
           `</tr>`
       )
       .join("");
+    const when = b.ts
+      ? `<span class="muted morph-when" title="when the tutor sent this card">· ${esc(String(b.ts).replace("T", " ").slice(11, 16))}</span>`
+      : "";
     html += `
       <div class="morph-block">
-        <h3>${esc(b.label || "Forms")}${upNext}</h3>
+        <h3>${esc(b.label || "Forms")}${upNext}${when}</h3>
         <div class="morph-lemma">${esc(b.pos || "")}${
       b.lemma ? " · " + esc(b.lemma) : ""
     }${esc(learner)}</div>

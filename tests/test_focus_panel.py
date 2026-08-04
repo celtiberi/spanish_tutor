@@ -1,53 +1,28 @@
-"""Focus + morphology rail data for the web UI."""
+"""Focus rail panel — sheet projection + the MODEL-AUTHORED morphology card.
+
+2026-08-03: the agenda-morphology assembly (next_best form_focus / can-do
+paradigm blocks) was DELETED with the code-detection card; the Morphology
+panel renders session.last_morph — the card the teacher emitted via
+<morph> — merged in by sheet_public. build_focus_panel itself no longer
+produces morphology blocks.
+"""
 
 import unittest
 
-from tutor.can_dos import build_focus_panel, morphology_blocks_for_can_do
+from tutor.can_dos import build_focus_panel
 from tutor.character_sheet import default_sheet
 from tutor.conv_session import ConversationalSession
 
 
 class TestFocusPanel(unittest.TestCase):
-    def test_morphology_for_ip04(self):
-        blocks = morphology_blocks_for_can_do("IP-04")
-        ids = [b["id"] for b in blocks]
-        self.assertTrue(any("present_estar_person" in i for i in ids))
-        self.assertTrue(blocks[0]["paradigm"])
-
-    def test_morphology_for_ip06(self):
-        blocks = morphology_blocks_for_can_do("IP-06")
-        labels = " ".join(b.get("label", "") for b in blocks).lower()
-        self.assertIn("gust", labels)
-
     def test_build_focus_panel_sheet_arc(self):
-        """Without mode_decision: live title is generic; sheet arc keeps can-do."""
         s = default_sheet()
-        s["next_best"] = {
-            "can_do": "IP-05",
-            "activity": "close_exchange_naturally",
-            "reason": "practice leave-taking",
-            "avoid": "more greetings",
-            "statement": "I can end a short exchange politely.",
-        }
-        s["skills"]["IP-05"]["status"] = "emerging"
-        s["skills"]["IP-05"]["confidence"] = 0.4
-        s["identity"]["preferred_name"] = "Patrick"
         panel = build_focus_panel(s)
-        self.assertEqual(panel["focus"]["can_do"], "IP-05")
-        self.assertIn("end a short exchange", (panel["focus"].get("sheet_title") or "").lower())
-        # Personal-data capture disabled 2026-07-28: even a sheet carrying a
-        # residual name must never emit it to the UI focus panel.
+        self.assertIn("focus", panel)
         self.assertIsNone(panel["focus"]["learner_name"])
-        self.assertTrue(panel["morphology"])
-        forms = " ".join(
-            p["form"] for b in panel["morphology"] for p in b.get("paradigm") or []
-        )
-        self.assertIn("Adiós", forms)
 
-    def test_panel_is_pure_sheet_projection(self):
-        """Router teardown 2026-08-03 (full-code-audit S4): the live-mode
-        overlay is gone — the rail is a sheet projection; form_focus still
-        drives the morphology card."""
+    def test_panel_produces_no_agenda_morphology(self):
+        """The panel never assembles paradigms (model-authored card only)."""
         import inspect
 
         from tutor import can_dos
@@ -62,28 +37,36 @@ class TestFocusPanel(unittest.TestCase):
             "reason": "form focus | weakest IP-03",
         }
         panel = build_focus_panel(s)
-        f = panel["focus"]
-        for gone in ("live", "mode", "mode_reason", "hard_break",
-                     "image_concept"):
-            self.assertNotIn(gone, f)
-        self.assertIn("name", f["title"].lower())
-        morph_labels = " ".join(b.get("label", "") for b in panel["morphology"]).lower()
-        self.assertIn("estar", morph_labels)
-        # Absence pins: the live-mode machinery stays deleted.
+        self.assertEqual(panel["morphology"], [])
+        # Absence pins: agenda-card machinery stays deleted.
+        self.assertFalse(hasattr(can_dos, "morphology_blocks_for_form"))
+        self.assertFalse(hasattr(can_dos, "morphology_blocks_for_can_do"))
         self.assertFalse(hasattr(can_dos, "_live_focus_from_mode"))
         self.assertFalse(hasattr(can_dos, "_MODE_TITLES"))
         sig = inspect.signature(build_focus_panel)
         self.assertNotIn("mode_decision", sig.parameters)
 
-    def test_sheet_public_has_focus_and_morphology(self):
-        """Regression: sheet_public must not crash (broke web rail)."""
+    def test_sheet_public_merges_model_card(self):
+        """sheet_public shows the teacher's <morph> card; none → empty."""
         sess = ConversationalSession(log=False)
         pub = sess.sheet_public()
         self.assertIn("focus", pub)
-        self.assertTrue(pub["focus"].get("title") or pub["focus"].get("can_do")
-                        or pub.get("next_best"))
-        self.assertIsInstance(pub.get("morphology"), list)
-        self.assertGreater(len(pub["morphology"]), 0)
+        self.assertEqual(pub.get("morphology"), [])
+
+        sess.last_morph = {
+            "label": "trabajar — to work",
+            "paradigm": [
+                {"form": "trabajo", "person": "yo", "gloss": "I work",
+                 "highlight": False},
+            ],
+            "note": "",
+            "live": True,
+            "source": "model",
+        }
+        pub2 = sess.sheet_public()
+        self.assertEqual(len(pub2["morphology"]), 1)
+        self.assertEqual(pub2["morphology"][0]["label"], "trabajar — to work")
+        self.assertTrue(pub2["morphology"][0]["live"])
 
 
 if __name__ == "__main__":
