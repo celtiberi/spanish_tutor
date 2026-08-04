@@ -81,8 +81,9 @@ ROUND_NOTE = """## Working from your plan
 Your session plan (you wrote it, learner never sees it) is in the turn
 task as `your_session_plan`. Teach from it and from what the learner just
 said — the plan serves the learner, never the reverse. Revise it with a
-new <plan> block whenever you want; emit <replan/> if you need the full
-teaching guide again."""
+new <plan> block whenever you want. Emit <replan/> when the plan's
+premise is WRONG — the learner is far stronger or far weaker than it
+assumed — or when you need the full teaching guide again."""
 
 _PLAN_RE = re.compile(r"<plan>\s*(.*?)\s*</plan>", re.S | re.I)
 _REPLAN_RE = re.compile(r"<replan\s*/?>", re.I)
