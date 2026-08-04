@@ -540,7 +540,28 @@ def format_sheet_for_prompt(sheet: dict, *, max_lex: int | None = None) -> str:
         "affect": sheet.get("affect"),
         "coverage": sheet.get("coverage"),
         "receptive": sheet.get("receptive"),
-        "lexicon": lex,
+        # Ability vs exposure split (USER 2026-08-04: "is the lexicon…
+        # fake?" — three record types were flattened into one view).
+        # "lexicon" = rows with ability/lifecycle signal; words the tutor
+        # merely SPOKE once (first_seen + bare, zero evidence) collapse
+        # to a compact heard-list so exposure never masquerades as
+        # ability. The sheet FILE keeps every row unchanged.
+        "lexicon": {
+            k: v for k, v in lex.items()
+            if not isinstance(v, dict)
+            or v.get("status") not in (None, "unknown")
+            or v.get("solid_uses")
+            or v.get("introduced_at")
+            or v.get("next_due")
+        },
+        "words_heard_but_not_yet_learned": sorted(
+            k for k, v in lex.items()
+            if isinstance(v, dict)
+            and v.get("status") in (None, "unknown")
+            and not v.get("solid_uses")
+            and not v.get("introduced_at")
+            and not v.get("next_due")
+        ),
         "updated_at": sheet.get("updated_at"),
     }
     return json.dumps(payload, ensure_ascii=False, indent=2)
