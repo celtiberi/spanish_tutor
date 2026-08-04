@@ -1019,3 +1019,43 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
 .part-flow { margin: 0.35rem 0; }
 .part-flow.part-recast { font-style: italic; opacity: 0.92; }
 .part-flow.part-continue { color: var(--muted); font-size: 0.92em; }
+
+/* Model-led game widgets (2026-08-04) */
+.game-card {
+  border: 1px dashed var(--you, #7aa2f7); border-radius: 12px;
+  padding: 0.8rem 1rem; margin: 0.5rem 0; background: rgba(122,162,247,0.06);
+}
+.game-head { display: flex; gap: 0.6rem; align-items: baseline; margin-bottom: 0.3rem; }
+.game-kind {
+  font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--you, #7aa2f7); border: 1px solid currentColor;
+  border-radius: 999px; padding: 0.05rem 0.5rem;
+}
+.game-title { font-weight: 600; }
+.game-instructions { color: var(--muted); font-size: 0.85rem; margin: 0.2rem 0 0.5rem; }
+.match-wrap { display: flex; gap: 1.2rem; }
+.match-col { display: flex; flex-direction: column; gap: 0.35rem; }
+.game-tile {
+  font: inherit; padding: 0.3rem 0.7rem; border-radius: 8px;
+  border: 1px solid var(--border, #444); background: transparent;
+  color: inherit; cursor: pointer; text-align: left;
+}
+.game-tile.sel { border-color: var(--you, #7aa2f7); }
+.game-tile.ok { border-color: var(--ok, #9ece6a); color: var(--ok, #9ece6a); }
+.game-tile.bad { border-color: var(--warn, #f7768e); }
+.game-tile:disabled { opacity: 0.65; cursor: default; }
+.game-q { margin: 0.5rem 0; }
+.game-prompt { margin: 0.2rem 0; }
+.game-opt { display: block; margin: 0.15rem 0; cursor: pointer; }
+.game-input {
+  font: inherit; background: transparent; color: inherit;
+  border: 1px solid var(--border, #444); border-radius: 8px;
+  padding: 0.3rem 0.6rem; width: 100%; max-width: 22rem;
+}
+.game-input.ok, .game-build.ok { border-color: var(--ok, #9ece6a); }
+.game-input.bad, .game-build.bad { border-color: var(--warn, #f7768e); }
+.game-tilerow { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.3rem 0; }
+.game-build { min-height: 1.4em; font-style: italic; }
+.game-check { margin-top: 0.5rem; }
+.game-result { color: var(--muted); margin-top: 0.5rem; font-size: 0.85rem; }
+.game-done .game-check { display: none; }

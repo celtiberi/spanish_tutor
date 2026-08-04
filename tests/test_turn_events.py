@@ -82,7 +82,7 @@ def test_catalog_count_published_number():
     # −1 = OUTPUT_GATE_SOFT_FAIL, 2026-08-03 S11 (the plumbing-only gate
     #      has no soft class — its emission site died with the
     #      teaching-opinion checks)).
-    assert len(NOTE_CATALOG) == 58
+    assert len(NOTE_CATALOG) == 59  # +GAME_SHOWN 2026-08-04 (model-led games)
 
 
 def test_output_gate_repaired_kind_stays_deleted():
@@ -160,6 +160,7 @@ ROUND_TRIP = [
     (EV.OUTPUT_GATE_ERROR, "output_gate_error:ValueError"),
     (EV.INTERNAL_ERROR, "internal_error:progress_note:KeyError: 'x'"),
     (EV.SESSION_PLAN, "session_plan:updated"),
+    (EV.GAME_SHOWN, "game:match"),
     (EV.INTRODUCED, "introduced:hola"),
     (EV.INTRODUCE_LAPSED, "introduce_lapsed:buenos días:no_scaffold"),
     (EV.FIRST_SEEN, "first_seen:mucho gusto"),

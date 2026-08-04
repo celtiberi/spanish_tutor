@@ -13,6 +13,7 @@ from pathlib import Path
 from . import config
 from .can_dos import build_focus_panel
 from .character_sheet import (
+    SHOW_GAME_TOOL,
     UPDATE_CHARACTER_SHEET_TOOL,
     clear_session_scoped_affect,
     compute_progress_score,
@@ -39,7 +40,7 @@ def compose_if_needed(parts) -> str:
     return compose_visible(parts)
 
 DEFAULT_SHEET_PATH = config.CHARACTER_SHEET_PATH
-SHEET_TOOLS = [UPDATE_CHARACTER_SHEET_TOOL]
+SHEET_TOOLS = [UPDATE_CHARACTER_SHEET_TOOL, SHOW_GAME_TOOL]
 
 # Per-session image-generation ceilings (novel images bill ~$0.039 each;
 # cache hits are free). 8×$0.039=$0.312 hard session ceiling; the tutor-
@@ -334,6 +335,7 @@ class TurnResult:
     input_mode: str = "text"  # text | speech (for future audio pipeline)
     stop_reason: str = ""
     model_ms: int | None = None  # wall time of the tutor model call
+    game: dict | None = None     # show_game widget spec (model-authored)
     error: str | None = None
     focus_meta: dict = field(default_factory=dict)
     # Structured multi-part reply (recast / explain / continue / …)
@@ -349,6 +351,7 @@ class TurnResult:
         return {
             "reply": self.reply,
             "model_ms": self.model_ms,
+            "game": self.game,
             "notes": self.notes,
             "next_best": self.next_best,
             "skills": self.skills,
@@ -390,6 +393,31 @@ def _split_content(final) -> tuple[str, list]:
         elif btype == "tool_use":
             tools.append(b)
     return "\n".join(texts).strip(), tools
+
+
+def _game_from_blocks(tool_blocks: list) -> dict | None:
+    """First show_game call this turn → validated game spec (or None).
+    Malformed specs are VISIBLE (no-hide): returned with an error field so
+    the UI can say the game failed rather than silently skipping."""
+    for b in tool_blocks:
+        if (getattr(b, "name", "") or "") != "show_game":
+            continue
+        inp = getattr(b, "input", None) or {}
+        if not isinstance(inp, dict):
+            continue
+        kind = inp.get("kind")
+        items = inp.get("items")
+        if kind in ("match", "choose", "type", "order") and isinstance(
+            items, list
+        ) and items:
+            return {
+                "kind": kind,
+                "title": str(inp.get("title") or "Quick game"),
+                "instructions": str(inp.get("instructions") or ""),
+                "items": items[:6],
+            }
+        return {"error": f"malformed game spec (kind={kind!r})"}
+    return None
 
 
 def _tool_delta_from_blocks(tool_blocks: list) -> dict | None:

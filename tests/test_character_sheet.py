@@ -956,3 +956,40 @@ class TestBandOnlyGrading(unittest.TestCase):
         blob = _json.dumps(UPDATE_CHARACTER_SHEET_TOOL)
         self.assertNotIn('"confidence"', blob)
         self.assertIn("BAND ANCHORS", UPDATE_CHARACTER_SHEET_TOOL["description"])
+
+
+class TestShowGameTool(unittest.TestCase):
+    """Model-led games (2026-08-04): spec extraction + honest failure."""
+
+    def test_game_extracted_from_blocks(self):
+        from types import SimpleNamespace
+        from tutor.conv_session import _game_from_blocks
+
+        b = SimpleNamespace(name="show_game", input={
+            "kind": "match", "title": "Match the words",
+            "items": [{"es": "perro", "en": "dog"}, {"es": "casa", "en": "house"}],
+        })
+        g = _game_from_blocks([b])
+        self.assertEqual(g["kind"], "match")
+        self.assertEqual(len(g["items"]), 2)
+
+    def test_malformed_spec_is_visible_not_silent(self):
+        from types import SimpleNamespace
+        from tutor.conv_session import _game_from_blocks
+
+        b = SimpleNamespace(name="show_game", input={"kind": "quiz", "items": []})
+        g = _game_from_blocks([b])
+        self.assertIn("error", g)
+
+    def test_sheet_tool_calls_ignored(self):
+        from types import SimpleNamespace
+        from tutor.conv_session import _game_from_blocks
+
+        b = SimpleNamespace(name="update_character_sheet", input={"reason": "x"})
+        self.assertIsNone(_game_from_blocks([b]))
+
+    def test_both_tools_offered(self):
+        from tutor.conv_session import SHEET_TOOLS
+
+        names = {t["name"] for t in SHEET_TOOLS}
+        self.assertEqual(names, {"update_character_sheet", "show_game"})

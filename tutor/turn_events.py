@@ -121,6 +121,7 @@ class TurnEventKind(str, Enum):
     OUTPUT_GATE_ERROR = "output_gate_error"
     INTERNAL_ERROR = "internal_error"
     SESSION_PLAN = "session_plan"
+    GAME_SHOWN = "game_shown"
     OUTPUT_GATE_STRIPPED = "output_gate_stripped"
     OUTPUT_GATE_RECOVERED = "output_gate_recovered"
     OUTPUT_GATE_DEGRADED = "output_gate_degraded"
@@ -307,6 +308,12 @@ NOTE_CATALOG: dict[TurnEventKind, NoteSpec] = {s.kind: s for s in [
           "requested|updated|replan_requested (two-phase context "
           "2026-08-03 — the model writes/revises its own session plan)",
           ["turn_pipeline stage_prompt_build/stage_model_call"],
+          [], "log-only", False),
+    _spec(TurnEventKind.GAME_SHOWN, "game:", False,
+          "kind of the model-authored show_game widget this turn "
+          "(match|choose|type|order; key=error on malformed spec — "
+          "2026-08-04, model-led games)",
+          ["turn_pipeline stage_model_call"],
           [], "log-only", False),
     _spec(TurnEventKind.OUTPUT_GATE_STRIPPED, "output_gate_stripped", True,
           "(still_fail floor rung a — probing parts dropped, remainder "
@@ -511,6 +518,7 @@ _RENDER = {
         "internal_error:" + e.key + ":" + str(e.payload.get("error") or "")
     ),
     _K.SESSION_PLAN: lambda e: f"session_plan:{e.key}",
+    _K.GAME_SHOWN: lambda e: f"game:{e.key}",
     _K.OUTPUT_GATE_STRIPPED: lambda e: "output_gate_stripped",
     _K.OUTPUT_GATE_RECOVERED: lambda e: "output_gate_recovered",
     _K.OUTPUT_GATE_DEGRADED: lambda e: (

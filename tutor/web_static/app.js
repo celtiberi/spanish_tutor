@@ -1356,6 +1356,193 @@ async function startSession() {
  * @param {string} inputMode
  * @param {{ alreadyLocked?: boolean }} [opts]
  */
+
+// ——— Model-led game widgets (2026-08-04): the teacher calls show_game;
+// we render a distinct card; the result auto-sends as the next learner
+// message so the teacher grades it as evidence. ———
+
+function normEs(s) {
+  return (s || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[¿¡?!.,]/g, "")
+    .trim();
+}
+
+function gameDone(card, kind, title, right, total, missed) {
+  card.classList.add("game-done");
+  const missTxt = missed.length ? `; missed: ${missed.join(", ")}` : "";
+  const summary = `[game: ${kind} "${title}" — ${right}/${total} correct${missTxt}]`;
+  const note = document.createElement("p");
+  note.className = "game-result";
+  note.textContent = `${right}/${total} — sending result to the tutor…`;
+  card.appendChild(note);
+  setTimeout(() => sendMessage(summary), 600);
+}
+
+function renderGameWidget(game) {
+  if (!game || game.error) {
+    if (game?.error)
+      addBubble("system", `⚠ game failed (not hidden): ${game.error}`);
+    return;
+  }
+  const card = document.createElement("div");
+  card.className = "bubble game-card";
+  const items = game.items || [];
+  card.innerHTML =
+    `<div class="game-head"><span class="game-kind">${esc(game.kind)}</span>` +
+    `<span class="game-title">${esc(game.title || "Quick game")}</span></div>` +
+    (game.instructions
+      ? `<p class="game-instructions">${esc(game.instructions)}</p>`
+      : "");
+  const missed = [];
+  let right = 0;
+
+  if (game.kind === "match") {
+    const pairs = items.filter((i) => i && i.es && i.en);
+    const wrap = document.createElement("div");
+    wrap.className = "match-wrap";
+    const left = document.createElement("div");
+    const rightCol = document.createElement("div");
+    left.className = "match-col";
+    rightCol.className = "match-col";
+    let sel = null;
+    let solved = 0;
+    const enShuffled = [...pairs].sort(() => Math.random() - 0.5);
+    for (const p of pairs) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "game-tile";
+      b.textContent = p.es;
+      b.onclick = () => {
+        if (b.disabled) return;
+        left.querySelectorAll(".sel").forEach((x) => x.classList.remove("sel"));
+        b.classList.add("sel");
+        sel = { btn: b, pair: p };
+      };
+      left.appendChild(b);
+    }
+    for (const p of enShuffled) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "game-tile";
+      b.textContent = p.en;
+      b.onclick = () => {
+        if (b.disabled || !sel) return;
+        if (sel.pair.en === p.en) {
+          sel.btn.disabled = true;
+          b.disabled = true;
+          sel.btn.classList.add("ok");
+          b.classList.add("ok");
+          right += 1;
+          solved += 1;
+          sel = null;
+          if (solved === pairs.length)
+            gameDone(card, "match", game.title, right, pairs.length, missed);
+        } else {
+          b.classList.add("bad");
+          if (!missed.includes(`${sel.pair.es}→?`))
+            missed.push(`${sel.pair.es}→?`);
+          setTimeout(() => b.classList.remove("bad"), 500);
+        }
+      };
+      rightCol.appendChild(b);
+    }
+    wrap.appendChild(left);
+    wrap.appendChild(rightCol);
+    card.appendChild(wrap);
+  } else if (game.kind === "choose" || game.kind === "type" || game.kind === "order") {
+    const qs = [];
+    for (const [qi, it] of items.entries()) {
+      const q = document.createElement("div");
+      q.className = "game-q";
+      if (game.kind === "choose") {
+        q.innerHTML = `<p class="game-prompt">${esc(it.prompt || "")}</p>`;
+        for (const opt of it.options || []) {
+          const lbl = document.createElement("label");
+          lbl.className = "game-opt";
+          lbl.innerHTML =
+            `<input type="radio" name="g${qi}" value="${esc(opt)}"> ${esc(opt)}`;
+          q.appendChild(lbl);
+        }
+        qs.push(() => {
+          const v = q.querySelector("input:checked")?.value || "";
+          const ok = v === (it.answer || "");
+          if (!ok) missed.push(`${(it.prompt || "").slice(0, 24)}→${it.answer}`);
+          return ok;
+        });
+      } else if (game.kind === "type") {
+        q.innerHTML = `<p class="game-prompt">${esc(it.en || "")}</p>`;
+        const inp = document.createElement("input");
+        inp.type = "text";
+        inp.className = "game-input";
+        inp.placeholder = "escribe en español…";
+        q.appendChild(inp);
+        qs.push(() => {
+          const ok = normEs(inp.value) === normEs(it.answer || "");
+          if (!ok) missed.push(`${it.en}→${it.answer}`);
+          inp.classList.add(ok ? "ok" : "bad");
+          return ok;
+        });
+      } else {
+        const tiles = [...(it.tiles || [])].sort(() => Math.random() - 0.5);
+        const build = document.createElement("p");
+        build.className = "game-build";
+        const tileRow = document.createElement("div");
+        tileRow.className = "game-tilerow";
+        const chosen = [];
+        for (const w of tiles) {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "game-tile";
+          b.textContent = w;
+          b.onclick = () => {
+            if (b.disabled) return;
+            b.disabled = true;
+            chosen.push(w);
+            build.textContent = chosen.join(" ");
+          };
+          tileRow.appendChild(b);
+        }
+        const clear = document.createElement("button");
+        clear.type = "button";
+        clear.className = "game-tile game-clear";
+        clear.textContent = "↺";
+        clear.onclick = () => {
+          chosen.length = 0;
+          build.textContent = "";
+          tileRow.querySelectorAll("button").forEach((b) => {
+            if (b !== clear) b.disabled = false;
+          });
+        };
+        tileRow.appendChild(clear);
+        q.appendChild(tileRow);
+        q.appendChild(build);
+        qs.push(() => {
+          const ok = normEs(chosen.join(" ")) === normEs(it.answer || "");
+          if (!ok) missed.push(`→${it.answer}`);
+          build.classList.add(ok ? "ok" : "bad");
+          return ok;
+        });
+      }
+      card.appendChild(q);
+    }
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn game-check";
+    btn.textContent = "Check";
+    btn.onclick = () => {
+      btn.disabled = true;
+      right = qs.reduce((n, f) => n + (f() ? 1 : 0), 0);
+      gameDone(card, game.kind, game.title, right, qs.length, missed);
+    };
+    card.appendChild(btn);
+  }
+  els.messages.appendChild(card);
+  els.messages.scrollTop = els.messages.scrollHeight;
+}
+
 async function sendMessage(text, inputMode = "text", opts = {}) {
   text = (text || "").trim();
   if (!text) return false;
@@ -1410,6 +1597,7 @@ async function sendMessage(text, inputMode = "text", opts = {}) {
         total_ms: _totalMs,
       },
     });
+    if (data.game) renderGameWidget(data.game);
     setNotes(data.notes);
     renderSheet(data.sheet); // score + static rail immediately
     lastFocusVersion = data.sheet?.focus_version ?? lastFocusVersion;

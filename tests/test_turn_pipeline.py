@@ -257,7 +257,7 @@ class TestPipelineOrder:
             "intro_plan",
             "teach_images", "image_decision", "system", "task", "messages",
             "final", "raw", "model_raw", "plan_turn", "model_ms",
-            "tool_delta",
+            "game", "tool_delta",
             "usage", "error_result",
             "render_drops",
             "gate_ctx", "gate_result", "gate_hold", "gate_fail",

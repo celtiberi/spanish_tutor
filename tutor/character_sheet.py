@@ -1543,6 +1543,66 @@ def apply_delta(sheet: dict, delta: dict) -> dict:
 
 
 # Anthropic-style tool definition (Gemini adapter converts to OpenAI tools).
+# Model-led game widget (USER 2026-08-04: "let the ai teach have function
+# calls for games and we pop them up"). The MODEL authors kind, items,
+# and distractors (its teaching judgment, §2.8 ladder: struggling →
+# match/choose; growing → type/order/listen); code only renders the
+# widget and returns the result as next-turn evidence. Games ARE
+# retrieval practice (recall > recognition for production; recognition
+# is the floor rung) — never decoration.
+SHOW_GAME_TOOL = {
+    "name": "show_game",
+    "description": (
+        "Pop up a quick game widget beside the chat when a game serves "
+        "THIS moment better than another chat turn (variety, a §2.8 "
+        "recognition floor for a struggling learner, or a retrieval round "
+        "for due items). You author all content — level-appropriate, from "
+        "material this learner has met. Kinds (easiest → hardest):\n"
+        "- match: pair Spanish with meanings (recognition floor).\n"
+        "- choose: one Spanish prompt, pick the right meaning/form "
+        "(3-4 options, plausible distractors).\n"
+        "- type: meaning shown, learner TYPES the Spanish (cued recall — "
+        "strongest for retention; use once they're succeeding).\n"
+        "- order: scrambled word tiles → correct sentence.\n"
+        "The result returns to you next turn as evidence — grade it via "
+        "update_character_sheet (recognition success supports at most "
+        "'emerging'). Keep your chat reply short when you send a game; "
+        "the game IS the turn's activity. Student sees the widget, never "
+        "this tool."
+    ),
+    "input_schema": {
+        "type": "object",
+        "required": ["kind", "title", "items"],
+        "properties": {
+            "kind": {
+                "type": "string",
+                "enum": ["match", "choose", "type", "order"],
+            },
+            "title": {
+                "type": "string",
+                "description": "Short learner-facing title, e.g. 'Match the words'",
+            },
+            "instructions": {
+                "type": "string",
+                "description": "One learner-facing line of instructions (English ok).",
+            },
+            "items": {
+                "type": "array",
+                "description": (
+                    "match: [{es, en}] pairs (3-6). choose: [{prompt, "
+                    "options: [..], answer}] (1-4 questions; answer = "
+                    "correct option text). type: [{en, answer}] (1-4; "
+                    "answer = expected Spanish, minor accent slips are "
+                    "fine). order: [{tiles: [..], answer}] (1-2 "
+                    "sentences; tiles scrambled words)."
+                ),
+                "items": {"type": "object"},
+            },
+        },
+    },
+}
+
+
 UPDATE_CHARACTER_SHEET_TOOL = {
     "name": "update_character_sheet",
     "description": (

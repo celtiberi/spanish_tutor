@@ -162,6 +162,7 @@ class TurnContext:
     #   (pre <plan>-strip — what was RECEIVED, for the traffic log)
     plan_turn: bool = False                         # this call was a PLAN turn
     model_ms: int | None = None                     # tutor-call wall time
+    game: dict | None = None                        # show_game spec (widget)
     tool_delta: Any = None                          # sheet tool blocks
     usage: dict | None = None                       # token usage (merged)
     error_result: Any = None                        # TurnResult on call error
@@ -583,7 +584,7 @@ def stage_model_call(session, ctx: TurnContext) -> None:
         tools = (
             session.tools if getattr(config, "SHEET_TOOLS", False) else None
         )
-        final, raw, tool_delta, usage, _ = tutor_turn(
+        final, raw, tool_delta, usage, _blocks = tutor_turn(
             session.client,
             session.caps,
             ctx.system,
@@ -606,6 +607,21 @@ def stage_model_call(session, ctx: TurnContext) -> None:
         return
     ctx.final = final
     ctx.model_ms = int((_time.perf_counter() - _t0) * 1000)
+    # Model-led game widget (USER 2026-08-04): first show_game call this
+    # turn becomes the turn's game; malformed specs stay VISIBLE.
+    from .conv_session import _game_from_blocks
+
+    ctx.game = _game_from_blocks(_blocks)
+    if ctx.game is not None:
+        from .turn_events import TurnEventKind as EV_g
+
+        ctx.ev.emit(
+            EV_g.GAME_SHOWN,
+            key=str(ctx.game.get("kind") or "error"),
+            payload={"title": ctx.game.get("title") or "",
+                     "error": ctx.game.get("error") or ""},
+            stage="model",
+        )
     # Two-phase context (2026-08-03): harvest the model's OWN <plan> /
     # <replan/> from the raw reply BEFORE anything parses it, so plan
     # text can never leak into the learner-visible message. Code stores
@@ -856,6 +872,7 @@ def stage_finish(session, ctx: TurnContext) -> None:
         skip_log=True,  # log after mode/plan/images attached
     )
     ctx.result.model_ms = ctx.model_ms
+    ctx.result.game = ctx.game
 
 
 def stage_introduce_ledger(session, ctx: TurnContext) -> None:
