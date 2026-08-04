@@ -296,8 +296,7 @@ function renderFocus(sheet) {
 
 function renderMorphology(sheet) {
   const blocks = sheet?.morphology || [];
-  const lex = sheet?.lexicon_focus || [];
-  if (!blocks.length && !lex.length) {
+  if (!blocks.length) {
     els.morphBody.innerHTML =
       '<p class="muted">The tutor puts a verb table here when a form matters — none yet this chat.</p>';
     els.morphPill.textContent = "—";
@@ -354,22 +353,9 @@ function renderMorphology(sheet) {
         }
       </div>`;
   }
-  if (lex.length) {
-    html += `
-      <div class="morph-block">
-        <h3>In your lexicon</h3>
-        <div class="lex-row">
-          ${lex
-            .map(
-              (x) =>
-                `<span class="lex-chip" title="${esc(x.status)}">${esc(
-                  x.form
-                )}</span>`
-            )
-            .join("")}
-        </div>
-      </div>`;
-  }
+  // "In your lexicon" chips DELETED (USER 2026-08-04): the Morphology
+  // panel shows form paradigms only — word-level progress lives in the
+  // grades rail, and the chips overclaimed ("this is also just false").
   els.morphBody.innerHTML = html;
 }
 
