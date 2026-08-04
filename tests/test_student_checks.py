@@ -68,9 +68,24 @@ class TestFixation:
         findings = check_fixation(transcript)
         assert findings, "near-identical A/B try 2 turns apart must be flagged"
         assert "turns 1->3" in findings[0]
-
+        # Two-band (2026-08-04): 0.89 sits in the WARN gray zone —
+        # visible, not gate-failing (token jaccard cannot separate
+        # +filler-word from different-activity at this margin).
+        assert findings[0].startswith("WARN")
         all_findings, passed = run_student_checks(transcript, table=FAKE_TABLE)
-        assert not passed, "nonzero fixation = FAIL"
+        assert passed
+
+        # Byte-identical repeat = the HARD class (Sam's 1.00 catch).
+        hard = [
+            _row("¡Hola! Vamos a hablar."),
+            _row(f"Muy bien. {AB_TRY}"),
+            _row("Sí, el café. ¿Y tú?"),
+            _row(f"Bueno. {AB_TRY}"),
+        ]
+        hf = check_fixation(hard)
+        assert hf and not hf[0].startswith("WARN")
+        _, hard_passed = run_student_checks(hard, table=FAKE_TABLE)
+        assert not hard_passed, "identical repeat = FAIL"
         assert "fixation" in all_findings
 
     def test_distinct_tries_are_clean(self):
@@ -154,8 +169,9 @@ class TestClusterIntro:
         findings = check_cluster_intro(transcript, table=FAKE_TABLE)
         assert len(findings) == 1
         assert "turn 1" in findings[0] and "descriptions" in findings[0]
-        # HARD: not WARN-prefixed.
-        assert not findings[0].startswith("WARN")
+        # WARN severity (2026-08-04 calibration: theme co-occurrence is a
+        # weak proxy for true similarity sets — visible, not gate-failing).
+        assert findings[0].startswith("WARN")
 
     def test_one_new_key_per_turn_is_clean(self):
         transcript = [
@@ -196,8 +212,6 @@ class TestClusterIntro:
         # how_are_you formulas — exempt by the 2026-08-04 ruling.
         findings = check_cluster_intro(transcript, table=FAKE_TABLE)
         assert findings == []
-        assert "how_are_you" in findings[0]
-        assert "estoy" not in findings[0]
 
     def test_formula_and_phrase_exemption(self):
         # USER-ruled 2026-08-04: "exempt formulas… exempt idioms and

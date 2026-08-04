@@ -49,7 +49,13 @@ import re
 
 from tutor.textnorm import fold_lexical, fold_prose
 
-FIXATION_JACCARD = 0.85
+# 2026-08-04 two-band calibration: token-set jaccard CANNOT separate
+# "same question + one filler word" (true fixation, 0.89) from "same
+# frame, different activity" (nadar-vs-senderismo, 0.88 — legitimate
+# variation). HARD only for essentially-identical repeats; the gray
+# zone stays visible as WARN.
+FIXATION_JACCARD = 0.85        # gray-zone floor → WARN
+FIXATION_HARD_JACCARD = 0.98   # essentially identical → HARD
 FIXATION_MIN_TOKENS = 6
 
 # Question spans: «¿...?» pairs first, then bare ...? sentence tails.
@@ -398,8 +404,10 @@ def check_fixation(transcript: list[dict]) -> list[str]:
                 sim = _jaccard(earlier_toks, toks)
                 if sim > FIXATION_JACCARD:
                     flagged.add((i, j))
+                    sev = "" if sim >= FIXATION_HARD_JACCARD else "WARN "
                     findings.append(
-                        f"turns {i}->{j}: repeated try (jaccard={sim:.2f}) "
+                        f"{sev}turns {i}->{j}: repeated try "
+                        f"(jaccard={sim:.2f}) "
                         f"{earlier_text!r} ~ {try_text!r}"
                     )
             seen.append((j, try_text, toks))
@@ -441,6 +449,11 @@ def check_cluster_intro(
     beyond the first are flagged.  Transcript-level successor of the
     deleted runtime gate:cluster_veto (S11).
 
+    WARN severity (2026-08-04 calibration: theme co-occurrence is a weak
+    proxy for true similarity sets — 1 true catch (grande+pequeño) vs
+    several weak positives across gate runs; visible, never gate-failing
+    until the domain data carries explicit similarity sets).
+
     EXEMPT (USER-ruled 2026-08-04: "exempt formulas… exempt idioms and
     common phrases" — formulaic sequences are learned as chunks in a
     script, not as competing form-meaning mappings; the Tinkham/Waring
@@ -470,9 +483,9 @@ def check_cluster_intro(
         for theme, theme_keys in sorted(by_theme.items()):
             if len(theme_keys) < 2:
                 continue
-            extras = theme_keys[1:]
+            extras = theme_keys[1:]  # WARN severity — see check docstring
             findings.append(
-                f"turn {i}: cluster co-introduction theme={theme!r} "
+                f"WARN turn {i}: cluster co-introduction theme={theme!r} "
                 f"keys={theme_keys} (extras {extras} — one new item per "
                 "turn, PEDAGOGY §2.2)"
             )
@@ -777,7 +790,7 @@ def run_student_checks(
 ) -> tuple[dict, bool]:
     """(findings-by-check, passed). Fail bar: any non-WARN finding — see
     the severity ledger in the module docstring (HARD: fixation,
-    truncated still_fail, cluster co-introduction, structured teach-shape
+    truncated still_fail, structured teach-shape
     misses; everything else WARN-only counters)."""
     findings: dict[str, list[str]] = {}
     gi = check_grade_inflation(transcript, grades=grades)
