@@ -11,6 +11,13 @@ Usage:
     python -m evals.run_student_smoke --n 2 --turns 8 --persona maya_shy
     python -m evals.run_student_smoke --model gemini-3.6-flash --level novice_mid
 
+Personas run in PARALLEL (each process is fully isolated: per-run sheet,
+progress/cost/grade ledgers, and session dir — nothing shared but API
+rate limits). The three standing archetypes:
+    for P in sam_stuck casey_steady sofia_fluent; do
+        python -m evals.run_student_smoke --turns 10 --persona $P --quiet &
+    done; wait
+
 Results: evals/results/<stamp>-student/ with per-session report JSON
 (transcript + findings) + summary.json. Exit nonzero on any FAIL/ERROR.
 
