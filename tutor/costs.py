@@ -67,6 +67,11 @@ PRICING: dict[str, dict[str, float | None]] = {
     # Focus rail — legacy slug; rates from secondary sources 2026-07; primary
     # xAI models page no longer lists grok-3-mini as of 2026-07-28
     "grok-3-mini": {"input": 0.30, "input_cached": None, "output": 0.50},
+    # xAI Grok 4.20 family (docs.x.ai via pricing trackers, 2026-08-04 —
+    # found UNPRICED after a day of $0 rows, §3.4 violation): reasoning
+    # output includes hidden thinking tokens (billed at output rate).
+    "grok-4.20-0309": {"input": 1.25, "input_cached": 0.20, "output": 2.50},
+    "grok-4.20-0309-non-reasoning": {"input": 1.25, "input_cached": 0.20, "output": 2.50},
     # Intent classifier — official Gemini Developer API paid tier (2026-07-28)
     # https://ai.google.dev/gemini-api/docs/pricing (Grok round-3 verified;
     # Claude's earlier $0.10/$0.40 estimate was 2.5-lite-era and ~3x low)
