@@ -1589,14 +1589,16 @@ async function sendMessage(text, inputMode = "text", opts = {}) {
     for (const n of internalErrs) {
       addBubble("system", `⚠ ${n}`);
     }
-    addBubble("tutor", data.reply, {
-      parts: data.parts,
-      timing: {
-        model_ms: data.model_ms,
-        server_ms: data.server_ms,
-        total_ms: _totalMs,
-      },
-    });
+    if ((data.reply || "").trim() || !data.game) {
+      addBubble("tutor", data.reply, {
+        parts: data.parts,
+        timing: {
+          model_ms: data.model_ms,
+          server_ms: data.server_ms,
+          total_ms: _totalMs,
+        },
+      });
+    }
     if (data.game) renderGameWidget(data.game);
     setNotes(data.notes);
     renderSheet(data.sheet); // score + static rail immediately
