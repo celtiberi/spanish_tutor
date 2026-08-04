@@ -163,8 +163,14 @@ def grades_since_epoch(
 
 def counts_from_sheet(sheet: dict) -> dict[str, int]:
     """Header counts from ability sheet (no journey ledger)."""
+    # BOTH directions counted (2026-08-04, stocks-exchange §2: "a meter
+    # that cannot see refusal is decoration" — this one could not see
+    # struggle: fragile/blocked were structurally invisible, so a
+    # sliding learner read as "fewer emerging").
     known = 0
     emerging = 0
+    fragile = 0
+    blocked = 0
     for v in (sheet.get("skills") or {}).values():
         if not isinstance(v, dict):
             continue
@@ -173,6 +179,10 @@ def counts_from_sheet(sheet: dict) -> dict[str, int]:
             known += 1
         elif st == "emerging":
             emerging += 1
+        elif st == "fragile":
+            fragile += 1
+        elif st == "blocked":
+            blocked += 1
     durable = 0
     for sec in ("lexicon", "grammar"):
         for v in (sheet.get(sec) or {}).values():
@@ -180,7 +190,10 @@ def counts_from_sheet(sheet: dict) -> dict[str, int]:
                 continue
             if _interval_days(v) >= 14:
                 durable += 1
-    return {"durable": durable, "known": known, "emerging": emerging}
+    return {
+        "durable": durable, "known": known, "emerging": emerging,
+        "fragile": fragile, "blocked": blocked,
+    }
 
 
 def _interval_days(v: dict) -> int:

@@ -37,6 +37,22 @@ Your standing roles here:
   item-by-item — COUNTERSIGN/AMEND (exact replacement)/REJECT with
   reasons.
 
+Review protocol (adopted 2026-08-04 from the stocks-repo exchange,
+enacted per the recursive test — the adopting round obeys them):
+- **VERDICT-LAST.** Emit dated evidence → per-item arithmetic → per-item
+  rulings → the overall status line as the FINAL block. For an
+  autoregressive judge, emission order is reasoning order; verdict-first
+  anchors everything after it.
+- **4-way rulings:** ACCEPT_AS_WRITTEN / ACCEPT_WITH_AMENDS /
+  REJECT_CLAIM (the named claim dies; the rest may ship) / REJECT_WHOLE.
+- **Kill-search clause:** every round either kills a named claim or
+  explicitly names the claim it tried hardest to kill AND the falsifier
+  that would have killed it. "Find something to soften" is not review.
+- **CORRELATED_AGREE:** when Claude and you agree on a consequential
+  call, that is ONE vote, not two — same-era RLHF assistants are not an
+  independent jury. Agreement upgrades only with non-overlapping primary
+  sources or a failed opposite-conclusion steelman.
+
 Conventions: absolute dates; append-ready output; review **outcomes**
 live at `docs/reviews-*.md` (catalog: `docs/reviews-index.md`); full
 debate transcripts append under `docs/archive/reviews/` — never rewrite
