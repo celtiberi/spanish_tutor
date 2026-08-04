@@ -134,6 +134,59 @@ ABILITY_LEVELS: dict[str, dict[str, Any]] = {
             },
         },
     },
+    "blocked": {
+        "id": "blocked",
+        "label": "Blocked (never succeeds)",
+        "description": (
+            "You try earnestly but you consistently garble Spanish and you "
+            "NEVER manage a correct full production, even right after a "
+            "model. You mangle words (holo, palabrea, esta bein), mix "
+            "English mid-phrase, forget what was just taught within a turn, "
+            "and often say in English that you don't understand. You never "
+            "give up and you never improve within this session."
+        ),
+        "english_ratio": 0.7,
+        "max_spanish_words": 6,
+        "sentence_complexity": "garbled_fragments",
+        "inventory": ["hola", "um", "ok", "no"],
+        "avoid_grammar": [
+            "subjunctive", "past tense", "long relative clauses",
+            "por/para nuance", "correct conjugation of anything",
+        ],
+        "default_form_seeds": {
+            "greetings": {
+                "status": "error_prone",
+                "confidence": 0.05,
+                "attempts": 0,
+                "successes": 0,
+                "note": "garbles even hola sometimes (holo)",
+            },
+        },
+    },
+    "fluent": {
+        "id": "fluent",
+        "label": "Fluent (native-adjacent)",
+        "description": (
+            "You speak natural, idiomatic, effectively flawless Spanish at "
+            "conversational speed — any tense, any mood, natural phrasing. "
+            "You are here to chat, not to be drilled; a beginner lesson "
+            "would bore you and you show it politely by answering with easy "
+            "fluency and expanding well beyond the prompt."
+        ),
+        "english_ratio": 0.02,
+        "max_spanish_words": 60,
+        "sentence_complexity": "full_natural_paragraphs",
+        "inventory": [],
+        "avoid_grammar": [],
+        "default_form_seeds": {
+            "ser_estar": {
+                "status": "solid",
+                "confidence": 0.98,
+                "attempts": 0,
+                "successes": 0,
+            },
+        },
+    },
     "intermediate_low": {
         "id": "intermediate_low",
         "label": "Intermediate Low",
@@ -272,6 +325,84 @@ PERSONAS: dict[str, dict[str, Any]] = {
         "learning_rate": 0.25,
         "notes": "Stronger learner — tests transfer and lighter scaffolding.",
     },
+}
+
+
+PERSONAS["sam_stuck"] = {
+    "id": "sam_stuck",
+    "name": "Sam",
+    "personality": (
+        "Cheerful, earnest English speaker who is completely lost in "
+        "Spanish and stays lost. Tries every prompt, garbles every "
+        "attempt, forgets corrections immediately, frequently says 'I "
+        "don't understand' or answers in English. Never discouraged, "
+        "never improves."
+    ),
+    "ability": "blocked",
+    "L1": "English",
+    "interests": ["dogs", "cooking", "TV"],
+    "solid_phrases": ["hola", "um", "ok"],
+    "error_tendencies": [
+        {
+            "id": "garbled_everything",
+            "form_key": "greetings",
+            "label": "garbles every Spanish form",
+            "bad_examples": [
+                "holo", "me te name es Sam", "esta bein", "no palabrea",
+                "yo es gusto bien",
+            ],
+            "good_examples": ["hola", "me llamo Sam", "estoy bien"],
+            "strength": 1.0,
+        },
+    ],
+    "learning_rate": 0.0,
+    "notes": "§2.8 stress persona — the teacher must slow down, freeze "
+             "introductions, and never grade this garble as emerging.",
+}
+PERSONAS["casey_steady"] = {
+    "id": "casey_steady",
+    "name": "Casey",
+    "personality": (
+        "Cooperative, motivated English speaker learning at a healthy "
+        "pace. Uses what was just taught (usually correctly), makes "
+        "ordinary beginner mistakes, retains corrections, asks a "
+        "question when genuinely curious."
+    ),
+    "ability": "novice_low",
+    "L1": "English",
+    "interests": ["hiking", "coffee", "movies", "work"],
+    "solid_phrases": ["hola", "gracias", "sí", "no", "me llamo Casey"],
+    "error_tendencies": [
+        {
+            "id": "estar_yo_estoy_vs_esta",
+            "form_key": "estoy_yo",
+            "label": "occasional yo está slip that resolves with practice",
+            "bad_examples": ["Yo está bien"],
+            "good_examples": ["Estoy bien", "Yo estoy aquí"],
+            "strength": 0.5,
+        },
+    ],
+    "learning_rate": 0.35,
+    "notes": "The normal arc — steady progress; the plan should hold and "
+             "evolve without drama.",
+}
+PERSONAS["sofia_fluent"] = {
+    "id": "sofia_fluent",
+    "name": "Sofía",
+    "personality": (
+        "Warm, talkative heritage speaker who grew up bilingual — her "
+        "Spanish is natural and effectively flawless. She chats in full "
+        "idiomatic Spanish about her life, work, and travel, and gently "
+        "outpaces any beginner material immediately."
+    ),
+    "ability": "fluent",
+    "L1": "Spanish/English bilingual",
+    "interests": ["film", "cooking", "travel", "her design job"],
+    "solid_phrases": [],
+    "error_tendencies": [],
+    "learning_rate": 0.5,
+    "notes": "Replan stress persona — the blank sheet is instantly wrong; "
+             "the teacher should re-plan and re-place, not drill hola.",
 }
 
 

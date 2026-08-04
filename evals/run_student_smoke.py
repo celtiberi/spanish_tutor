@@ -167,9 +167,19 @@ def main() -> None:
 
         findings, passed = run_student_checks(report.get("transcript") or [])
         status = "PASS" if passed else "FAIL"
+        # Plan-lifecycle visibility (USER 2026-08-04: when does the
+        # teacher call for a new plan?): count session_plan events.
+        plan_counts: dict[str, int] = {}
+        for t_row in report.get("transcript") or []:
+            for n in t_row.get("notes") or []:
+                n = str(n)
+                if n.startswith("session_plan:"):
+                    k = n.split(":", 1)[1]
+                    plan_counts[k] = plan_counts.get(k, 0) + 1
         row = {
             "id": sid,
             "status": status,
+            "plan_events": plan_counts,
             "warns": sum(
                 1 for v in findings.values() for f in v if str(f).startswith("WARN")
             ),
@@ -218,7 +228,12 @@ def main() -> None:
             failed += 1
         warns = f" ({row['warns']} warns)" if row.get("warns") else ""
         extra = f" err={row.get('error')}" if row["status"] == "ERROR" else ""
-        print(f"  {row['status']:5} {row['id']}{warns}{extra}")
+        pc = row.get("plan_events") or {}
+        plan_s = (
+            " plan[" + " ".join(f"{k}={v}" for k, v in sorted(pc.items())) + "]"
+            if pc else ""
+        )
+        print(f"  {row['status']:5} {row['id']}{warns}{plan_s}{extra}")
         for name, items in (row.get("findings") or {}).items():
             for f in items:
                 print(f"        [{name}] {f}")
