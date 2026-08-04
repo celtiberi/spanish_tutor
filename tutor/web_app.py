@@ -41,6 +41,25 @@ from . import tts as tts_mod
 STATIC_DIR = Path(__file__).resolve().parent / "web_static"
 COOKIE = "ml_teacher_sid"
 SESSION_TTL_SEC = 60 * 60 * 8  # 8h (cookie max_age)
+
+# Returning-user identity (USER 2026-08-04: "store the users sheet, plan,
+# etc so that they do not need to be reloaded when the user comes back").
+# The sid above is the CHAT (8h, rotates per visit); ml_uid is the PERSON —
+# long-lived, so tester sheets/grades/plans key to the same human across
+# visits instead of forking per page load.
+UID_COOKIE = "ml_uid"
+UID_TTL_SEC = 60 * 60 * 24 * 180  # ~180d
+
+
+def _uid_for(request: Request) -> str:
+    uid = (request.cookies.get(UID_COOKIE) or "").strip()
+    # Cookie value is client-supplied: it becomes part of a filename, so
+    # only accept the exact token_urlsafe alphabet at sane length.
+    if uid and len(uid) <= 64 and all(
+        c.isalnum() or c in "-_" for c in uid
+    ):
+        return uid
+    return secrets.token_urlsafe(16)
 # Orphan reaper (2026-07-28 reset-race forensics: session 20260728-120331
 # leaked with no session_end): any session with no activity for 2h is
 # close()d — writing its session_end — and dropped.
@@ -154,7 +173,12 @@ def _reap_all_locked(*, persist_sheet: bool = True) -> int:
     return n
 
 
-def _get_or_create(sid: str | None, *, model: str | None = None) -> tuple[str, ConversationalSession]:
+def _get_or_create(
+    sid: str | None,
+    *,
+    model: str | None = None,
+    uid: str | None = None,
+) -> tuple[str, ConversationalSession]:
     with _lock:
         _purge_stale()
         if sid and sid in _sessions:
@@ -166,10 +190,30 @@ def _get_or_create(sid: str | None, *, model: str | None = None) -> tuple[str, C
             # close them (session_end) before creating the replacement.
             _reap_all_locked()
         new_id = secrets.token_urlsafe(16)
+        # Tester mode (MULTI_USER_SHEETS=1, set on Fly): every visitor
+        # gets their OWN sheet + grade ledger, and session logs carry the
+        # id so "look for issues" maps logs → person. Without this, all
+        # visitors share one global sheet (fine for the single-operator
+        # local app; nonsense for testers). Keyed by the durable uid
+        # (ml_uid cookie) so a returning tester gets THEIR sheet back;
+        # sid is the fallback for callers with no uid.
+        multi = (os.environ.get("MULTI_USER_SHEETS", "").strip().lower()
+                 in ("1", "true", "yes", "on"))
+        key8 = (uid or new_id)[:8]
+        kwargs = {}
+        if multi:
+            sheets_dir = config.CHARACTER_SHEET_PATH.parent / "sheets"
+            sheets_dir.mkdir(parents=True, exist_ok=True)
+            kwargs["sheet_path"] = sheets_dir / f"web-{key8}.json"
         session = ConversationalSession(
             model=model or config.MODEL,
-            label="web",
+            label=f"web-{key8}" if multi else "web",
+            **kwargs,
         )
+        if multi:
+            grades_dir = config.CHARACTER_SHEET_PATH.parent / "grades"
+            grades_dir.mkdir(parents=True, exist_ok=True)
+            session.grade_log_path = str(grades_dir / f"web-{key8}.jsonl")
         _sessions[new_id] = {
             "session": session,
             "touched": time.time(),
@@ -498,7 +542,8 @@ def create_app() -> FastAPI:
                         traceback.print_exc()
             sid = None
 
-        sid, session = _get_or_create(sid)
+        uid = _uid_for(request)
+        sid, session = _get_or_create(sid, uid=uid)
 
         # Always re-read sheet from disk so a manual file wipe shows up
         try:
@@ -532,6 +577,9 @@ def create_app() -> FastAPI:
         }
         response.set_cookie(
             COOKIE, sid, httponly=True, samesite="lax", max_age=SESSION_TTL_SEC,
+        )
+        response.set_cookie(
+            UID_COOKIE, uid, httponly=True, samesite="lax", max_age=UID_TTL_SEC,
         )
         result["session_id"] = sid
         result["model"] = session.model
@@ -581,6 +629,7 @@ def create_app() -> FastAPI:
         return build_grades_payload(
             session.sheet,
             session_id=getattr(session, "progress_session_id", ""),
+            ledger_path=getattr(session, "grade_log_path", None),
         )
 
     @app.get("/api/debug/requests")
@@ -656,7 +705,7 @@ def create_app() -> FastAPI:
             path.parent.mkdir(parents=True, exist_ok=True)
             save_sheet(path, default_sheet())
 
-        sid, session = _get_or_create(None)
+        sid, session = _get_or_create(None, uid=_uid_for(request))
         if body.reset_sheet:
             session.reset_sheet()
         if body.clear_personal:
@@ -693,6 +742,18 @@ def main() -> None:
     # stays loopback-only.
     host = __import__("os").environ.get("HOST", "127.0.0.1")
     port = int(__import__("os").environ.get("PORT", "8765"))
+    # Blank-plan precache (USER 2026-08-04): warm off the request path at
+    # SERVER start only — never at import/app-creation, where the test
+    # suite would fire a real model call. Daemon thread: serving never
+    # waits on it; a stale fingerprint just means the first blank-sheet
+    # visitor pays the plan turn like before.
+    import threading
+
+    from .plan_cache import warm_blank_plan
+
+    threading.Thread(
+        target=warm_blank_plan, name="plan-cache-warm", daemon=True,
+    ).start()
     print(f"ml_teacher web → http://{host}:{port}")
     print(
         f"  tutor={config.MODEL}  pack={config.DEFAULT_PACK_DIR.name}"

@@ -288,6 +288,33 @@ def record_grades_from_diff(
     return written
 
 
+GRADES_RECENT_HOURS = 24
+
+
+def _recent_only(rows: list[dict[str, Any]], hours: int) -> list[dict[str, Any]]:
+    """Display filter (USER 2026-08-04: "lets not show grades that arent
+    recent - its just confusing"). The LEDGER keeps everything; only the
+    rail is filtered. Rows with unparseable ts stay visible — hiding a
+    grade because its clock is broken would be a silent drop."""
+    import datetime
+
+    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        hours=hours
+    )
+    out = []
+    for r in rows:
+        try:
+            ts = datetime.datetime.fromisoformat(str(r.get("ts") or ""))
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=datetime.timezone.utc)
+            if ts < cutoff:
+                continue
+        except ValueError:
+            pass
+        out.append(r)
+    return out
+
+
 def build_grades_payload(
     sheet: dict,
     *,
@@ -296,7 +323,10 @@ def build_grades_payload(
     limit: int = 80,
 ) -> dict[str, Any]:
     """Payload for GET /api/progress (grade feed + header counts)."""
-    grades = grades_since_epoch(ledger_path=ledger_path, limit=limit)
+    grades = _recent_only(
+        grades_since_epoch(ledger_path=ledger_path, limit=limit),
+        GRADES_RECENT_HOURS,
+    )
     counts = counts_from_sheet(sheet or {})
     from .character_sheet import compute_progress_score
 

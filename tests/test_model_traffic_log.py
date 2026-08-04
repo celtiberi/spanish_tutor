@@ -93,7 +93,9 @@ def test_entries_carry_no_router_shadow_fields(monkeypatch, tmp_path):
     logger.log_model_exchange(entry)
     got = json.loads(logger.requests_path.read_text())
     assert "router_shadow_NOT_SENT" not in got
-    assert set(got["sent"]) == {"system_blocks", "history", "task_message"}
+    assert set(got["sent"]) == {
+        "system_blocks", "history", "task_message", "tools",
+    }
 
 
 # --- Lazy creation (full-code-audit S8 log hygiene) -----------------------
