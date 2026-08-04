@@ -30,6 +30,19 @@ def main() -> None:
     args = ap.parse_args()
     personas = [p.strip() for p in args.personas.split(",") if p.strip()]
 
+    # Subprocesses import the WORKING TREE at launch time — a dirty tree
+    # means the gate measures a moving target (incident 2026-08-04: two
+    # personas crashed importing a mid-edit module; their runs left no
+    # dirs and the launcher's tail clipped the tracebacks).
+    import subprocess as _sp
+    dirty = _sp.run(
+        ["git", "status", "--porcelain"], capture_output=True, text=True
+    ).stdout.strip()
+    if dirty:
+        print("[persona-gate] WARNING: working tree is DIRTY — results "
+              "will reflect uncommitted edits and may crash mid-import:")
+        print("  " + "\n  ".join(dirty.splitlines()[:8]))
+
     procs = {}
     for p in personas:
         procs[p] = subprocess.Popen(
