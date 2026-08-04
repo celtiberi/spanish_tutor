@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Spanish tutor</title>
-  <link rel="stylesheet" href="/static/styles.css?v=20260804h" />
+  <link rel="stylesheet" href="/static/styles.css?v=20260804j" />
 </head>
 <body>
   <div class="app">
@@ -14,20 +14,6 @@
         <div>
           <h1>Spanish tutor <span class="build-stamp" id="buildStamp" title="Server code version (auto: newest code file when the server started)"></span></h1>
           <p class="sub" id="statusLine">Starting…</p>
-        </div>
-      </div>
-      <!-- Countable progress from the ability sheet (known / emerging can-dos). -->
-      <div class="score-board" id="scoreBoard" title="Can-do bands from your character sheet" aria-live="polite">
-        <div class="score-main">
-          <span class="score-label">Solid</span>
-          <span class="score-value" id="countDurable">0</span>
-          <span class="score-unit">can-dos</span>
-          <span class="score-delta hidden" id="scoreDelta"></span>
-        </div>
-        <div class="score-meta">
-          <span id="countKnown">known 0</span>
-          <span class="score-sep">·</span>
-          <span id="countEmerging">emerging 0</span>
         </div>
       </div>
       <div class="cost-board" id="costBoard" title="API spend this chat session" aria-live="polite">
@@ -71,7 +57,6 @@
 
       <section class="chat-panel">
         <div id="messages" class="messages" aria-live="polite"></div>
-        <div id="notes" class="notes hidden"></div>
         <form id="composer" class="composer">
           <button type="button" class="btn icon" id="micBtn" title="Click to record, click again to send" aria-label="Microphone" aria-pressed="false">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -146,6 +131,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=20260804i"></script>
+  <script src="/static/app.js?v=20260804j"></script>
 </body>
 </html>

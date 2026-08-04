@@ -65,21 +65,8 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
 .header-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 
 /* Progress score (character sheet → 0–100) */
-.score-board {
-  flex: 1 1 200px;
-  max-width: 280px;
-  min-width: 160px;
-  margin: 0 0.5rem;
-  padding: 0.45rem 0.75rem 0.5rem;
-  border-radius: 12px;
-  background: linear-gradient(145deg, rgba(61, 139, 253, 0.12), rgba(56, 178, 172, 0.1));
-  border: 1px solid var(--border);
-  transition: box-shadow 0.35s ease, border-color 0.35s ease;
-}
-.score-board.score-up {
-  border-color: var(--ok);
-  box-shadow: 0 0 0 1px rgba(127, 217, 154, 0.35), 0 0 18px rgba(127, 217, 154, 0.15);
-}
+
+
 /* Session API cost (tracked per provider call) */
 .cost-board {
   flex: 0 1 170px;
@@ -113,12 +100,17 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
   font-size: 0.72rem;
   color: var(--muted);
 }
-.score-delta {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--ok);
+.score-meta {
+  margin-top: 0.3rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
 }
-.score-delta.hidden { display: none; }
+
+
 .score-bar-wrap {
   margin-top: 0.35rem;
   height: 6px;
@@ -133,16 +125,8 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
   transition: width 0.45s ease;
   min-width: 0;
 }
-.score-meta {
-  margin-top: 0.3rem;
-  font-size: 0.72rem;
-  color: var(--muted);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-  align-items: center;
-}
-.score-sep { opacity: 0.5; }
+
+
 
 
 .toggle {
@@ -661,15 +645,6 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
   letter-spacing: 0;
 }
 
-.notes {
-  padding: 0.4rem 1rem;
-  font-size: 0.78rem;
-  color: var(--ok);
-  border-top: 1px solid var(--border);
-  background: #14201a;
-}
-.notes.warn { color: var(--warn); background: #241f12; }
-.notes.hidden { display: none; }
 
 .composer {
   display: flex;

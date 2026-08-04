@@ -27,11 +27,6 @@ const els = {
   focusPill: $("focusPill"),
   focusTitle: $("focusTitle"),
   focusMeta: $("focusMeta"),
-  scoreBoard: $("scoreBoard"),
-  countDurable: $("countDurable"),
-  countKnown: $("countKnown"),
-  countEmerging: $("countEmerging"),
-  scoreDelta: $("scoreDelta"),
   journeyCard: $("journeyCard"),
   journeyToggle: $("journeyToggle"),
   journeyBody: $("journeyBody"),
@@ -199,18 +194,6 @@ function addBubble(role, content, { inputMode, parts, timing } = {}) {
   return div;
 }
 
-function setNotes(notes) {
-  if (!notes || !notes.length) {
-    els.notes.classList.add("hidden");
-    els.notes.textContent = "";
-    return;
-  }
-  els.notes.classList.remove("hidden");
-  const warn = notes.includes("rules_backup") && !notes.includes("tool_update");
-  els.notes.classList.toggle("warn", warn);
-  els.notes.textContent = "sheet: " + notes.join("; ");
-}
-
 function pct(c) {
   const n = Number(c) || 0;
   return `${Math.round(n * 100)}%`;
@@ -360,8 +343,6 @@ function renderMorphology(sheet) {
 }
 
 /** Last rendered durable count — used to show +Δ when it advances. */
-let lastDurableCount = null;
-let scoreFlashTimer = null;
 /** Latest /api/progress payload (grade feed + countable header). */
 let lastProgress = null;
 
@@ -396,47 +377,8 @@ function renderCost(sheet) {
   }
 }
 
-/** Countable-header fallback from the ability sheet. */
-function countsFromSheet(sheet) {
-  let known = 0;
-  let emerging = 0;
-  for (const v of Object.values(sheet?.skills || {})) {
-    const st = String(v?.status || "");
-    if (st === "known") known += 1;
-    else if (st === "emerging") emerging += 1;
-  }
-  return { durable: known, known, emerging };
-}
-
-/** Header: known can-dos (solid) + emerging count. */
-function renderScore(sheet) {
-  if (!els.scoreBoard || !els.countDurable) return;
-  const counts = lastProgress?.counts || countsFromSheet(sheet || {});
-  const known = Number(counts.known || 0);
-  const emerging = Number(counts.emerging || 0);
-
-  const prev = lastDurableCount;
-  els.countDurable.textContent = String(known);
-  if (els.countKnown) els.countKnown.textContent = `known ${known}`;
-  if (els.countEmerging) els.countEmerging.textContent = `emerging ${emerging}`;
-
-  if (els.scoreDelta) {
-    if (prev !== null && known > prev) {
-      els.scoreDelta.textContent = `+${known - prev}`;
-      els.scoreDelta.classList.remove("hidden");
-      els.scoreBoard.classList.add("score-up");
-      if (scoreFlashTimer) clearTimeout(scoreFlashTimer);
-      scoreFlashTimer = setTimeout(() => {
-        els.scoreDelta.classList.add("hidden");
-        els.scoreBoard.classList.remove("score-up");
-      }, 2800);
-    } else if (prev !== null && known < prev) {
-      els.scoreDelta.classList.add("hidden");
-      els.scoreBoard.classList.remove("score-up");
-    }
-  }
-  lastDurableCount = known;
-}
+// Header can-do counter DELETED (USER 2026-08-04: "I dont think it
+// does anything anymore") — band counts live in the grades rail.
 
 // ——— Grades rail (left): teacher tool ability moves with why ———
 const GRADES_EMPTY_COPY =
@@ -530,7 +472,6 @@ async function refreshProgress() {
     const p = await api("/api/progress");
     lastProgress = p;
     renderJourney(p);
-    renderScore(null);
   } catch (_) {
     /* rail is display only — never break the chat over it */
   }
@@ -791,11 +732,6 @@ function renderSheet(sheet) {
         avoid: sheet.next_best.avoid,
       },
     };
-  }
-  try {
-    renderScore(sheet);
-  } catch (e) {
-    console.error("renderScore", e);
   }
   try {
     renderCost(sheet);
@@ -1344,7 +1280,6 @@ async function startSession() {
     });
     wait.remove();
     showMessages(data.messages);
-    setNotes(data.notes);
     renderSheet(data.sheet);
     lastFocusVersion = data.sheet?.focus_version ?? null;
     scheduleRailRefresh();
@@ -1773,7 +1708,6 @@ async function sendMessage(text, inputMode = "text", opts = {}) {
       });
     }
     if (data.game) renderGameWidget(data.game);
-    setNotes(data.notes);
     renderSheet(data.sheet); // score + static rail immediately
     lastFocusVersion = data.sheet?.focus_version ?? lastFocusVersion;
     scheduleRailRefresh(); // focus LLM finishes async → pull updated rail
@@ -2452,7 +2386,6 @@ els.newChat.addEventListener("click", async () => {
     });
     wait.remove();
     showMessages(data.messages);
-    setNotes(data.notes);
     renderSheet(data.sheet);
     refreshProgress();
     refreshDebug();
@@ -2499,13 +2432,6 @@ async function hardResetLearner() {
     // Full UI wipe before painting the new open
     els.messages.innerHTML = "";
     showMessages(data.messages);
-    setNotes(
-      (data.notes || []).concat(
-        data.fresh_learner || data.sheet_reset
-          ? ["fresh_learner"]
-          : ["reset_may_have_failed"]
-      )
-    );
     renderSheet(data.sheet);
     refreshProgress();
     refreshDebug();
