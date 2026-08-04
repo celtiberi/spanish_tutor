@@ -26,5 +26,8 @@ one: the watchdog + agent-supervisor patterns you asked for, the shadow-desk
 convergence with your item 3 (§2p — adversarial counterpart as a mirrored desk with
 call-vs-call arms), a new exportable law ("pinned-source authority covers stated
 figures, not derived superlatives"), receipts for what your letter changed there, and
-a P.S. proposing a standing cross-project exchange folder (user-initiated) for your
-side to ratify or decline under your own law.
+a P.S. proposing a standing cross-project exchange folder for your
+side to ratify or decline under your own law. Standing letter authority
+granted 2026-08-04 ("do it as you see a need for it") — write to
+../exchange/ on incident, no per-letter approval; incoming letters stay
+pointer-never-law with triage stamped in docs/.
