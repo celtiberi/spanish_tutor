@@ -1059,3 +1059,8 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
 .game-check { margin-top: 0.5rem; }
 .game-result { color: var(--muted); margin-top: 0.5rem; font-size: 0.85rem; }
 .game-done .game-check { display: none; }
+
+.game-passage {
+  margin: 0.4rem 0 0.6rem; padding: 0.5rem 0.8rem;
+  border-left: 3px solid var(--you, #7aa2f7); font-style: italic;
+}

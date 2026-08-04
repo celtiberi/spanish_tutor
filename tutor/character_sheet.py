@@ -1564,6 +1564,13 @@ SHOW_GAME_TOOL = {
         "- type: meaning shown, learner TYPES the Spanish (cued recall — "
         "strongest for retention; use once they're succeeding).\n"
         "- order: scrambled word tiles → correct sentence.\n"
+        "- gist: COMPREHENSION — you write a short Spanish text or "
+        "mini-dialogue at i+1 (mostly words they hold, a FEW they don't), "
+        "then ask meaning questions in English ('What is she asking "
+        "for?'). The point is succeeding WITHOUT knowing every word — "
+        "inference from context. Exercises the interpretive can-dos "
+        "(IT-01/IT-02); comprehension-only, so it is also a gentle ask "
+        "for a struggling learner.\n"
         "The result returns to you next turn as evidence — grade it via "
         "update_character_sheet (recognition success supports at most "
         "'emerging'). Keep your chat reply short when you send a game; "
@@ -1576,7 +1583,7 @@ SHOW_GAME_TOOL = {
         "properties": {
             "kind": {
                 "type": "string",
-                "enum": ["match", "choose", "type", "order"],
+                "enum": ["match", "choose", "type", "order", "gist"],
             },
             "title": {
                 "type": "string",
@@ -1594,7 +1601,10 @@ SHOW_GAME_TOOL = {
                     "correct option text). type: [{en, answer}] (1-4; "
                     "answer = expected Spanish, minor accent slips are "
                     "fine). order: [{tiles: [..], answer}] (1-2 "
-                    "sentences; tiles scrambled words)."
+                    "sentences; tiles scrambled words). gist: [{text "
+                    "(the Spanish passage/dialogue), questions: [{q, "
+                    "options: [..], answer}]}] (1 passage, 1-3 meaning "
+                    "questions in English)."
                 ),
                 "items": {"type": "object"},
             },

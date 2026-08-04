@@ -1452,6 +1452,43 @@ function renderGameWidget(game) {
     wrap.appendChild(left);
     wrap.appendChild(rightCol);
     card.appendChild(wrap);
+  } else if (game.kind === "gist") {
+    const qs = [];
+    for (const [gi, it] of items.entries()) {
+      const passage = document.createElement("blockquote");
+      passage.className = "game-passage";
+      passage.textContent = it.text || "";
+      card.appendChild(passage);
+      for (const [qi, qq] of (it.questions || []).entries()) {
+        const q = document.createElement("div");
+        q.className = "game-q";
+        q.innerHTML = `<p class="game-prompt">${esc(qq.q || "")}</p>`;
+        for (const opt of qq.options || []) {
+          const lbl = document.createElement("label");
+          lbl.className = "game-opt";
+          lbl.innerHTML =
+            `<input type="radio" name="gg${gi}-${qi}" value="${esc(opt)}"> ${esc(opt)}`;
+          q.appendChild(lbl);
+        }
+        card.appendChild(q);
+        qs.push(() => {
+          const v = q.querySelector("input:checked")?.value || "";
+          const ok = v === (qq.answer || "");
+          if (!ok) missed.push(`${(qq.q || "").slice(0, 28)}→${qq.answer}`);
+          return ok;
+        });
+      }
+    }
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn game-check";
+    btn.textContent = "Check";
+    btn.onclick = () => {
+      btn.disabled = true;
+      right = qs.reduce((n, f) => n + (f() ? 1 : 0), 0);
+      gameDone(card, "gist", game.title, right, qs.length, missed);
+    };
+    card.appendChild(btn);
   } else if (game.kind === "choose" || game.kind === "type" || game.kind === "order") {
     const qs = [];
     for (const [qi, it] of items.entries()) {

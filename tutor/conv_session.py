@@ -407,7 +407,7 @@ def _game_from_blocks(tool_blocks: list) -> dict | None:
             continue
         kind = inp.get("kind")
         items = inp.get("items")
-        if kind in ("match", "choose", "type", "order") and isinstance(
+        if kind in ("match", "choose", "type", "order", "gist") and isinstance(
             items, list
         ) and items:
             return {
