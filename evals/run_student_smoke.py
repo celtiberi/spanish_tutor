@@ -104,8 +104,11 @@ def main() -> None:
     ap.add_argument("-q", "--quiet", action="store_true")
     args = ap.parse_args()
 
-    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    outdir = RESULTS_ROOT / f"{stamp}-student"
+    # Microseconds + persona in the stamp: parallel gate launches land in
+    # the same SECOND and previously shared one dir + one grade ledger
+    # (2026-08-04 collision incident).
+    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    outdir = RESULTS_ROOT / f"{stamp}-{args.persona}-student"
     (outdir / "sheets").mkdir(parents=True, exist_ok=True)
     _pin_ledgers(outdir)
 
