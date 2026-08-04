@@ -440,6 +440,57 @@ function gradeChip(g, curSid) {
   );
 }
 
+/** One tool call often grades several fields with ONE shared reason +
+ * evidence (the ledger fans it out to a row per field). Grouping
+ * consecutive rows that share why+evidence renders one card per call
+ * instead of near-identical triplets (USER 2026-08-04: "all three
+ * grades are really the same"). */
+function groupGrades(grades) {
+  const groups = [];
+  for (const g of grades) {
+    const key = `${g.why || ""}|${g.evidence || ""}|${g.session_id || ""}`;
+    const prev = groups[groups.length - 1];
+    if (prev && prev.key === key) prev.items.push(g);
+    else groups.push({ key, items: [g] });
+  }
+  return groups;
+}
+
+function gradeGroupChip(group, curSid) {
+  const items = group.items;
+  if (items.length === 1) return gradeChip(items[0], curSid);
+  const g0 = items[0];
+  const names = items
+    .map((g) => {
+      const dir =
+        g.direction === "down" ? "↓" : g.direction === "up" ? "↑" : "·";
+      return `<span class="j-chip-name">${dir} ${esc(gradeLabel(g))}</span>`;
+    })
+    .join("");
+  const ev = (g0.evidence || "").trim();
+  const evLine = ev
+    ? `<span class="j-chip-ev">“${esc(ev.length > 90 ? ev.slice(0, 90) + "…" : ev)}”</span>`
+    : "";
+  const whyLine = g0.why
+    ? `<span class="j-chip-why">${esc(g0.why)}</span>`
+    : "";
+  const earlier = curSid && g0.session_id && g0.session_id !== curSid;
+  const metaLine =
+    `<span class="j-chip-meta">${esc(gradeWhen(g0.ts) || "")}` +
+    (earlier ? " · earlier session" : "") +
+    `</span>`;
+  const anyDown = items.some((g) => g.direction === "down");
+  return (
+    `<li class="j-chip grade-${anyDown ? "down" : "up"}${earlier ? " grade-past" : ""}">` +
+    `<span class="j-chip-body">` +
+    names +
+    evLine +
+    whyLine +
+    metaLine +
+    `</span></li>`
+  );
+}
+
 function renderJourney(progress) {
   if (!els.journeyBody) return;
   const grades = (progress?.grades || []).slice();
@@ -447,8 +498,8 @@ function renderJourney(progress) {
     els.journeyBody.innerHTML =
       `<p class="j-empty">${esc(GRADES_EMPTY_COPY)}</p>`;
   } else {
-    const chips = grades
-      .map((g) => gradeChip(g, progress?.session_id || ""))
+    const chips = groupGrades(grades)
+      .map((grp) => gradeGroupChip(grp, progress?.session_id || ""))
       .join("");
     els.journeyBody.innerHTML =
       `<div class="j-rail"><section class="j-day current">` +
