@@ -66,6 +66,9 @@ These are the project's claims about how an adult acquires a second language on 
 **P9 — Frequency and recycling entrench what association only starts.** Forms with higher type/token frequency and clearer form–function contingency are acquired earlier and more robustly (usage-based accounts: N. Ellis; Bybee). A closed inventory still needs deliberate recycle density; one-shot introduce without scheduled return under-teaches even perfect first associations.
 *Served by:* §2.4 scheduler, introduce budget ≤2/session, frequency fields (PACK-FREQUENCY DEBT, §8).
 
+**P10 — Support must be contingent on learner success.** Scaffolding is temporary, adaptive control of task elements the learner cannot yet manage (Wood, Bruner & Ross 1976). Contingent shift: fail → more tutor control/support; succeed → less (Wood, Wood & Middleton 1978; related observational line Wood & Middleton 1975). van de Pol, Volman & Beishuizen 2010: contingency, fading, and transfer of responsibility are the three key characteristics of scaffolding — contingency is necessary, not the only one. Bloom mastery learning: advance on demonstrated mastery with corrective loops, not on calendar or agenda pressure. Rosenshine 2012: novice guided-practice success near ~80%. Boundary on Bjork's desirable difficulties: difficulty is desirable only when effort can still succeed; repeated unrecoverable failure is not a desirable difficulty. Serves/constrains P1 (persistent failure ≈ input beyond reach), P6 (failure spiral → anxiety → WTC collapse).
+*Served by:* §2.8; also §2.1 (uptake/repair), §2.5 (same-item repair), §2.7 (affect as signal).
+
 <!-- NOTES:END -->
 
 ---
@@ -171,3 +174,19 @@ fired in 0 of 207 real turns and its guard sat above comprehension
 repair — P6 stays theory; code returns only on the omission-ledger
 revive condition (evals/omission_ledger.jsonl). A principle needs no
 runtime until an observed failure demands one. -->
+
+### 2.8 Support rises when the learner struggles — and fades when they succeed
+Contingency is the rule: after a failed, garbled, or clearly stuck attempt on an item, the *next* turn raises support — shorter and simpler Spanish, more English scaffolding when needed, re-model the *same* item, and a smaller ask (recognition or yes/no before free production). After a clear success, hand control back: less support, a bigger ask.
+If the learner fails the same item twice in a row even after raised support, stop eliciting production of it for now. Model it again, check comprehension only, and return to something the learner *can* do — bank a success before retrying the hard thing. Novices need mostly-successful practice; a failure streak teaches anxiety, not Spanish.
+While the learner is struggling on the current work, introduce nothing new: new items wait until the learner is succeeding again. New items ride on a base of success, never on top of confusion.
+Grade honestly: a garbled or uninterpretable attempt is evidence of difficulty or non-evidence for ability — never grounds to mark an ability as emerging. Struggle must not be rewritten as progress.
+<!-- INTERNAL: HARD LAW — proposed from the 2026-08-04 stress-test
+session (USER as failing student: tutor kept pace through 4 straight
+failures and offered a NEW WORD after explicit distress; grades
+inflated garble to "emerging"). ⬛ Claude drafted, ⬛ Grok AMENDed ×4
+(Wood, Wood & Middleton 1978 attribution fix; contingency starts at
+fail #1 — the two-fail production freeze is PROJECT POLICY, not a
+literature constant, N change requires a pre-registered live bound;
+grading rider reworded to reinforce ENGINEERING §3.2 without implying
+a struggle field), all accepted; USER-ratified 2026-08-04. Serves P10,
+P1, P6. Round: docs/reviews-contingent-support.md. -->
