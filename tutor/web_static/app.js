@@ -24,9 +24,6 @@ const els = {
   newChat: $("newChat"),
   resetSheet: $("resetSheet"),
   resetLearner: $("resetLearner"),
-  focusPill: $("focusPill"),
-  focusTitle: $("focusTitle"),
-  focusMeta: $("focusMeta"),
   journeyCard: $("journeyCard"),
   journeyToggle: $("journeyToggle"),
   journeyBody: $("journeyBody"),
@@ -199,84 +196,8 @@ function pct(c) {
   return `${Math.round(n * 100)}%`;
 }
 
-function renderFocus(sheet) {
-  const f = sheet?.focus || {};
-  const nb = sheet?.next_best || {};
-  const src = sheet?.focus_source || "static";
-  // Sheet projection (the this-turn mode pill died with the router)
-  els.focusPill.textContent = f.can_do || "sheet";
-  els.focusPill.classList.toggle("warn", f.skill_status === "fragile");
-  els.focusTitle.textContent =
-    f.title || nb.statement || "Conversation";
-
-  const why = f.blurb || f.reason_ai || f.why || f.reason || "—";
-  const rows = [
-    ["Up next", f.activity || "chat"],
-    ["Why", why],
-  ];
-  // Sheet longer arc — only if different from this-turn title
-  const sheetArc = f.sheet_title || nb.statement || "";
-  if (sheetArc && sheetArc !== f.title) {
-    rows.push([
-      "Sheet arc",
-      `${f.can_do || nb.can_do || ""} · ${sheetArc}`.replace(/^ · /, ""),
-    ]);
-  }
-  if (f.avoid || nb.avoid) {
-    rows.push(["Avoid", f.avoid || nb.avoid || "—", "avoid"]);
-  }
-  if (f.watch) rows.push(["Watch", f.watch, "avoid"]);
-  if (f.error_focus) {
-    rows.push([
-      "Error",
-      `×${f.error_focus.count} ${f.error_focus.label}` +
-        (f.error_focus.examples?.length
-          ? ` (e.g. ${f.error_focus.examples.slice(-1)[0]})`
-          : ""),
-      "avoid",
-    ]);
-  }
-  els.focusMeta.innerHTML = rows
-    .map(
-      ([k, v, cls]) =>
-        `<div class="row"><span class="k">${esc(k)}</span>` +
-        `<span class="v ${cls || ""}">${esc(v)}</span></div>`
-    )
-    .join("");
-
-  const chips = [];
-  if (f.learner_name) chips.push(`<span class="chip hot">${esc(f.learner_name)}</span>`);
-  if (f.error_focus) {
-    chips.push(
-      `<span class="chip" style="color:var(--warn);border-color:#6b5420">err×${esc(
-        String(f.error_focus.count)
-      )}</span>`
-    );
-  }
-  if (f.form_focus) {
-    chips.push(`<span class="chip on">${esc(f.form_focus)}</span>`);
-  }
-  if (f.can_do || nb.can_do) {
-    chips.push(
-      `<span class="chip">${esc(f.can_do || nb.can_do)} · ${esc(
-        f.skill_status || "unknown"
-      )}</span>`
-    );
-  }
-  chips.push(
-    f.scaffold
-      ? `<span class="chip on">EN+ES scaffold</span>`
-      : `<span class="chip">more Spanish OK</span>`
-  );
-  const srcLabel = f.live
-    ? "live mode"
-    : String(src).startsWith("focus_model")
-      ? "rail: grok"
-      : "rail: static";
-  chips.push(`<span class="chip" title="${esc(src)}">${esc(srcLabel)}</span>`);
-  els.focusMeta.innerHTML += `<div class="status-bar">${chips.join("")}</div>`;
-}
-
+// "This turn" focus card DELETED (USER 2026-08-04: "cluttering") —
+// the model's plan drives the turn; morphology + grades are the rails.
 function renderMorphology(sheet) {
   const blocks = sheet?.morphology || [];
   if (!blocks.length) {
@@ -764,36 +685,14 @@ function initJourney() {
 
 function renderSheet(sheet) {
   if (!sheet) {
-    // Keep rail usable even if API omitted sheet
-    els.focusTitle.textContent = "Sheet unavailable — try New chat";
-    els.focusPill.textContent = "—";
     els.morphBody.innerHTML =
       '<p class="muted">No sheet data from server.</p>';
     return;
-  }
-  // Always paint static next_best even if focus block missing
-  if (!sheet.focus && sheet.next_best) {
-    sheet = {
-      ...sheet,
-      focus: {
-        can_do: sheet.next_best.can_do,
-        title: sheet.next_best.statement,
-        activity: sheet.next_best.activity || sheet.next_best.stretch,
-        reason: sheet.next_best.reason,
-        avoid: sheet.next_best.avoid,
-      },
-    };
   }
   try {
     renderCost(sheet);
   } catch (e) {
     console.error("renderCost", e);
-  }
-  try {
-    renderFocus(sheet);
-  } catch (e) {
-    console.error("renderFocus", e);
-    els.focusTitle.textContent = "Focus render error";
   }
   try {
     renderMorphology(sheet);

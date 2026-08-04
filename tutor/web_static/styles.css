@@ -365,39 +365,6 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
   color: var(--warn);
   border-color: #6b5420;
 }
-.focus-card {
-  border-color: #2d4660;
-  background: linear-gradient(165deg, #1a2838 0%, var(--bg-elev) 55%);
-}
-.focus-title {
-  margin: 0 0 0.65rem;
-  font-size: 1.02rem;
-  font-weight: 600;
-  line-height: 1.35;
-  color: var(--text);
-}
-.focus-meta {
-  margin: 0;
-  display: grid;
-  gap: 0.4rem;
-  font-size: 0.82rem;
-}
-.focus-meta .row {
-  display: grid;
-  grid-template-columns: 4.5rem 1fr;
-  gap: 0.4rem;
-  align-items: start;
-}
-.focus-meta .k {
-  color: var(--muted);
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding-top: 0.12rem;
-}
-.focus-meta .v { color: var(--text); line-height: 1.35; }
-.focus-meta .v.avoid { color: var(--warn); }
-.focus-meta .v.muted { color: var(--muted); }
 .status-bar {
   display: flex;
   flex-wrap: wrap;

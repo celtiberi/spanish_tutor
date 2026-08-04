@@ -1724,7 +1724,9 @@ class ConversationalSession:
 
         panel = self._focus_panel or build_focus_panel(self._sheet_for_focus())
 
-        focus = panel.get("focus") if isinstance(panel, dict) else {}
+        # ("This turn" focus card DELETED from the UI, USER 2026-08-04 —
+        # the panel's focus block no longer ships; focus_version stays,
+        # it drives the morphology rail refresh.)
         # Rail morphology = the teacher's LIVE card (model-authored,
         # 2026-08-03) followed by reference paradigms projected from the
         # learner's own grammar record (2026-08-04) — never agenda.
@@ -1758,16 +1760,12 @@ class ConversationalSession:
             "lexicon": dict(self.sheet.get("lexicon") or {}),
             "updated_at": self.sheet.get("updated_at"),
             "human": format_sheet_human(self.sheet),
-            "focus": focus or {},
             "morphology": morph or [],
             "error_patterns": self.sheet.get("error_patterns") or {},
             "error_patterns_active": (
                 panel.get("error_patterns_active")
                 if isinstance(panel, dict) else []
             ) or [],
-            "focus_source": (panel.get("source") if isinstance(panel, dict) else None)
-            or (self._focus_meta or {}).get("source")
-            or "static",
             "focus_version": int(getattr(self, "_focus_version", 0) or 0),
             "focus_pending": bool(getattr(self, "_focus_inflight", False)),
             "score": compute_progress_score(self.sheet),

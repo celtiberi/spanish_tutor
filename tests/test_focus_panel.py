@@ -77,7 +77,10 @@ class TestFocusPanel(unittest.TestCase):
             log=False, sheet_path=Path(tmp) / "sheet.json"
         )
         pub = sess.sheet_public()
-        self.assertIn("focus", pub)
+        # "This turn" focus card deleted from the payload (USER
+        # 2026-08-04); focus_version survives — it drives rail refresh.
+        self.assertNotIn("focus", pub)
+        self.assertIn("focus_version", pub)
         self.assertEqual(pub.get("morphology"), [])  # blank sheet, no card
 
         sess.last_morph = {
