@@ -251,6 +251,22 @@ def create_app() -> FastAPI:
     _access_token = (os.environ.get("APP_ACCESS_TOKEN") or "").strip()
 
     @app.middleware("http")
+    async def _request_timing(request: Request, call_next):
+        """Every request logs its wall time (USER 2026-08-04: page took
+        25s — "put logging for all of the parts that need to load").
+        Static under 50ms stays quiet; API always prints."""
+        t0 = time.perf_counter()
+        response = await call_next(request)
+        ms = (time.perf_counter() - t0) * 1000
+        if request.url.path.startswith("/api") or ms >= 50:
+            print(
+                f"[timing] {request.method} {request.url.path} "
+                f"-> {response.status_code} in {ms:.0f}ms",
+                flush=True,
+            )
+        return response
+
+    @app.middleware("http")
     async def _access_gate(request: Request, call_next):
         if not _access_token:
             return await call_next(request)
@@ -542,8 +558,16 @@ def create_app() -> FastAPI:
                         traceback.print_exc()
             sid = None
 
+        _t = {"t0": time.perf_counter()}
+
+        def _mark(name: str) -> None:
+            now = time.perf_counter()
+            _t[name] = (now - _t["t0"]) * 1000
+            _t["t0"] = now
+
         uid = _uid_for(request)
         sid, session = _get_or_create(sid, uid=uid)
+        _mark("create_session")
 
         # Always re-read sheet from disk so a manual file wipe shows up
         try:
@@ -556,6 +580,7 @@ def create_app() -> FastAPI:
             )
         except Exception:
             pass
+        _mark("reload_sheet")
 
         # Always open a new tutor turn on page load. Both branches route
         # through the unified new-chat reset inside open_session() (Phase 1
@@ -564,6 +589,7 @@ def create_app() -> FastAPI:
         # per-chat cost tracker all reset there — no inline partial clears
         # (the batch-1 census leak).
         turn = session.open_session()
+        _mark("open_session")
         if turn.error:
             raise HTTPException(status_code=502, detail=turn.error)
         with _lock:
@@ -575,6 +601,14 @@ def create_app() -> FastAPI:
             "resumed": False,
             "fresh": True,
         }
+        _mark("build_payload")
+        print(
+            "[timing] session_start phases: "
+            + " ".join(
+                f"{k}={v:.0f}ms" for k, v in _t.items() if k != "t0"
+            ),
+            flush=True,
+        )
         response.set_cookie(
             COOKIE, sid, httponly=True, samesite="lax", max_age=SESSION_TTL_SEC,
         )

@@ -1444,28 +1444,53 @@ class ConversationalSession:
             input_mode=input_mode,
             log_learner=log_learner,
         )
+        # Per-stage wall-clock (USER 2026-08-04: "put logging for all of
+        # the parts that need to load. Lets see what is holding us up").
+        import time as _time
+
+        timings: list[tuple[str, float]] = []
+
+        def _timed(stage) -> None:
+            t0 = _time.perf_counter()
+            stage(self, ctx)
+            timings.append(
+                (stage.__name__, (_time.perf_counter() - t0) * 1000)
+            )
+
+        _t_total = _time.perf_counter()
         for _stage in PRE_MODEL_STAGES:
-            _stage(self, ctx)
+            _timed(_stage)
         for _stage in REALIZE_STAGES:
-            _stage(self, ctx)
+            _timed(_stage)
         if ctx.error_result is not None:
             return ctx.error_result
         # settle_pixels₀ (§1.1b) — outside the gate try/except, like the
         # context build: settlement is code-simple and must not be
         # swallowed as a gate error.
-        stage_settle_pixels(self, ctx)
-        stage_gate_context(self, ctx)
+        _timed(stage_settle_pixels)
+        _timed(stage_gate_context)
         try:
-            stage_gate_check(self, ctx)
-            stage_gate_verdict(self, ctx)
+            _timed(stage_gate_check)
+            _timed(stage_gate_verdict)
         except Exception as ge:
             ev.emit(
                 EV.OUTPUT_GATE_ERROR, key=type(ge).__name__, stage="gate",
             )
         for _stage in RECORDER_STAGES:
-            _stage(self, ctx)
+            _timed(_stage)
         for _stage in CAPTURE_LOG_STAGES:
-            _stage(self, ctx)
+            _timed(_stage)
+        total_ms = (_time.perf_counter() - _t_total) * 1000
+        slow = sorted(
+            (t for t in timings if t[1] >= 5.0),
+            key=lambda t: t[1], reverse=True,
+        )
+        print(
+            f"[timing] turn is_open={is_open} total={total_ms:.0f}ms | "
+            + (" ".join(f"{n}={ms:.0f}" for n, ms in slow) or "all<5ms"),
+            flush=True,
+        )
+        self.last_stage_timings = {n: round(ms, 1) for n, ms in timings}
         return ctx.result
 
     def open_session(self) -> TurnResult:
@@ -1494,10 +1519,10 @@ class ConversationalSession:
 
         # Plan reuse (USER 2026-08-04: precreate the blank plan; store the
         # returning user's plan). A hit turns the expensive open PLAN turn
-        # into a cheap ROUND turn. Both caches self-invalidate on server
-        # update (code fingerprint); a miss just means the normal plan
-        # turn runs. The model can still <replan/> a restored plan it
-        # disagrees with — reuse is a starting point, never a cage.
+        # into a cheap ROUND turn. Cached plans are served even when the
+        # server updated (USER ruling: refresh is the warm's job, the
+        # request path never rejects); the model can still <replan/> a
+        # plan it disagrees with — reuse is a starting point, never a cage.
         was_blank = False
         plan_source = None
         try:
