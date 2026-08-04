@@ -1,0 +1,24 @@
+# Fly deployment — the full-fidelity host (docs/vercel-deploy.md names
+# Fly for always-on FastAPI + WebSockets + disk).
+app = "ml-teacher-tutor"
+primary_region = "dfw"
+
+[build]
+
+[env]
+  ML_TEACHER_DATA_DIR = "/data"
+
+[[mounts]]
+  source = "ml_teacher_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

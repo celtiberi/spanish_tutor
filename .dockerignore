@@ -1,0 +1,9 @@
+.venv
+logs
+evals/results
+docs
+tests
+.git
+.vercel
+.githooks
+scripts

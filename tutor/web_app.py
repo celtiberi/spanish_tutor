@@ -10,6 +10,7 @@ Audio: browser Web Speech (mic + TTS) for now; server STT/TTS later.
 from __future__ import annotations
 
 import asyncio
+import os
 import secrets
 import threading
 import time
@@ -198,6 +199,32 @@ def create_app() -> FastAPI:
         print(f"teach image generator not installed: {type(e).__name__}: {e}", flush=True)
 
     app = FastAPI(title="ml_teacher conversational", version="0.2.0")
+
+    # Public-deploy gate (2026-08-04, Fly): when APP_ACCESS_TOKEN is set,
+    # every request needs the token — once via ?token=… (sets a cookie)
+    # or the cookie thereafter. Unset (local dev) → no-op. Without this,
+    # a public URL lets anyone burn the API keys and read /api/debug.
+    _access_token = (os.environ.get("APP_ACCESS_TOKEN") or "").strip()
+
+    @app.middleware("http")
+    async def _access_gate(request: Request, call_next):
+        if not _access_token:
+            return await call_next(request)
+        supplied = request.query_params.get("token") or request.cookies.get(
+            "app_access"
+        )
+        if supplied != _access_token:
+            return PlainResponse(
+                "ml_teacher: access token required (append ?token=… once)",
+                status_code=401,
+            )
+        response = await call_next(request)
+        if request.query_params.get("token") == _access_token:
+            response.set_cookie(
+                "app_access", _access_token, httponly=True,
+                samesite="lax", max_age=60 * 60 * 24 * 30,
+            )
+        return response
 
     if STATIC_DIR.is_dir():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -662,7 +689,9 @@ app = create_app()
 def main() -> None:
     import uvicorn
 
-    host = "127.0.0.1"
+    # HOST env for container deploys (Fly binds 0.0.0.0); local default
+    # stays loopback-only.
+    host = __import__("os").environ.get("HOST", "127.0.0.1")
     port = int(__import__("os").environ.get("PORT", "8765"))
     print(f"ml_teacher web → http://{host}:{port}")
     print(
