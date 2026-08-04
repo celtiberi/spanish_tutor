@@ -156,6 +156,19 @@ function renderTutorParts(parts, fallbackContent) {
   return blocks.length ? blocks.join("") : esc(fallbackContent || "");
 }
 
+/** Loading indicator (USER 2026-08-04: "we need a loading screen"):
+ * one visual for every model wait — page open, new chat, reset, turn. */
+function showWaitBubble(text) {
+  const b = addBubble("system", text);
+  b.classList.add("typing", "wait-bubble");
+  const dots = document.createElement("span");
+  dots.className = "wait-dots";
+  dots.innerHTML = "<span></span><span></span><span></span>";
+  b.appendChild(dots);
+  b.scrollIntoView({ block: "end" });
+  return b;
+}
+
 function addBubble(role, content, { inputMode, parts, timing } = {}) {
   const div = document.createElement("div");
   div.className = `bubble ${role}`;
@@ -1335,12 +1348,15 @@ async function startSession() {
   els.statusLine.textContent = "Connecting…";
   // Every full page load (including Ctrl/Cmd+Shift+R) starts a clean chat.
   // Character sheet is kept unless user hits Reset learner.
+  let wait = null;
   try {
     els.messages.innerHTML = "";
+    wait = showWaitBubble("Marisol is getting ready…");
     const data = await api("/api/session/start", {
       method: "POST",
       body: JSON.stringify({ fresh: true }),
     });
+    wait.remove();
     showMessages(data.messages);
     setNotes(data.notes);
     renderSheet(data.sheet);
@@ -1351,6 +1367,7 @@ async function startSession() {
     els.statusLine.textContent = `Model ${data.model || "tutor"} · new chat`;
     if (data.reply) speak(data.reply, data.parts);
   } catch (e) {
+    if (wait) wait.remove();
     addBubble("system", `Could not start: ${e.message}`);
     els.statusLine.textContent = "Error — check API keys / server logs";
   } finally {
@@ -1738,8 +1755,7 @@ async function sendMessage(text, inputMode = "text", opts = {}) {
   els.input.classList.remove("speech-interim");
   autosize();
   setMicStatus("working", "Tutor is thinking…");
-  const typing = addBubble("system", "Tutor is thinking…");
-  typing.classList.add("typing");
+  const typing = showWaitBubble("Tutor is thinking…");
   const _sentAt = performance.now();
   try {
     const data = await api("/api/chat", {
@@ -2442,11 +2458,13 @@ els.newChat.addEventListener("click", async () => {
   // new session's opening turn; no separate start call happens).
   sessionFlowInFlight = true;
   setBusy(true);
+  const wait = showWaitBubble("Starting a new chat…");
   try {
     const data = await api("/api/session/reset", {
       method: "POST",
       body: JSON.stringify({ reset_sheet: false }),
     });
+    wait.remove();
     showMessages(data.messages);
     setNotes(data.notes);
     renderSheet(data.sheet);
@@ -2455,6 +2473,7 @@ els.newChat.addEventListener("click", async () => {
     setMicStatus("idle", "New chat — same learner sheet");
     speak(data.reply, data.parts);
   } catch (e) {
+    wait.remove();
     addBubble("system", e.message);
   } finally {
     sessionFlowInFlight = false;
@@ -2484,11 +2503,13 @@ async function hardResetLearner() {
   try {
     forceStopMicOnly();
   } catch (_) {}
+  const wait = showWaitBubble("Resetting learner — fresh start…");
   try {
     const data = await api("/api/session/reset", {
       method: "POST",
       body: JSON.stringify({ reset_sheet: true }),
     });
+    wait.remove();
     // Full UI wipe before painting the new open
     els.messages.innerHTML = "";
     showMessages(data.messages);
@@ -2514,6 +2535,7 @@ async function hardResetLearner() {
     );
     speak(data.reply, data.parts);
   } catch (e) {
+    wait.remove();
     addBubble("system", `Reset failed: ${e.message}`);
   } finally {
     sessionFlowInFlight = false;
