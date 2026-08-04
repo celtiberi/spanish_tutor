@@ -5,11 +5,11 @@ when the user comes back. This will speed things up").
 The sheet already persists (per-uid file in tester mode). This stores the
 model's OWN session plan next to that sheet, so a returning learner's
 open turn runs as a cheap ROUND turn on the restored plan instead of the
-expensive full-context plan turn. Same invalidation rule as the blank
-cache: the plan is stamped with the code fingerprint (model + pedagogy +
-plan instructions + stance + persona) and dropped when the server's
-teaching inputs change — the model then writes a fresh plan. §1.1: code
-stores and replays the plan verbatim, never edits it.
+expensive full-context plan turn. Stored plans are served
+unconditionally (USER ruling 2026-08-04: server updates refresh caches;
+the server never rejects a plan at request time — the model's <replan/>
+is the correction lever). §1.1: code stores and replays the plan
+verbatim, never edits it.
 
 Storage: <sheet-dir>/<sheet-stem>.plan.json (rides wherever the sheet
 lives — /data volume on Fly, repo-local for the operator).
@@ -51,15 +51,18 @@ def save_plan(sheet_path: str | Path, plan: str) -> None:
 
 
 def load_plan(sheet_path: str | Path) -> str | None:
-    """The learner's stored plan, iff its fingerprint still matches the
-    current teaching inputs (server update ⇒ stale ⇒ None)."""
-    from .plan_cache import blank_plan_fingerprint
+    """The learner's stored plan — served UNCONDITIONALLY if present.
 
+    USER ruling 2026-08-04: a server update means WE refresh cached
+    plans; the server never rejects one at request time. The plan is
+    the model's own artifact about THIS learner — a code deploy does
+    not change the learner, and round turns always carry the CURRENT
+    stance/pedagogy regardless. If the plan truly no longer fits, the
+    model emits <replan/> (its documented lever). The fingerprint is
+    stored for forensics only."""
     try:
         d = json.loads(_plan_path(sheet_path).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return None
-    if d.get("fingerprint") != blank_plan_fingerprint():
         return None
     plan = d.get("plan")
     return plan if isinstance(plan, str) and plan.strip() else None

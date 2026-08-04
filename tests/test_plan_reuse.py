@@ -22,27 +22,32 @@ class TestBlankPlanCache(unittest.TestCase):
         config.CHARACTER_SHEET_PATH = self._old
         self._tmp.cleanup()
 
-    def test_roundtrip_and_fingerprint_invalidation(self):
+    def test_roundtrip_and_stale_still_served(self):
         from tutor import plan_cache
 
-        self.assertIsNone(plan_cache.get_cached_blank_plan())
+        self.assertEqual(plan_cache.get_cached_blank_plan(), (None, False))
         plan_cache.store_blank_plan("LEARNER: blank\nGOALS: greet")
         self.assertEqual(
             plan_cache.get_cached_blank_plan(),
-            "LEARNER: blank\nGOALS: greet",
+            ("LEARNER: blank\nGOALS: greet", True),
         )
-        # Server update ⇒ fingerprint mismatch ⇒ cache invalidates itself
+        # USER ruling 2026-08-04: a server update means WE refresh the
+        # cached plan (startup warm) — the request path never REJECTS
+        # it. Stale ⇒ still served, flagged for the warm to regenerate.
         p = plan_cache._cache_path()
         d = json.loads(p.read_text())
         d["fingerprint"] = "stale-deploy"
         p.write_text(json.dumps(d))
-        self.assertIsNone(plan_cache.get_cached_blank_plan())
+        self.assertEqual(
+            plan_cache.get_cached_blank_plan(),
+            ("LEARNER: blank\nGOALS: greet", False),
+        )
 
     def test_empty_plan_never_served(self):
         from tutor import plan_cache
 
         plan_cache.store_blank_plan("   ")
-        self.assertIsNone(plan_cache.get_cached_blank_plan())
+        self.assertEqual(plan_cache.get_cached_blank_plan(), (None, False))
 
     def test_fingerprint_is_clock_free(self):
         # 2026-08-04 incident: the formatted sheet embeds "now": <clock>,
@@ -70,13 +75,14 @@ class TestPlanStore(unittest.TestCase):
             self.assertIsNone(plan_store.load_plan(sheet))
             plan_store.save_plan(sheet, "ARC: keep going")
             self.assertEqual(plan_store.load_plan(sheet), "ARC: keep going")
-            # Stale fingerprint (server updated) ⇒ dropped, plan turn runs
+            # USER ruling 2026-08-04: a learner's stored plan is served
+            # UNCONDITIONALLY — a code deploy does not change the
+            # learner; <replan/> is the correction lever.
             p = plan_store._plan_path(sheet)
             d = json.loads(p.read_text())
             d["fingerprint"] = "old-deploy"
             p.write_text(json.dumps(d))
-            self.assertIsNone(plan_store.load_plan(sheet))
-            plan_store.save_plan(sheet, "ARC: again")
+            self.assertEqual(plan_store.load_plan(sheet), "ARC: keep going")
             plan_store.delete_plan(sheet)
             self.assertIsNone(plan_store.load_plan(sheet))
             self.assertFalse(p.exists())

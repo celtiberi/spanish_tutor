@@ -1507,10 +1507,16 @@ class ConversationalSession:
 
             was_blank = is_blank_learner(self.sheet)
             if was_blank:
-                cached = get_cached_blank_plan()
+                # Served even when stale (USER ruling 2026-08-04): the
+                # startup warm refreshes the cache on server update; the
+                # request path never rejects it and never makes a
+                # learner pay the plan turn for our deploy.
+                cached, fresh = get_cached_blank_plan()
                 if cached:
                     self.session_plan = cached
-                    plan_source = "cached_blank"
+                    plan_source = (
+                        "cached_blank" if fresh else "cached_blank_stale"
+                    )
             else:
                 stored = load_plan(self.sheet_path)
                 if stored:

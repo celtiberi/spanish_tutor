@@ -64,16 +64,23 @@ def blank_plan_fingerprint() -> str:
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:24]
 
 
-def get_cached_blank_plan() -> str | None:
-    """The precreated plan, iff its fingerprint still matches the code."""
+def get_cached_blank_plan() -> tuple[str | None, bool]:
+    """``(plan, fresh)`` — the precreated plan plus whether its
+    fingerprint matches the current teaching inputs.
+
+    USER ruling 2026-08-04: a server update means WE update the cached
+    plan (startup warm / store-on-first-use) — the server never REJECTS
+    a cached plan at request time. A stale plan is still served (the
+    model can <replan/> if it truly disagrees); ``fresh=False`` only
+    tells the warm path to regenerate in the background."""
     try:
         d = json.loads(_cache_path().read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return None
-    if d.get("fingerprint") != blank_plan_fingerprint():
-        return None
+        return None, False
     plan = d.get("plan")
-    return plan if isinstance(plan, str) and plan.strip() else None
+    if not (isinstance(plan, str) and plan.strip()):
+        return None, False
+    return plan, d.get("fingerprint") == blank_plan_fingerprint()
 
 
 def store_blank_plan(plan: str) -> None:
@@ -92,8 +99,11 @@ def warm_blank_plan() -> bool:
     """Generate + store the blank plan via the REAL pipeline (one model
     call) if the cache is stale. Returns True when a valid plan is
     cached afterwards. Failures are visible, never raised (called from
-    a startup thread — serving never blocks on this)."""
-    if get_cached_blank_plan():
+    a startup thread — serving never blocks on this). This IS the
+    "update the cached plan when we update the server" mechanism: a
+    stale cache keeps being served meanwhile, never rejected."""
+    plan, fresh = get_cached_blank_plan()
+    if plan and fresh:
         return True
     try:
         import tempfile
