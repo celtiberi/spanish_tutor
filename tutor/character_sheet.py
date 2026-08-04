@@ -1353,6 +1353,50 @@ def sanitize_tool_delta(delta: dict | None) -> dict:
     return {k: v for k, v in delta.items() if k in allowed}
 
 
+# Model grades in BANDS; code owns the numbers (2026-08-04, USER "go" on
+# the anchored-scale rework — LLM-evaluator research: judges are lenient
+# and poorly calibrated on absolute numbers, reliable on anchored
+# categories). Representative targets per claimed band; every value still
+# flows through _clamp_skill_entry legality + _cap_turn_confidence caps.
+BAND_TARGET_CONF: dict[str, float] = {
+    "unknown": 0.0,
+    "emerging": 0.4,
+    "fragile": 0.65,
+    "known": 0.85,
+}
+_BAND_REAFFIRM_NUDGE = 0.10  # same-band re-affirmation → small up move
+
+
+def _bands_to_numbers(sheet: dict, delta: dict) -> None:
+    """Strip model-sent confidence and derive it from the claimed band
+    (in place). The model's number is NEVER trusted — schema no longer
+    offers the field; this is belt and braces."""
+    for section in ("skills", "grammar", "lexicon"):
+        entries = delta.get(section)
+        if not isinstance(entries, dict):
+            continue
+        current_section = sheet.get(section) or {}
+        for key, ent in entries.items():
+            if not isinstance(ent, dict):
+                continue  # bare-string lexicon statuses clamp downstream
+            ent.pop("confidence", None)
+            st = ent.get("status")
+            if st not in BAND_TARGET_CONF:
+                continue
+            cur = current_section.get(key) or {}
+            cur_band = ability_band(cur if isinstance(cur, dict) else None)
+            cur_conf = 0.0
+            if isinstance(cur, dict):
+                try:
+                    cur_conf = float(cur.get("confidence") or 0.0)
+                except (TypeError, ValueError):
+                    cur_conf = 0.0
+            if st == cur_band:
+                ent["confidence"] = min(1.0, cur_conf + _BAND_REAFFIRM_NUDGE)
+            else:
+                ent["confidence"] = BAND_TARGET_CONF[st]
+
+
 def apply_delta(sheet: dict, delta: dict) -> dict:
     """Merge a model-proposed partial delta (trusted fields only).
 
@@ -1363,6 +1407,7 @@ def apply_delta(sheet: dict, delta: dict) -> dict:
     delta = sanitize_tool_delta(delta)
     if not delta:
         return sheet
+    _bands_to_numbers(sheet, delta)
     before = sheet
     s = copy.deepcopy(sheet)
 
@@ -1502,20 +1547,25 @@ UPDATE_CHARACTER_SHEET_TOOL = {
     "name": "update_character_sheet",
     "description": (
         "Grade the learner's Spanish ability when THIS turn gives clear NEW "
-        "evidence (solo success, repeated failure, recovery after repair, "
-        "durable re-use). Partial delta only.\n"
-        "USE when: you can quote what they produced (or failed to produce) "
-        "and ability should move up or down.\n"
-        "DO NOT use when: you only modeled the form, they only echoed you, "
-        "you are unsure, or you are tidying the sheet. Prefer no call.\n"
-        "REQUIRED: reason (why, evidence-based, ≥12 chars) whenever you "
-        "change skills, grammar, lexicon, or error_patterns. Strongly "
-        "preferred: evidence (short quote from the LEARNER, not you). "
-        "Calls without a real reason are rejected — ability does not change.\n"
-        "Be conservative: prefer emerging/fragile over known; one good turn "
-        "is not mastery. Do not claim solid_uses (code counts tool-confirmed "
-        "successes). Do not record names or personal facts. "
-        "Student never sees this tool."
+        "evidence. Work in this order: (1) EVIDENCE — quote what the "
+        "learner produced; (2) REASON — what that evidence shows; "
+        "(3) BAND — pick the anchored band. You never pick numbers; code "
+        "converts bands.\n"
+        "BAND ANCHORS (grade against these, not your generosity — graders "
+        "systematically over-reward):\n"
+        "- unknown: no interpretable evidence yet. Garbled or "
+        "uninterpretable attempts stay HERE — struggle is not emerging.\n"
+        "- emerging: produced it correctly at least once WITH support "
+        "(just modeled, glossed, or heavily prompted).\n"
+        "- fragile: produces it without immediate support, but "
+        "inconsistently — sometimes right, sometimes wrong.\n"
+        "- known: produced correctly, unprompted, in more than one "
+        "context or session.\n"
+        "DOWNGRADES are honest grades: repeated failure on something "
+        "previously credited moves it DOWN.\n"
+        "DO NOT call when: you only modeled the form, they only echoed "
+        "you, or you are unsure. Prefer no call. Do not claim solid_uses. "
+        "Do not record names or personal facts. Student never sees this."
     ),
     "input_schema": {
         "type": "object",
@@ -1557,8 +1607,8 @@ UPDATE_CHARACTER_SHEET_TOOL = {
                 "type": "object",
                 "description": (
                     "Can-do ids (IP-01…IP-08, IT-01, PR-01) → "
-                    "{status, confidence}. status: unknown|emerging|fragile|known|blocked. "
-                    "Never solid_uses."
+                    "{status}. Band only — see anchors in the tool "
+                    "description. Never solid_uses."
                 ),
                 "additionalProperties": {
                     "type": "object",
@@ -1567,18 +1617,16 @@ UPDATE_CHARACTER_SHEET_TOOL = {
                             "type": "string",
                             "enum": list(STATUSES),
                         },
-                        "confidence": {"type": "number"},
                     },
                 },
             },
             "grammar": {
                 "type": "object",
-                "description": "Supporting forms → {status, confidence, evidence?}",
+                "description": "Supporting forms → {status (band), evidence?}",
                 "additionalProperties": {
                     "type": "object",
                     "properties": {
                         "status": {"type": "string"},
-                        "confidence": {"type": "number"},
                         "evidence": {
                             "type": "array",
                             "items": {"type": "string"},
@@ -1589,14 +1637,13 @@ UPDATE_CHARACTER_SHEET_TOOL = {
             "lexicon": {
                 "type": "object",
                 "description": (
-                    "Lemma → {status, confidence} for words they used. "
+                    "Lemma → {status} (band) for words they used. "
                     "Never solid_uses."
                 ),
                 "additionalProperties": {
                     "type": "object",
                     "properties": {
                         "status": {"type": "string"},
-                        "confidence": {"type": "number"},
                     },
                 },
             },

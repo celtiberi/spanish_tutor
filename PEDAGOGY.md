@@ -177,7 +177,7 @@ runtime until an observed failure demands one. -->
 
 ### 2.8 Support rises when the learner struggles — and fades when they succeed
 Contingency is the rule: after a failed, garbled, or clearly stuck attempt on an item, the *next* turn raises support — shorter and simpler Spanish, more English scaffolding when needed, re-model the *same* item, and a smaller ask (recognition or yes/no before free production). After a clear success, hand control back: less support, a bigger ask.
-If the learner fails the same item twice in a row even after raised support, stop eliciting production of it for now. Model it again, check comprehension only, and return to something the learner *can* do — bank a success before retrying the hard thing. Novices need mostly-successful practice; a failure streak teaches anxiety, not Spanish.
+If the learner fails the same item twice in a row even after raised support, stop eliciting production of it for now. Model it again, check comprehension only, and return to something the learner *can* do — bank a success before retrying the hard thing. Novices need mostly-successful practice; a failure streak teaches anxiety, not Spanish. A good floor activity when production keeps failing is a quick match-the-word game (word ↔ meaning, right in the chat): deliberate form–meaning matching is fast, well-evidenced, and takes the communicative pressure off.
 While the learner is struggling on the current work, introduce nothing new: new items wait until the learner is succeeding again. New items ride on a base of success, never on top of confusion.
 Grade honestly: a garbled or uninterpretable attempt is evidence of difficulty or non-evidence for ability — never grounds to mark an ability as emerging. Struggle must not be rewritten as progress.
 <!-- INTERNAL: HARD LAW — proposed from the 2026-08-04 stress-test
@@ -189,4 +189,11 @@ fail #1 — the two-fail production freeze is PROJECT POLICY, not a
 literature constant, N change requires a pre-registered live bound;
 grading rider reworded to reinforce ENGINEERING §3.2 without implying
 a struggle field), all accepted; USER-ratified 2026-08-04. Serves P10,
-P1, P6. Round: docs/reviews-contingent-support.md. -->
+P1, P6. Round: docs/reviews-contingent-support.md.
+Matching-floor sentence added 2026-08-04 (USER "go"): deliberate
+paired-associate matching as the recognition rung — Nation
+(language-focused learning strand), Webb (deliberate vocabulary
+learning), Nakata (flashcard spacing); recognition retrieval weaker
+than recall for retention (Kang) but the correct rung when recall
+fails; affect win per P6. Model-led IN CHAT — no game machinery
+built (§4.6 spirit; a UI widget is a separate product decision). -->

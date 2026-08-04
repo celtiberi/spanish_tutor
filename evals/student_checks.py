@@ -561,6 +561,11 @@ def check_english_wall(transcript: list[dict]) -> list[str]:
         )
         n_alpha = alphabetic_token_count(full_blob)
         min_ratio = ZERO_MIN_SPANISH_RATIO if i == 0 else MIN_SPANISH_RATIO
+        # §2.8 carve-out (2026-08-04): when the LEARNER's turn showed
+        # struggle (mostly-English text or explicit confusion), heavy
+        # English support is the LAW, not a wall.
+        if _learner_struggling(turn):
+            continue
         if n_alpha >= MIN_ALPHA_TOKENS and ratio < min_ratio:
             findings.append(
                 f"WARN turn {i}: english wall ratio={ratio:.2f}<{min_ratio} "
@@ -727,14 +732,62 @@ CHECKS = {
 _TABLE_AWARE = {"cluster_intro", "exposure"}
 
 
+_CONFUSION_MARKERS = (
+    "don't understand", "dont understand", "no understand", "i don't get",
+    "no entiendo", "what does", "what is", "confused", "lost", "help",
+)
+
+
+def _learner_struggling(turn: dict) -> bool:
+    """Did THIS turn's learner text show struggle? (mostly English, or an
+    explicit confusion marker.) §2.8: tutor English support is then legal."""
+    learner = str(turn.get("learner") or "")
+    if not learner.strip():
+        return False
+    low = learner.lower()
+    if any(m in low for m in _CONFUSION_MARKERS):
+        return True
+    return spanish_token_ratio(learner) < 0.35
+
+
+def check_grade_inflation(
+    transcript: list[dict], *, grades: list[dict] | None = None
+) -> list[str]:
+    """WARN: an UP ability grade whose evidence quote contains no
+    interpretable Spanish (garble/English). §2.8 honesty pressure gauge —
+    LLM judges are lenient; this keeps the leniency measured.
+    Needs the per-run grade ledger rows (run_student_smoke passes them);
+    without them it reports nothing."""
+    findings: list[str] = []
+    for g in grades or []:
+        if g.get("kind") != "grade" or g.get("direction") != "up":
+            continue
+        ev = str(g.get("evidence") or "").strip()
+        if not ev:
+            findings.append(
+                f"WARN: up-grade with NO evidence quote ({g.get('ability') or g.get('label')})"
+            )
+            continue
+        if spanish_token_ratio(ev) < 0.3:
+            findings.append(
+                "WARN: up-grade on garble/English evidence "
+                f"({g.get('ability') or g.get('label')}: \"{ev[:50]}\")"
+            )
+    return findings
+
+
 def run_student_checks(
-    transcript: list[dict], *, table: dict | None = None
+    transcript: list[dict], *, table: dict | None = None,
+    grades: list[dict] | None = None,
 ) -> tuple[dict, bool]:
     """(findings-by-check, passed). Fail bar: any non-WARN finding — see
     the severity ledger in the module docstring (HARD: fixation,
     truncated still_fail, cluster co-introduction, structured teach-shape
     misses; everything else WARN-only counters)."""
     findings: dict[str, list[str]] = {}
+    gi = check_grade_inflation(transcript, grades=grades)
+    if gi:
+        findings["grade_inflation"] = gi
     for name, fn in CHECKS.items():
         out = (
             fn(transcript, table=table)

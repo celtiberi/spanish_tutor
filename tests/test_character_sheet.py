@@ -922,3 +922,37 @@ class TestGradeFeedVisibility(unittest.TestCase):
                 grade_log_path=str(Path(d) / "grades.jsonl"),
             )
         self.assertNotIn("why=grade_unrecorded:no_reason", notes)
+
+
+class TestBandOnlyGrading(unittest.TestCase):
+    """2026-08-04: the model grades in anchored BANDS; code owns numbers."""
+
+    def test_model_confidence_is_ignored(self):
+        from tutor.character_sheet import apply_delta, default_sheet
+
+        s = default_sheet()
+        out = apply_delta(s, {
+            "reason": "clean production of estoy bien twice",
+            "skills": {"IP-01": {"status": "emerging", "confidence": 0.99}},
+        })
+        # 0.99 discarded; band target 0.4 (clamped path may cap below)
+        self.assertLessEqual(out["skills"]["IP-01"]["confidence"], 0.4)
+
+    def test_same_band_reaffirmation_nudges(self):
+        from tutor.character_sheet import apply_delta, default_sheet
+
+        s = default_sheet()
+        s["skills"]["IP-01"].update({"status": "emerging", "confidence": 0.4})
+        out = apply_delta(s, {
+            "reason": "re-used the greeting correctly again",
+            "skills": {"IP-01": {"status": "emerging"}},
+        })
+        self.assertGreater(out["skills"]["IP-01"]["confidence"], 0.4)
+
+    def test_schema_offers_no_confidence_field(self):
+        from tutor.character_sheet import UPDATE_CHARACTER_SHEET_TOOL
+        import json as _json
+
+        blob = _json.dumps(UPDATE_CHARACTER_SHEET_TOOL)
+        self.assertNotIn('"confidence"', blob)
+        self.assertIn("BAND ANCHORS", UPDATE_CHARACTER_SHEET_TOOL["description"])

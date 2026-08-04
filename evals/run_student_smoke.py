@@ -172,7 +172,18 @@ def main() -> None:
             )
             continue
 
-        findings, passed = run_student_checks(report.get("transcript") or [])
+        grade_rows = []
+        try:
+            gpath = os.environ.get("GRADE_LOG_PATH")
+            if gpath and Path(gpath).exists():
+                grade_rows = [
+                    json.loads(l) for l in Path(gpath).read_text().splitlines() if l.strip()
+                ]
+        except Exception as e:
+            print(f"[no-hide] grade ledger read failed for checks: {e}")
+        findings, passed = run_student_checks(
+            report.get("transcript") or [], grades=grade_rows
+        )
         status = "PASS" if passed else "FAIL"
         # Plan-lifecycle visibility (USER 2026-08-04: when does the
         # teacher call for a new plan?): count session_plan events.
