@@ -1584,10 +1584,11 @@ class ConversationalSession:
         panel = self._focus_panel or build_focus_panel(self._sheet_for_focus())
 
         focus = panel.get("focus") if isinstance(panel, dict) else {}
-        # Morphology is MODEL-AUTHORED (2026-08-03): the teacher emits a
-        # <morph> card with its reply when a form table helps; the rail
-        # shows the latest one. No agenda paradigms.
-        morph = [self.last_morph] if self.last_morph else []
+        # Rail morphology = the teacher's LIVE card (model-authored,
+        # 2026-08-03) followed by reference paradigms projected from the
+        # learner's own grammar record (2026-08-04) — never agenda.
+        panel_morph = panel.get("morphology") if isinstance(panel, dict) else []
+        morph = ([self.last_morph] if self.last_morph else []) + list(panel_morph or [])
         lex = panel.get("lexicon_focus") if isinstance(panel, dict) else []
         from .costs import ledger_report
 

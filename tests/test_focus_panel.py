@@ -21,13 +21,15 @@ class TestFocusPanel(unittest.TestCase):
         self.assertIn("focus", panel)
         self.assertIsNone(panel["focus"]["learner_name"])
 
-    def test_panel_produces_no_agenda_morphology(self):
-        """The panel never assembles paradigms (model-authored card only)."""
+    def test_panel_morphology_is_record_projection_never_agenda(self):
+        """Panel paradigms come from the learner's GRAMMAR RECORD (forms
+        with emerging/fragile evidence), never from next_best/agenda."""
         import inspect
 
         from tutor import can_dos
 
         s = default_sheet()
+        # Agenda alone (next_best form_focus) must produce NOTHING:
         s["next_best"] = {
             "can_do": "IP-03",
             "activity": "introduce_in_conversation",
@@ -38,6 +40,21 @@ class TestFocusPanel(unittest.TestCase):
         }
         panel = build_focus_panel(s)
         self.assertEqual(panel["morphology"], [])
+        # Learner RECORD produces the reference paradigm, weakest first:
+        s["grammar"]["present_estar_person"].update(
+            {"status": "emerging", "confidence": 0.3}
+        )
+        s["grammar"]["present_ser"].update(
+            {"status": "fragile", "confidence": 0.2}
+        )
+        panel2 = build_focus_panel(s)
+        ids = [b["form_id"] for b in panel2["morphology"]]
+        self.assertEqual(ids, ["present_ser", "present_estar_person"])
+        for b in panel2["morphology"]:
+            self.assertFalse(b["live"])
+            self.assertEqual(b["kind"], "from_sheet")
+            self.assertTrue(b["paradigm"])
+            self.assertIn("status", b["learner"])
         # Absence pins: agenda-card machinery stays deleted.
         self.assertFalse(hasattr(can_dos, "morphology_blocks_for_form"))
         self.assertFalse(hasattr(can_dos, "morphology_blocks_for_can_do"))
@@ -51,7 +68,7 @@ class TestFocusPanel(unittest.TestCase):
         sess = ConversationalSession(log=False)
         pub = sess.sheet_public()
         self.assertIn("focus", pub)
-        self.assertEqual(pub.get("morphology"), [])
+        self.assertEqual(pub.get("morphology"), [])  # blank sheet, no card
 
         sess.last_morph = {
             "label": "trabajar — to work",
@@ -64,7 +81,8 @@ class TestFocusPanel(unittest.TestCase):
             "source": "model",
         }
         pub2 = sess.sheet_public()
-        self.assertEqual(len(pub2["morphology"]), 1)
+        self.assertGreaterEqual(len(pub2["morphology"]), 1)
+        # The model's card leads; record-projection reference follows.
         self.assertEqual(pub2["morphology"][0]["label"], "trabajar — to work")
         self.assertTrue(pub2["morphology"][0]["live"])
 

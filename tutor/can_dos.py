@@ -122,10 +122,33 @@ def build_focus_panel(sheet: dict) -> dict:
             "examples": top.get("last_examples") or [],
         }
 
-    # Morphology card is MODEL-AUTHORED (2026-08-03) and merged by
-    # conv_session.sheet_public from session.last_morph — the panel no
-    # longer assembles agenda paradigms.
+    # The LIVE morphology card is MODEL-AUTHORED (2026-08-03; merged by
+    # conv_session.sheet_public from session.last_morph). The panel adds
+    # REFERENCE paradigms projected from the LEARNER RECORD (USER
+    # 2026-08-04: "its not giving the morphology of words") — forms the
+    # sheet shows in progress (evidence-based state, never next_best /
+    # agenda), weakest first, capped at 3.
+    grammar_state = sheet.get("grammar") or {}
+    working = []
+    for fid, g in grammar_state.items():
+        if not isinstance(g, dict):
+            continue
+        if g.get("status") in ("emerging", "fragile") and fid in MORPHOLOGY_BY_FORM:
+            working.append((float(g.get("confidence") or 0.0), fid, g))
+    working.sort(key=lambda x: x[0])
     morph: list = []
+    for conf, fid, g in working[:3]:
+        b = dict(MORPHOLOGY_BY_FORM[fid])
+        b["paradigm"] = [dict(r) for r in (b.get("paradigm") or [])]
+        b["id"] = fid
+        b["form_id"] = fid
+        b["live"] = False
+        b["kind"] = "from_sheet"
+        b["learner"] = {
+            "status": g.get("status"),
+            "confidence": g.get("confidence"),
+        }
+        morph.append(b)
 
     lex_items = []
     for lemma, meta_l in list((sheet.get("lexicon") or {}).items())[:12]:

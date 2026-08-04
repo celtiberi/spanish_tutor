@@ -301,7 +301,7 @@ function renderMorphology(sheet) {
     // labeled "up next" — never silently as this-turn engagement.
     const upNext =
       b.live === false
-        ? ` <span class="muted" title="agenda preview — not this turn's engagement">· up next</span>`
+        ? ` <span class="muted" title="a form your sheet shows in progress — reference table, not this turn's focus">· working on</span>`
         : "";
     const learner = b.learner
       ? ` · you: ${b.learner.status || "?"} (${pct(b.learner.confidence)})`
