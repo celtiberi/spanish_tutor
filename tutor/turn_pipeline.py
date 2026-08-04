@@ -511,7 +511,10 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
         session_memory=session.pedagogy_memory.snapshot(),
         teach_images=ctx.teach_images,
         blank_sheet=ctx.blank,
-        sheet_summary=format_sheet_for_prompt(session.sheet),
+        sheet_summary=format_sheet_for_prompt(
+            session.sheet,
+            round_view=(plan_mode and not needs_plan),
+        ),
         teaching_data={"due_for_review": due_facts},
         session_plan=(
             None if (not plan_mode or needs_plan)
@@ -521,7 +524,6 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
     if plan_mode:
         from .session_plan import (
             PLAN_INSTRUCTIONS,
-            ROUND_HISTORY_MESSAGES,
             ROUND_NOTE,
             load_pedagogy,
         )
@@ -543,6 +545,9 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
             # when the provider call fails (audit D finding 3).
             ctx.plan_turn = True
             ctx.ev.emit(EV.SESSION_PLAN, key="requested", stage="plan")
+            # New plan cycle: the plan digests everything before this
+            # point; rounds then send history FROM here, append-only.
+            session.plan_cycle_start = len(session.history)
             history = session.history
         else:
             # ROUND turn: the pedagogy guide stays out of the system; the
@@ -552,11 +557,15 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
             ctx.system = list(ctx.system) + [
                 {"type": "text", "text": ROUND_NOTE}
             ]
-            # truncation-ok: plan-mode ROUND window — USER architecture
-            # 2026-08-03, not a silent latency slice. PLAN turns carry
-            # full history; the model escapes to full context any turn
-            # with <replan/>.
-            history = session.history[-ROUND_HISTORY_MESSAGES:]  # truncation-ok: plan-mode round window (see above)
+            # truncation-ok: plan-cycle history (cache arm 2026-08-04,
+            # USER "go") — rounds send everything SINCE the current plan
+            # turn, append-only: the prefix is stable so provider caching
+            # engages ($0.20/M vs $1.25/M on xAI), and nothing the plan
+            # didn't already digest is dropped. The sliding 12-message
+            # window it replaces broke message caching every turn AND
+            # dropped in-cycle context (B0 lesson).
+            _start = max(0, int(getattr(session, "plan_cycle_start", 0) or 0))
+            history = session.history[_start:]  # truncation-ok: plan-cycle suffix (plan digested the prefix)
     else:
         history = session.history
 

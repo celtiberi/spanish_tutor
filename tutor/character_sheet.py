@@ -485,7 +485,9 @@ def compute_progress_score(sheet: dict | None) -> dict:
 DOMAIN_SCOPE: dict = _DOMAIN.domain_scope
 
 
-def format_sheet_for_prompt(sheet: dict, *, max_lex: int | None = None) -> str:
+def format_sheet_for_prompt(
+    sheet: dict, *, max_lex: int | None = None, round_view: bool = False
+) -> str:
     """Full character sheet for the tutor model (testing: no silent slimming).
 
     When TEACHER_CONTEXT_TRUNCATE is later enabled, callers may still clip the
@@ -522,6 +524,32 @@ def format_sheet_for_prompt(sheet: dict, *, max_lex: int | None = None) -> str:
         if isinstance(ent, dict):
             ent.pop("teach_hint", None)
 
+    if round_view:
+        # ROUND diet (cache arm 2026-08-04): the task payload re-bills at
+        # the FULL input rate every turn (it can never prefix-cache), so
+        # rounds carry only entries with evidence — unknown rows are the
+        # default state and carry zero information; the plan turn already
+        # saw the full inventory. Stable/cached content (stance, persona,
+        # cycle history) is deliberately NOT cut (B0 lesson: the risky
+        # cuts live there, and caching makes them ~free).
+        skills = {
+            k: {
+                kk: vv for kk, vv in v.items()
+                if kk not in ("supports", "priority")
+            }
+            for k, v in skills.items()
+            if isinstance(v, dict)
+            and (v.get("status") not in (None, "unknown") or v.get("solid_uses"))
+        }
+        grammar = {
+            k: {
+                kk: vv for kk, vv in v.items()
+                if kk not in ("supports", "priority", "evidence")
+            }
+            for k, v in grammar.items()
+            if isinstance(v, dict) and v.get("status") not in (None, "unknown")
+        }
+
     payload = {
         "now": now_iso(),
         # Personal-data capture disabled 2026-07-28: identity is omitted.
@@ -532,7 +560,7 @@ def format_sheet_for_prompt(sheet: dict, *, max_lex: int | None = None) -> str:
         # sheet records whatever was actually taught (open lexicon). The
         # association table remains internal data: image assets, glosses,
         # exposure bookkeeping — never prompt content.
-        "domain_scope": DOMAIN_SCOPE,
+        **({} if round_view else {"domain_scope": DOMAIN_SCOPE}),
         "active_error_focus": active_focus,
         "error_patterns": errors,
         "skills": skills,
@@ -564,6 +592,11 @@ def format_sheet_for_prompt(sheet: dict, *, max_lex: int | None = None) -> str:
         ),
         "updated_at": sheet.get("updated_at"),
     }
+    if round_view:
+        # Plan-turn-only material: the exposure heard-list and the
+        # coverage map inform PLANNING, not the next reply.
+        payload.pop("words_heard_but_not_yet_learned", None)
+        payload.pop("coverage", None)
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 

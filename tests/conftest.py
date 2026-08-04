@@ -199,8 +199,6 @@ def assert_full_teacher_context(ctx) -> None:
     assert config.STANCE_PROMPT_CHARS == 0
     assert config.SHEET_PROMPT_CHARS == 0
 
-    from tutor.session_plan import ROUND_HISTORY_MESSAGES
-
     def _blob(req):
         return "\n".join(
             str(b.get("text") or "") if isinstance(b, dict) else str(b)
@@ -264,20 +262,24 @@ def assert_full_teacher_context(ctx) -> None:
     if len(hist) >= 2:
         expect = hist[:-2]  # history before the most recent exchange
         last = fake.requests[-1]
-        if _is_round(last):
-            # ROUND law: exactly the declared window, tail-aligned — a
-            # window that silently shrank or drifted fails here.
-            expect = expect[-ROUND_HISTORY_MESSAGES:]
         got = last["messages"]
-        assert len(got) >= len(expect) + 1, (
-            "last request dropped history messages"
-        )
-        assert got[:len(expect)] == expect, (
-            "last request history diverges from full session history"
-        )
         if _is_round(last):
-            assert len(got) == len(expect) + 1, (
-                "ROUND turn carried more history than its declared window"
+            # ROUND law (cache arm 2026-08-04): history is an append-only
+            # SUFFIX of the full session history (the current plan cycle;
+            # the plan turn digested the prefix). Marker-independent so a
+            # failed plan call that already moved the cycle marker cannot
+            # confuse the audit — no middle drops, tail-aligned.
+            tail = got[:-1]
+            assert expect[len(expect) - len(tail):] == tail, (
+                "ROUND history is not an append-only suffix of the "
+                "session history"
+            )
+        else:
+            assert len(got) >= len(expect) + 1, (
+                "last request dropped history messages"
+            )
+            assert got[:len(expect)] == expect, (
+                "last request history diverges from full session history"
             )
 
 

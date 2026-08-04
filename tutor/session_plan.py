@@ -14,9 +14,11 @@ character sheet — domain model + learner state in one artifact: targets,
 scope, per-item evidence — and history. The model writes its own session
 plan in a private <plan> block before its normal <tutor> reply.
 
-ROUND turns get the small context: the model's OWN plan + the character
-sheet + session facts + due data + a recent history window. No pedagogy
-file — the plan already digested it.
+ROUND turns get the small context: the model's OWN plan + the evidence
+rows of the character sheet + session facts + due data + the full
+history of the CURRENT plan cycle (append-only since the plan turn —
+cache-friendly, and nothing the plan didn't already digest is dropped).
+No pedagogy file — the plan digested it.
 
 The model revises its plan any turn by emitting a new <plan> block, and
 requests a full-context re-plan with <replan/> when it needs the
@@ -36,11 +38,6 @@ import re
 from . import config
 
 PEDAGOGY_PATH = config.REPO_ROOT / "PEDAGOGY.md"
-
-# History window for ROUND turns (messages, i.e. 2 per exchange). Plan
-# turns get full history. Generous on purpose: the B0 blind grade proved
-# that losing the learner's established world kills responsiveness.
-ROUND_HISTORY_MESSAGES = 12
 
 PLAN_INSTRUCTIONS = """## Your session plan (required on this turn)
 

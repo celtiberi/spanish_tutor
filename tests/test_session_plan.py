@@ -18,7 +18,6 @@ import pytest
 from tutor import config
 from tutor.session_plan import (
     PLAN_INSTRUCTIONS,
-    ROUND_HISTORY_MESSAGES,
     ROUND_NOTE,
     extract_plan,
     load_pedagogy,
@@ -168,8 +167,8 @@ class TestRoundTurn:
         assert "# The teaching guide (yours)" not in blob
         payload = ctx.fake.task_payload(-1)
         assert payload["your_session_plan"] == PLAN_TEXT
-        # Guard teardown asserts: tail-aligned ROUND_HISTORY_MESSAGES
-        # window, full sheet still present.
+        # Guard teardown asserts: append-only plan-cycle history, full
+        # sheet evidence still present.
 
     def test_round_revised_plan_updates_without_replan(
         self, plan_mode, tutor_session_factory
@@ -281,3 +280,50 @@ class TestPlanEdgeCases:
         turn = s.user_turn("¿Qué?")
         assert turn.error
         assert s.replan_requested is True  # NOT swallowed by the failure
+
+
+class TestPlanCycleHistory:
+    def test_round_history_is_cycle_suffix_after_replan(
+        self, plan_mode, tutor_session_factory
+    ):
+        # Cache arm 2026-08-04: rounds carry everything SINCE the current
+        # plan turn (append-only). After a mid-session replan, the next
+        # round's history starts at the replan point — the new plan
+        # digested the prefix.
+        ctx = tutor_session_factory(replies=[
+            BODY_WITH_PLAN,      # open = plan turn (cycle starts at 0)
+            BODY_PLAIN,          # round
+            BODY_WITH_REPLAN,    # round + <replan/>
+            BODY_WITH_PLAN,      # plan turn #2 (new cycle)
+            BODY_PLAIN,          # round in cycle 2
+        ])
+        s = ctx.session
+        s.open_session()
+        s.user_turn("Hola")
+        s.user_turn("¿Qué?")
+        assert s.replan_requested is True
+        s.user_turn("Sí")          # plan turn #2 runs here
+        cycle_start = s.plan_cycle_start
+        assert cycle_start == len(s.history) - 2  # everything before it digested
+        s.user_turn("Bueno")       # round in the new cycle
+        req = ctx.fake.requests[-1]
+        # History sent = exactly the cycle suffix.
+        assert len(req["messages"]) - 1 == len(s.history) - 2 - cycle_start
+
+    def test_round_sheet_is_evidence_only(
+        self, plan_mode, tutor_session_factory
+    ):
+        import json as _json
+
+        ctx = tutor_session_factory(replies=[BODY_WITH_PLAN, BODY_PLAIN])
+        s = ctx.session
+        s.open_session()
+        s.user_turn("Hola")
+        plan_task = ctx.fake.task_text(0)
+        round_task = ctx.fake.task_text(-1)
+        # Plan turn carries the planning material; rounds do not.
+        assert "domain_scope" in plan_task
+        assert "domain_scope" not in round_task
+        assert "words_heard_but_not_yet_learned" not in round_task
+        # Unknown-status rows (zero information) stay off rounds.
+        assert '"IP-02"' not in round_task

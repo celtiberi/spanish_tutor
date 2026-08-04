@@ -648,6 +648,7 @@ class ConversationalSession:
         # Code stores it verbatim; a missing plan makes the next turn a
         # full-context PLAN turn. Reset with the session.
         self.session_plan: str | None = None
+        self.plan_cycle_start = 0  # history index where the current plan cycle began
         self.last_morph: dict | None = None  # model-authored rail card
         self.replan_requested = False
         self.teacher_mode = (config.TEACHER_MODE or "planned").strip().lower()
@@ -1474,6 +1475,7 @@ class ConversationalSession:
         self.state.reset("new_chat")
         self.last_turn_render = None  # §1.1b: render record is per-chat
         self.session_plan = None      # new chat → new plan turn
+        self.plan_cycle_start = 0
         self.replan_requested = False
         self.last_morph = None        # new chat → fresh morphology card
 
