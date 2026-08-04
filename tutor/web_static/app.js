@@ -368,7 +368,13 @@ function renderCost(sheet) {
   const c = sheet?.session_cost;
   if (!c) return;
   const total = Number(c.total_usd || 0);
-  els.costValue.textContent = `$${total.toFixed(total < 0.1 ? 4 : 2)}`;
+  const unpriced = c.unpriced_models || [];
+  // §3.4 rider (2026-08-04): the flag rides the surface it protects — a
+  // clean dollar figure while models run unpriced is a swallow.
+  els.costValue.textContent = unpriced.length
+    ? `$${total.toFixed(total < 0.1 ? 4 : 2)} ⚠ UNPRICED: ${unpriced.join(", ")}`
+    : `$${total.toFixed(total < 0.1 ? 4 : 2)}`;
+  els.costValue.classList.toggle("cost-unpriced", unpriced.length > 0);
   const cats = c.by_category || {};
   const parts = Object.entries(cats)
     .sort((a, b) => (b[1]?.usd || 0) - (a[1]?.usd || 0))

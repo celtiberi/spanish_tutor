@@ -1167,3 +1167,5 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
 }
 .game-tile.shake, .game-input.shake { animation: game-shake 0.28s ease; }
 .game-tile.pop, .game-input.pop { animation: game-pop 0.22s ease; }
+
+.cost-unpriced { color: var(--warn, #e0af68); }

@@ -70,8 +70,9 @@ Ledger writes (introduced_at, scaffold, first_seen, next_due, interval, streak) 
 - **The truncation ban stands.** The round window is explicit, versioned, and `truncation-ok`-annotated — the lint gained a named-constant-window pattern so it cannot recur silently, and the characterization guard (`tests/conftest.py::assert_full_teacher_context`) enforces the round contract (no pack, plan present, tail-aligned window of exactly K) rather than exempting it. Silent slices remain banned on all paths.
 This addresses the blind-grade failure directly: the plan is the teacher's own words, not a code brief — the learner's world survives because its author is the one who taught it.
 
-### 3.4 Unknown is not neutral (BINDING — cost review 2026-07-28)
+### 3.4 Unknown is not neutral (BINDING — cost review 2026-07-28; RIDER 2026-08-04)
 Unpriced models are tracked and FLAGGED, never silently $0. Missing evidence is a gap, never a fake-neutral score. A crashed check reports UNCHECKED, not clean.
+**Rider — the flag rides the surface it protects (USER 2026-08-04: "another case of swallowing errors so we didn't even know we had a problem"):** a flag written to a side channel (summary field, stderr, log file) while the primary display shows a plausible value IS a swallow. The incident: grok-4.20 ran unpriced for a day; the `unpriced` flag sat in a summary nobody reads while every row and the web header showed $0.00 — §3.4's letter satisfied, its purpose defeated. Wherever a value can be wrong-but-plausible, the wrongness marker must appear ON that value's own display surface.
 
 ---
 
@@ -160,6 +161,7 @@ If any other doc, prompt, memory, or code comment conflicts with this file, THIS
 
 | Debt | What it is | Created | Retired when |
 |---|---|---|---|
+| STDERR-SIDE-CHANNEL | The S5 no-hide fixes print `[no-hide]` to stderr — invisible to an operator in the web UI (§3.4 rider applies to our own fixes). Teaching-path criticals (stance/pedagogy load failure, cost-append failure, sheet quarantine) deserve UI surfacing via internal_error notes/banner. | 2026-08-04 (unpriced-cost incident review) | Sweep routes operator-relevant [no-hide] prints through a UI-visible channel |
 | R-C DEFERRED | Engineered ≥95%-coverage context rule unbuilt; introduce falls through to gloss/keyword | 2026-07-28 (thin ship, adjudicated) | Coverage estimator built + router rule enabled |
 | STORM RESIDUAL | ≥3-key formulaic turns degrade to soft flood fault, not critical | 2026-07-28 (Grok r2, adjudicated) | first_seen coverage makes floods rare in logs |
 | MULTIDAY-HARNESS DEBT | Spacing claims untestable beyond fake-clock units; no cross-session eval trajectories | 2026-07-28 (r6) | Multi-day simulated eval harness ships |
