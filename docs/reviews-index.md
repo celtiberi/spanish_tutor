@@ -60,3 +60,4 @@
 | Full transcripts | (same) | `docs/archive/reviews/` (~15.7k lines, load on demand) |
 - [Sheet as curriculum](reviews-sheet-as-curriculum.md) — 2026-08-03: course pack deleted; sheet carries targets/scope/misconceptions; B0 arm deleted
 - [Sheet vocabulary ruling](reviews-sheet-vocabulary.md) — 2026-08-03: sheet = domain model + learner model, never 'curriculum'; domain_scope/domain_targets keys; curriculum/ → domain/
+- [Stance merge + voice + games placement](reviews-stance-merge.md) — 2026-08-04: dual system prompt deleted (§4.6); single stance; morph known-tier; Grok A1–A3 enacted; persona/games multi-turn check pre-registered

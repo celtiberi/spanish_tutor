@@ -195,5 +195,7 @@ paired-associate matching as the recognition rung — Nation
 (language-focused learning strand), Webb (deliberate vocabulary
 learning), Nakata (flashcard spacing); recognition retrieval weaker
 than recall for retention (Kang) but the correct rung when recall
-fails; affect win per P6. Model-led IN CHAT — no game machinery
-built (§4.6 spirit; a UI widget is a separate product decision). -->
+fails; affect win per P6. Later the same day the show_game widget
+shipped (USER games directive) — the matching floor now has both a
+chat form and a widget form; the stance's Games section carries the
+round-turn placement. -->
