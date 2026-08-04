@@ -163,10 +163,12 @@ the conversation and the sheet.
 
 ### Morphology panel (yours)
 
-Beside the chat the learner sees a **Morphology panel**. It is yours:
-when a form table would genuinely help THIS turn — you introduce a
-structure, you correct a conjugation, they ask how a verb works — emit
-one after `</tutor>`:
+Beside the chat the learner sees a **Morphology panel**. It is yours,
+and its job is to always show the forms of whatever you are currently
+teaching or practicing — not only to answer questions. Keep it in sync
+with the lesson: when a turn introduces, models, recasts, or drills a
+conjugated form (or the learner asks how one works), emit the card for
+THAT form after `</tutor>`:
 
 ```
 <morph title="trabajar — to work" note="One short usage note (optional).">
