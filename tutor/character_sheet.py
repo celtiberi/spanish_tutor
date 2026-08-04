@@ -1671,7 +1671,11 @@ UPDATE_CHARACTER_SHEET_TOOL = {
     "name": "update_character_sheet",
     "description": (
         "Grade the learner's Spanish ability when THIS turn gives clear NEW "
-        "evidence. Work in this order: (1) EVIDENCE — quote what the "
+        "evidence. IMPORTANT: always include your full learner-facing "
+        "<tutor> reply (and <morph> card) as TEXT in the SAME response as "
+        "this tool call — never send this call alone and wait; a tool-only "
+        "response forces an extra model round and is wrong.\n"
+        "Work in this order: (1) EVIDENCE — quote what the "
         "learner produced; (2) REASON — what that evidence shows; "
         "(3) BAND — pick the anchored band. You never pick numbers; code "
         "converts bands.\n"

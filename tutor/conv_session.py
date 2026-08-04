@@ -510,8 +510,14 @@ def tutor_turn(
     text = ""
 
     for round_i in range(max_tool_rounds + 1):
+        # The reply-only follow-up leg (after a tool-only response) gets
+        # NO tools: it exists purely to produce the learner-facing text,
+        # and re-sending the ~1.4k-token schemas would invite another
+        # tool call the round cap will only refuse anyway (cost forensics
+        # 2026-08-04: grading turns billed exactly 2x input).
         final, text, tool_blocks = _call(
-            client, caps, system, work_messages, tools=tools,
+            client, caps, system, work_messages,
+            tools=tools if round_i == 0 else None,
             max_tokens=max_tokens,
         )
         u = _usage_dict(final)

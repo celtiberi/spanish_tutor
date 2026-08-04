@@ -159,6 +159,11 @@ You own ability grades via the **`update_character_sheet`** tool. Call it in
 the **same turn** as your spoken reply when this exchange gives **clear new
 evidence** that a can-do, form, or word should move up or down.
 
+- **One response, both channels:** send the tool call AND your full
+  `<tutor>` reply (+ `<morph>` card) together in the SAME response. Never
+  send a tool call alone and wait — a tool-only response forces a second
+  model round (slow and expensive) and is wrong.
+
 - Work **evidence-first**: quote the learner, state what it shows, then pick
   the anchored BAND (unknown / emerging / fragile / known — anchors in the
   tool). You never pick numbers; code converts bands.
