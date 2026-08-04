@@ -375,12 +375,6 @@ def _first_appearance_turns(
 
 
 # A question-formula surface (for the UNRESOLVED Q&A-pair policy below).
-_QUESTION_FORMULA_RE = re.compile(
-    r"^(?:¿|c[oó]mo\b|qu[eé]\b|d[oó]nde\b|de\s+d[oó]nde\b|qui[eé]n\b|"
-    r"cu[aá]l\b|cu[aá]ndo\b|y\s+t[uú]\b)",
-    re.I,
-)
-
 
 # ---------------------------------------------------------------------------
 # Checks
@@ -439,23 +433,27 @@ def check_cluster_intro(
     transcript: list[dict],
     *,
     table: dict | None = None,
-    exempt_qa_pairs: bool = False,
 ) -> list[str]:
     """PEDAGOGY §2.2 one-new-item law as a transcript check → HARD finding.
 
     Two or more same-theme association-table keys FIRST-appearing in one
     tutor turn is near-synonym/antonym interference (r7 R-F): the extras
-    beyond the first are flagged.  This is the transcript-level successor
-    of the deleted runtime gate:cluster_veto (S11).
+    beyond the first are flagged.  Transcript-level successor of the
+    deleted runtime gate:cluster_veto (S11).
 
-    ``exempt_qa_pairs`` — UNRESOLVED policy (see the S11 stamp in
-    docs/reviews-full-code-audit-20260803.md): whether a question formula
-    plus its answer formula from one theme («¿cómo estás?» + «bien») is a
-    legitimate co-introduction or an interference pair.  Default False
-    (the pair FLAGS) until the policy is adjudicated; True exempts a
-    two-key theme pair where exactly one key has a question-formula
-    surface.
+    EXEMPT (USER-ruled 2026-08-04: "exempt formulas… exempt idioms and
+    common phrases" — formulaic sequences are learned as chunks in a
+    script, not as competing form-meaning mappings; the Tinkham/Waring
+    interference class is single-word near-synonym/antonym/category
+    SETS):
+    - social-formula themes (greetings, how_are_you, introductions,
+      farewells, courtesy — association_table.SOCIAL_FORMULA_THEMES);
+    - multi-word keys (a phrase/idiom is a chunk by definition).
+    Single-word category-mates still flag (grande+pequeño,
+    hermano+hermana).
     """
+    from tutor.association_table import SOCIAL_FORMULA_THEMES
+
     rows = _turn_rows(transcript)
     table = table if table is not None else _association_table()
     keys = _content_table_keys(table)
@@ -463,18 +461,15 @@ def check_cluster_intro(
     for i, new_keys in sorted(_first_appearance_turns(rows, keys).items()):
         by_theme: dict[str, list[str]] = {}
         for key in new_keys:
+            if " " in (key or ""):
+                continue  # chunk/phrase — exempt by ruling
             theme = str((table.get(key) or {}).get("theme") or "")
+            if theme in SOCIAL_FORMULA_THEMES:
+                continue  # exchange-script formula — exempt by ruling
             by_theme.setdefault(theme, []).append(key)
         for theme, theme_keys in sorted(by_theme.items()):
             if len(theme_keys) < 2:
                 continue
-            if exempt_qa_pairs and len(theme_keys) == 2:
-                q_like = [
-                    k for k in theme_keys
-                    if _QUESTION_FORMULA_RE.match(k or "")
-                ]
-                if len(q_like) == 1:
-                    continue
             extras = theme_keys[1:]
             findings.append(
                 f"turn {i}: cluster co-introduction theme={theme!r} "

@@ -50,6 +50,10 @@ FAKE_TABLE = {
                   "cognate_en": "enchanted", "imageable": False},
     # structural rows must never count
     "estoy": {"theme": "copulas", "gloss_en": "I am", "imageable": False},
+    # single-word content category-mates: the REAL interference class
+    "grande": {"theme": "descriptions", "gloss_en": "big", "imageable": False},
+    "pequeño": {"theme": "descriptions", "gloss_en": "small",
+                "imageable": False},
 }
 
 
@@ -142,20 +146,21 @@ class TestStillFail:
 
 class TestClusterIntro:
     def test_two_new_same_theme_keys_in_one_turn_flag(self):
+        # Single-word category-mates (Tinkham/Waring class) still flag.
         transcript = [
             _row("¡Hola! Vamos a empezar."),
-            _row("**Hasta luego** (see you later). **Adiós** (goodbye)."),
+            _row("**Grande** (big). **Pequeño** (small)."),
         ]
         findings = check_cluster_intro(transcript, table=FAKE_TABLE)
         assert len(findings) == 1
-        assert "turn 1" in findings[0] and "farewells" in findings[0]
+        assert "turn 1" in findings[0] and "descriptions" in findings[0]
         # HARD: not WARN-prefixed.
         assert not findings[0].startswith("WARN")
 
     def test_one_new_key_per_turn_is_clean(self):
         transcript = [
-            _row("**Hasta luego** (see you later)."),
-            _row("Y ahora: **adiós** (goodbye)."),
+            _row("**Grande** (big)."),
+            _row("Y ahora: **pequeño** (small)."),
         ]
         assert check_cluster_intro(transcript, table=FAKE_TABLE) == []
 
@@ -187,29 +192,30 @@ class TestClusterIntro:
         transcript = [
             _row("Yo estoy bien. ¿Cómo estás?"),
         ]
-        # «estoy» is a copulas-theme row: exempt; cómo estás + bien DO pair
-        # (how_are_you theme) — that is the Q&A-formula question below.
+        # «estoy» = copulas (structural, exempt); «cómo estás»+«bien» =
+        # how_are_you formulas — exempt by the 2026-08-04 ruling.
         findings = check_cluster_intro(transcript, table=FAKE_TABLE)
-        assert len(findings) == 1
+        assert findings == []
         assert "how_are_you" in findings[0]
         assert "estoy" not in findings[0]
 
-    def test_exempt_qa_pairs_default_false(self):
-        # UNRESOLVED policy (S11 stamp): the question+answer formula pair
-        # FLAGS by default; the exemption is opt-in until adjudicated.
+    def test_formula_and_phrase_exemption(self):
+        # USER-ruled 2026-08-04: "exempt formulas… exempt idioms and
+        # common phrases." Exchange-script themes never flag:
         transcript = [_row("¿Cómo estás? Bien, gracias.")]
-        flagged = check_cluster_intro(transcript, table=FAKE_TABLE)
-        assert flagged and "how_are_you" in flagged[0]
-        exempted = check_cluster_intro(
-            transcript, table=FAKE_TABLE, exempt_qa_pairs=True
-        )
-        assert exempted == []
-        # The exemption is exactly one-question + one-answer: two answer
-        # formulas never exempt (no question surface).
+        assert check_cluster_intro(transcript, table=FAKE_TABLE) == []
+        # Farewell formulas (the r7 founding pair) — formula theme, exempt
+        # from CLUSTER (bare-exposure still has its own check):
         pair = [_row("**Hasta luego** (bye). **Adiós** (goodbye).")]
-        assert check_cluster_intro(
-            pair, table=FAKE_TABLE, exempt_qa_pairs=True
-        )
+        assert check_cluster_intro(pair, table=FAKE_TABLE) == []
+        # Multi-word chunks are exempt even in a content theme:
+        chunky_table = {
+            **FAKE_TABLE,
+            "por la noche": {"theme": "descriptions", "gloss_en": "at night",
+                             "imageable": False},
+        }
+        mixed = [_row("**Grande** (big). **Por la noche** (at night).")]
+        assert check_cluster_intro(mixed, table=chunky_table) == []
 
 
 class TestProbeRepeat:
