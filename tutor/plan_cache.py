@@ -18,10 +18,25 @@ from __future__ import annotations
 import datetime
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
 from . import config
+
+# The formatted sheet embeds the wall clock ("now": …) for the teacher's
+# time awareness. A fingerprint that hashes the clock changes every
+# second, so the cache could NEVER hit after the moment it was stored —
+# the exact 2026-08-04 incident (USER: reset "still took forever…
+# still requesting an initial plan"). The fingerprint covers teaching
+# INPUTS only; volatile timestamp lines are stripped.
+_VOLATILE_LINE = re.compile(r'^\s*"(now|updated_at)":.*$', re.MULTILINE)
+
+
+def _stable_default_sheet_text() -> str:
+    from .character_sheet import default_sheet, format_sheet_for_prompt
+
+    return _VOLATILE_LINE.sub("", format_sheet_for_prompt(default_sheet()))
 
 
 def _cache_path() -> Path:
@@ -29,8 +44,8 @@ def _cache_path() -> Path:
 
 
 def blank_plan_fingerprint() -> str:
-    """Hash of every input that shapes a blank-sheet plan."""
-    from .character_sheet import default_sheet, format_sheet_for_prompt
+    """Hash of every input that shapes a blank-sheet plan (never the
+    clock — see _VOLATILE_LINE)."""
     from .executor import CONV_PROMPT, load_persona
     from .session_plan import PLAN_INSTRUCTIONS, load_pedagogy
 
@@ -44,7 +59,7 @@ def blank_plan_fingerprint() -> str:
         PLAN_INSTRUCTIONS,
         stance,
         load_persona() or "",
-        format_sheet_for_prompt(default_sheet()),
+        _stable_default_sheet_text(),
     ])
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:24]
 

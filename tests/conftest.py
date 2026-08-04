@@ -370,6 +370,15 @@ def tutor_session_factory(monkeypatch, tmp_path, request):
 
     _isolate_teach_assets(monkeypatch, request, tmp_path)
 
+    # Plan-reuse isolation (2026-08-04): the blank-plan cache and the
+    # per-learner plan store derive their paths from the process-global
+    # CHARACTER_SHEET_PATH. Without this, a fake-session test STORES its
+    # fake plan into the LIVE logs/plan_cache/ (and later tests hit it) —
+    # the suite must never write, or read, the operator's cache.
+    monkeypatch.setattr(
+        config, "CHARACTER_SHEET_PATH", tmp_path / "character_sheet.json"
+    )
+
     save_calls: list[str] = []
     _count_save_sheet(monkeypatch, save_calls)
 

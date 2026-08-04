@@ -212,13 +212,22 @@ class TestReplan:
         ctx = tutor_session_factory(replies=[BODY_WITH_PLAN, BODY_PLAIN])
         s = ctx.session
         s.open_session()
-        s.user_turn("Hola")
-        assert s.session_plan == PLAN_TEXT
-        ctx.fake.queue_reply(BODY_WITH_PLAN)
-        s.open_session()  # every open IS the unified new-chat reset
-        # Fresh chat: plan cleared, so the open was a PLAN turn again.
+        # First blank open = PLAN turn, and its plan is saved as the
+        # precreated blank plan (USER 2026-08-04: "When the character
+        # sheet is fresh the plan will always be the same… Just save
+        # the plan and reuse it").
         blob = _blob(ctx.fake.requests[-1])
         assert "## Your session plan (required on this turn)" in blob
+        s.user_turn("Hola")
+        assert s.session_plan == PLAN_TEXT
+        ctx.fake.queue_reply(BODY_PLAIN)
+        s.open_session()  # every open IS the unified new-chat reset
+        # Fresh chat on a STILL-BLANK sheet: the cached blank plan is
+        # reused — a cheap ROUND turn, not a second plan request; the
+        # plan itself is the same one the first open wrote.
+        blob = _blob(ctx.fake.requests[-1])
+        assert "## Your session plan (required on this turn)" not in blob
+        assert s.session_plan == PLAN_TEXT
 
 
 class TestFullPathUntouched:

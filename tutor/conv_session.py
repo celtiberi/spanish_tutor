@@ -1498,13 +1498,15 @@ class ConversationalSession:
         # update (code fingerprint); a miss just means the normal plan
         # turn runs. The model can still <replan/> a restored plan it
         # disagrees with — reuse is a starting point, never a cage.
+        was_blank = False
+        plan_source = None
         try:
             from .pedagogy_contract import is_blank_learner
             from .plan_cache import get_cached_blank_plan
             from .plan_store import load_plan
 
-            plan_source = None
-            if is_blank_learner(self.sheet):
+            was_blank = is_blank_learner(self.sheet)
+            if was_blank:
                 cached = get_cached_blank_plan()
                 if cached:
                     self.session_plan = cached
@@ -1546,6 +1548,19 @@ class ConversationalSession:
                 "parts": result.parts,
             },
         ]
+        # Blank sheet paid a REAL plan turn (cache miss / warm race):
+        # save the result AS the blank cache (USER 2026-08-04: "When the
+        # character sheet is fresh the plan will always be the same…
+        # Just save the plan and reuse it"). The warm thread is the
+        # pre-heater; this is the guarantee — at most ONE blank plan
+        # turn per deploy, ever, no matter how the warm fared.
+        if was_blank and plan_source is None and self.session_plan:
+            try:
+                from .plan_cache import store_blank_plan
+
+                store_blank_plan(self.session_plan)
+            except Exception as e:
+                self._oops("open_session.store_blank_plan", e)
         self._persist_plan()
         return result
 

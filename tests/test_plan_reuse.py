@@ -44,6 +44,22 @@ class TestBlankPlanCache(unittest.TestCase):
         plan_cache.store_blank_plan("   ")
         self.assertIsNone(plan_cache.get_cached_blank_plan())
 
+    def test_fingerprint_is_clock_free(self):
+        # 2026-08-04 incident: the formatted sheet embeds "now": <clock>,
+        # so a fingerprint hashing it changed EVERY SECOND — the cache
+        # could never hit after the moment it was stored and every blank
+        # open paid a full plan turn (USER: "It still took forever").
+        import time
+
+        from tutor import plan_cache
+
+        text = plan_cache._stable_default_sheet_text()
+        self.assertNotIn('"now"', text)
+        self.assertNotIn('"updated_at"', text)
+        a = plan_cache.blank_plan_fingerprint()
+        time.sleep(1.1)
+        self.assertEqual(a, plan_cache.blank_plan_fingerprint())
+
 
 class TestPlanStore(unittest.TestCase):
     def test_save_load_delete(self):
