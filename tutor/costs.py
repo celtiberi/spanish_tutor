@@ -76,6 +76,9 @@ PRICING: dict[str, dict[str, float | None]] = {
     # https://ai.google.dev/gemini-api/docs/pricing (Grok round-3 verified;
     # Claude's earlier $0.10/$0.40 estimate was 2.5-lite-era and ~3x low)
     "gemini-3.1-flash-lite": {"input": 0.25, "input_cached": 0.025, "output": 1.50},
+    # Cheaper-model trial 2026-08-05 (USER "prices are too high"):
+    # web-verified $0.30/$2.50; cached at the standard 10% convention.
+    "gemini-3.5-flash-lite": {"input": 0.30, "input_cached": 0.03, "output": 2.50},
     "gemini-3.5-flash-lite": {"input": 0.30, "input_cached": 0.03, "output": 2.50},
     # Alias hot-swaps; price at current GA lite (3.5) until pin is forced
     "gemini-flash-lite-latest": {"input": 0.30, "input_cached": 0.03, "output": 2.50},
