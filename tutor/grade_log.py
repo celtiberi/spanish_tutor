@@ -321,12 +321,41 @@ def build_grades_payload(
     session_id: str = "",
     ledger_path: Path | str | None = None,
     limit: int = 80,
+    progress_path: Path | str | None = None,
+    session_suffix: str | None = None,
 ) -> dict[str, Any]:
-    """Payload for GET /api/progress (grade feed + header counts)."""
+    """Payload for GET /api/progress (grade feed + header counts + XP)."""
     grades = _recent_only(
         grades_since_epoch(ledger_path=ledger_path, limit=limit),
         GRADES_RECENT_HOURS,
     )
+
+    # XP (docs/design-xp-progression.md): derived over the FULL post-epoch
+    # ledgers — never the display-limited/24h-filtered rows above.
+    from . import xp as xp_mod
+
+    grade_ledger = xp_mod.read_ledger(
+        Path(ledger_path) if ledger_path else default_grade_log_path()
+    )
+    from . import config as _config
+    import os as _os
+
+    prog_p = (progress_path
+              or _os.environ.get("PROGRESS_LEDGER_PATH")
+              or (_config.CHARACTER_SHEET_PATH.parent / "progress.jsonl"))
+    progress_rows = xp_mod.read_ledger(prog_p, session_suffix=session_suffix)
+    xp = xp_mod.compute_xp(grade_ledger, progress_rows, sheet=sheet)
+
+    # Glue points to their evidence: annotate displayed grade rows with
+    # the XP their ledger event paid (0 for rows that paid nothing).
+    paid_by_key = {}
+    for ev in xp["events"]:
+        if ev["source"] == "grade":
+            paid_by_key[(ev.get("section"), ev.get("key"), ev.get("ts"))] = ev["xp"]
+    for g in grades:
+        g["xp"] = paid_by_key.get(
+            (g.get("section"), g.get("field_id"), g.get("ts")), 0
+        )
     counts = counts_from_sheet(sheet or {})
     from .character_sheet import compute_progress_score
 
@@ -337,6 +366,7 @@ def build_grades_payload(
         "empty": len(grades) == 0,
         "session_id": session_id or "",
         "score": score,
+        "xp": xp,
         # legacy keys so old clients don't explode
         "groups": [],
         "due_soon": 0,

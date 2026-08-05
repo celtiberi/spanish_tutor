@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Spanish tutor</title>
-  <link rel="stylesheet" href="/static/styles.css?v=20260805b" />
+  <link rel="stylesheet" href="/static/styles.css?v=20260805c" />
 </head>
 <body>
   <div class="app">
@@ -14,6 +14,17 @@
         <div>
           <h1>Spanish tutor <span class="build-stamp" id="buildStamp" title="Server code version (auto: newest code file when the server started)"></span></h1>
           <p class="sub" id="statusLine">Starting…</p>
+        </div>
+      </div>
+      <!-- Progression (dual-signal law, docs/design-xp-progression.md):
+           ability counts PRIMARY, XP journey bar secondary — XP never
+           appears alone. -->
+      <div class="xp-board" id="xpBoard" hidden aria-live="polite">
+        <div class="xp-ability" id="xpAbility" title="Your ability record — can go down; this is the honest part">—</div>
+        <div class="xp-journey">
+          <span class="xp-level" id="xpLevel" title="Journey stage — practice volume, not an ability claim">Nivel 1</span>
+          <span class="xp-bar-wrap"><span class="xp-bar" id="xpBar"></span></span>
+          <span class="xp-nums" id="xpNums"></span>
         </div>
       </div>
       <div class="cost-board" id="costBoard" title="API spend this chat session" aria-live="polite">
@@ -122,6 +133,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=20260805b"></script>
+  <script src="/static/app.js?v=20260805c"></script>
 </body>
 </html>

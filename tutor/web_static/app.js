@@ -28,6 +28,11 @@ const els = {
   journeyToggle: $("journeyToggle"),
   journeyBody: $("journeyBody"),
   journeyFoot: $("journeyFoot"),
+  xpBoard: $("xpBoard"),
+  xpAbility: $("xpAbility"),
+  xpLevel: $("xpLevel"),
+  xpBar: $("xpBar"),
+  xpNums: $("xpNums"),
   costBoard: $("costBoard"),
   costValue: $("costValue"),
   costBreakdown: $("costBreakdown"),
@@ -266,6 +271,37 @@ function renderMorphology(sheet) {
 /** Last rendered durable count — used to show +Δ when it advances. */
 /** Latest /api/progress payload (grade feed + countable header). */
 let lastProgress = null;
+let lastXpLevel = null;
+
+/** Dual-signal header (docs/design-xp-progression.md): ability counts
+ * PRIMARY, XP journey bar secondary. XP never renders without ability. */
+function renderXp(progress) {
+  if (!els.xpBoard) return;
+  const xp = progress?.xp;
+  const counts = progress?.counts || {};
+  if (!xp) { els.xpBoard.hidden = true; return; }
+  els.xpBoard.hidden = false;
+  const bits = [];
+  if (counts.known) bits.push(`${counts.known} known`);
+  if (counts.emerging) bits.push(`${counts.emerging} emerging`);
+  if (counts.fragile) bits.push(`${counts.fragile} fragile`);
+  els.xpAbility.textContent = bits.length ? bits.join(" · ") : "just starting";
+  els.xpLevel.textContent = xp.level_name || `Nivel ${xp.level}`;
+  const floor = xp.level_floor || 0;
+  const frac = xp.next_threshold != null
+    ? Math.max(0, Math.min(1,
+        (xp.total - floor) / Math.max(1, xp.next_threshold - floor)))
+    : 1;
+  els.xpBar.style.width = `${Math.round(frac * 100)}%`;
+  els.xpNums.textContent = xp.next_threshold != null
+    ? `${xp.total} xp · ${xp.to_next} to next`
+    : `${xp.total} xp`;
+  // Level-up: one celebration chip in the rail, no confetti spam.
+  if (lastXpLevel !== null && xp.level > lastXpLevel) {
+    addBubble("system", `⭐ ${xp.level_name} — level up!`);
+  }
+  lastXpLevel = xp.level;
+}
 
 function renderCost(sheet) {
   if (!els.costBoard || !els.costValue) return;
@@ -345,9 +381,13 @@ function gradeChip(g, curSid) {
     ? `<span class="j-chip-ev">“${esc(ev.length > 90 ? ev.slice(0, 90) + "…" : ev)}”</span>`
     : "";
   const earlier = curSid && g.session_id && g.session_id !== curSid;
+  const xpTag = g.xp
+    ? ` <span class="j-chip-xp" title="journey XP this evidence earned">+${g.xp} xp</span>`
+    : "";
   const metaLine =
     `<span class="j-chip-meta">${esc(gradeWhen(g.ts) || "")}` +
     (earlier ? " · earlier session" : "") +
+    xpTag +
     `</span>`;
   return (
     `<li class="j-chip grade-${dir}${earlier ? " grade-past" : ""}" title="${esc(tip)}">` +
@@ -396,9 +436,14 @@ function gradeGroupChip(group, curSid) {
     ? `<span class="j-chip-why">${esc(g0.why)}</span>`
     : "";
   const earlier = curSid && g0.session_id && g0.session_id !== curSid;
+  const groupXp = items.reduce((a, g) => a + (g.xp || 0), 0);
+  const xpTag = groupXp
+    ? ` <span class="j-chip-xp" title="journey XP this evidence earned">+${groupXp} xp</span>`
+    : "";
   const metaLine =
     `<span class="j-chip-meta">${esc(gradeWhen(g0.ts) || "")}` +
     (earlier ? " · earlier session" : "") +
+    xpTag +
     `</span>`;
   const anyDown = items.some((g) => g.direction === "down");
   return (
@@ -444,6 +489,7 @@ async function refreshProgress() {
     const p = await api("/api/progress");
     lastProgress = p;
     renderJourney(p);
+    renderXp(p);
   } catch (_) {
     /* rail is display only — never break the chat over it */
   }

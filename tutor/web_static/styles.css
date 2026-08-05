@@ -67,6 +67,58 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
 /* Progress score (character sheet → 0–100) */
 
 
+/* Progression header (dual-signal law, docs/design-xp-progression.md):
+   ability counts primary, XP journey bar secondary — never XP alone. */
+.xp-board {
+  flex: 0 1 220px;
+  min-width: 170px;
+  padding: 0.45rem 0.75rem 0.5rem;
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(56, 178, 172, 0.12), rgba(43, 108, 176, 0.10));
+  border: 1px solid var(--border);
+}
+.xp-ability {
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: var(--text);
+}
+.xp-journey {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.3rem;
+}
+.xp-level {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.xp-bar-wrap {
+  flex: 1;
+  height: 6px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.xp-bar {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #2b6cb0, #38b2ac 55%, #7fd99a);
+  transition: width 0.45s ease;
+  min-width: 0;
+}
+.xp-nums {
+  font-size: 0.66rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.j-chip-xp {
+  color: #7fd99a;
+  font-weight: 700;
+}
+
 /* Session API cost (tracked per provider call) */
 .cost-board {
   flex: 0 1 170px;
@@ -182,6 +234,8 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
   }
   .top { align-items: flex-start; gap: 0.5rem; padding: 0.3rem 0 0.45rem; }
   .cost-board { display: none; }
+  /* xp-board is LEARNER-facing — stays on mobile, full width row */
+  .xp-board { flex: 1 1 100%; min-width: 0; padding: 0.4rem 0.6rem; }
   .sub { display: none; }
   .build-stamp { display: none; }
   .logo { width: 36px; height: 36px; border-radius: 10px; }

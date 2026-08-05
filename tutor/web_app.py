@@ -664,6 +664,10 @@ def create_app() -> FastAPI:
             session.sheet,
             session_id=getattr(session, "progress_session_id", ""),
             ledger_path=getattr(session, "grade_log_path", None),
+            # Multi-user: scope the SHARED progress ledger to this
+            # learner's sessions by label suffix (web-<uid8>); local
+            # single-user label "web" matches its own rows the same way.
+            session_suffix=getattr(session, "label", None),
         )
 
     @app.get("/api/debug/requests")
