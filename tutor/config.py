@@ -289,6 +289,8 @@ def provider_for(model: str) -> str:
         return "xai"
     if model.startswith("gemini"):
         return "google"
+    if model.startswith("deepseek"):
+        return "deepseek"
     return "anthropic"
 
 
@@ -335,6 +337,17 @@ def make_client_for(model: str):
         if not key:
             raise RuntimeError("GEMINI_API_KEY not set (needed for gemini models)")
         return GeminiClient(key)
+    if provider == "deepseek":
+        # DeepSeek ships a native Anthropic-format endpoint (their docs,
+        # 2026-08-05) — same wiring as xai, no OpenAI adapter needed.
+        key = os.environ.get("DEEPSEEK_API_KEY")
+        if not key:
+            raise RuntimeError(
+                "DEEPSEEK_API_KEY not set (needed for deepseek models)"
+            )
+        return anthropic.Anthropic(
+            api_key=key, base_url="https://api.deepseek.com/anthropic"
+        )
     return anthropic.Anthropic()
 
 

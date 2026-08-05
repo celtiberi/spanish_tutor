@@ -79,6 +79,11 @@ PRICING: dict[str, dict[str, float | None]] = {
     # Cheaper-model trial 2026-08-05 (USER "prices are too high"):
     # web-verified $0.30/$2.50; cached at the standard 10% convention.
     "gemini-3.5-flash-lite": {"input": 0.30, "input_cached": 0.03, "output": 2.50},
+    # DeepSeek trial 2026-08-05 (api-docs.deepseek.com/quick_start/pricing):
+    # cache-hit input is their $/M "cache hit" rate; NOTE peak hours
+    # (Beijing 9-12 & 14-18) may bill 2x once their announcement lands.
+    "deepseek-v4-flash": {"input": 0.14, "input_cached": 0.0028, "output": 0.28},
+    "deepseek-v4-pro": {"input": 0.435, "input_cached": 0.003625, "output": 0.87},
     "gemini-3.5-flash-lite": {"input": 0.30, "input_cached": 0.03, "output": 2.50},
     # Alias hot-swaps; price at current GA lite (3.5) until pin is forced
     "gemini-flash-lite-latest": {"input": 0.30, "input_cached": 0.03, "output": 2.50},
