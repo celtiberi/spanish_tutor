@@ -44,8 +44,15 @@ Monotone XP is legal ONLY because the UI always co-displays ability
    band re-crossed, not the path.
 2. Echo-grade rows pay 0 (when the echo_grade eval flag lands).
 3. No XP for introduction, exposure, login, session length, or turns.
-4. Day cap **120 XP** (≈ one fully-rooted item + change). Pre-registered
-   revisit after two weeks of live telemetry.
+4. **No day cap** (USER challenge 2026-08-05, adjudicated): every payer
+   is once-per-item-per-threshold with echo and seat-time excluded, so
+   there is no repeatable action to farm — the anti-farm is structural,
+   and a rate cap would only zero out an honestly enthusiastic
+   learner's real crossings, breaking the evidence↔points glue ("+0 xp"
+   on a real achievement is the inverse flattery bug). Revive condition:
+   if live telemetry shows teacher grade-inflation minting XP, fix the
+   GRADING layer (anchors, echo check) — a cap returns only if that
+   fails.
 
 ## Levels
 

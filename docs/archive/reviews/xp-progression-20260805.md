@@ -367,3 +367,17 @@ signal with the XP bar giving it a reason to exist.
 
 **Converged: ACCEPT_WITH_AMENDS enacted; final plan at
 docs/design-xp-progression.md. One round sufficed — no round 2.**
+
+---
+
+## Post-round USER challenge (2026-08-05): "why would there be a cap?"
+
+Re-adjudicated: **day cap REMOVED.** Grok's A6 already conceded the cap
+is "a rate limit, not a quality filter." With once-per-(item,threshold)
+payment, echo exclusion, and zero seat-time XP, no repeatable farming
+action exists — the anti-farm is structural. A day cap's only real
+effect is paying an enthusiastic learner +0 for a genuine crossing,
+which violates the evidence↔points glue (deflation is the same honesty
+bug as inflation, mirrored). The grade-inflation amplification risk the
+cap hedged belongs to the grading layer (band anchors + echo_grade
+eval), not the display layer. Revive condition recorded in the plan.
