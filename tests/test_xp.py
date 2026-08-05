@@ -6,9 +6,13 @@ import unittest
 from tutor.xp import compute_xp, level_thresholds
 
 
-def g(item, frm, to, section="lexicon", ts="2026-08-05T10:00:00"):
+def g(item, frm, to, section="lexicon", ts="2026-08-05T10:00:00",
+      evidence=None):
+    # Default evidence SHOWS the item (the audit demands it; tests that
+    # probe the audit pass their own evidence).
+    ev = evidence if evidence is not None else item.replace("_", " ")
     return {"kind": "grade", "field_id": item, "section": section,
-            "from_status": frm, "to_status": to, "ts": ts}
+            "from_status": frm, "to_status": to, "ts": ts, "evidence": ev}
 
 
 def m(kind, key, **extra):
@@ -45,6 +49,32 @@ class TestBandCrossings(unittest.TestCase):
         self.assertEqual(compute_xp(rows, [])["total"], 0)
 
 
+class TestEvidenceAudit(unittest.TestCase):
+    """XP pays only when the quoted evidence shows the item (the sam
+    inflation forensics, 2026-08-05: 'esta bein' minted bien+estar)."""
+
+    def test_garble_evidence_pays_nothing(self):
+        rows = [g("bien", "unknown", "emerging", evidence="esta bein"),
+                g("estar", "unknown", "emerging", evidence="esta bein")]
+        self.assertEqual(compute_xp(rows, [])["total"], 0)
+
+    def test_real_evidence_pays(self):
+        rows = [g("bien", "unknown", "emerging", evidence="estoy bien hoy")]
+        self.assertEqual(compute_xp(rows, [])["total"], 10)
+
+    def test_no_evidence_no_pay(self):
+        rows = [g("hola", "unknown", "emerging", evidence="")]
+        self.assertEqual(compute_xp(rows, [])["total"], 0)
+
+    def test_grammar_audited_against_paradigm(self):
+        ok = [g("present_estar_person", "unknown", "emerging",
+                section="grammar", evidence="yo estoy bien")]
+        bad = [g("present_estar_person", "unknown", "emerging",
+                 section="grammar", evidence="me te name es Sam")]
+        self.assertEqual(compute_xp(ok, [])["total"], 10)
+        self.assertEqual(compute_xp(bad, [])["total"], 0)
+
+
 class TestMilestones(unittest.TestCase):
     def test_weights_and_dedupe(self):
         rows = [m("planted", "hola"),          # exposure: 0
@@ -78,14 +108,14 @@ class TestLevels(unittest.TestCase):
         self.assertTrue(all(b > a for a, b in zip(t, t[1:])))
 
     def test_level_and_to_next(self):
-        r = compute_xp([g(f"w{i}", "unknown", "known") for i in range(3)], [])
+        r = compute_xp([g(f"word{i}", "unknown", "known") for i in range(3)], [])
         # 3 x 50 = 150 -> level 2 (>=100), 100 to next (250)
         self.assertEqual(r["total"], 150)
         self.assertEqual(r["level"], 2)
         self.assertEqual(r["to_next"], 100)
 
     def test_gated_name_requires_sheet_evidence(self):
-        rows = [g(f"w{i}", "unknown", "known") for i in range(3)]  # level 2
+        rows = [g(f"word{i}", "unknown", "known") for i in range(3)]  # level 2
         bare = compute_xp(rows, [], sheet={"skills": {}})
         self.assertEqual(bare["level_name"], "Nivel 2")
         gated = compute_xp(rows, [], sheet={

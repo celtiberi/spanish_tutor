@@ -65,6 +65,38 @@ def _band_index(status: str | None) -> int:
     return BAND_ORDER.index(s) if s in BAND_ORDER else 0
 
 
+def _evidence_shows(section: str, item: str, evidence: str) -> bool:
+    """Mechanical evidence audit (code = auditor, §1.1): a lexicon
+    crossing pays only if the credited word appears, correctly spelled
+    (accent-lenient), in the quoted evidence — 'esta bein' mints nothing
+    for «bien» (2026-08-05 gate: the lite teacher credited garble; the
+    sheet grade is teaching judgment and may stand, but XP demands the
+    evidence literally show the item). Grammar rows are audited against
+    the form's paradigm when MORPHOLOGY_BY_FORM knows it; unknown form
+    ids pay unaudited (benefit of doubt, recorded here honestly). No
+    evidence quote → no pay."""
+    from .textnorm import phrase_present
+
+    if not evidence.strip():
+        return False
+    if section == "lexicon":
+        word = item.replace("_", " ")
+        if len(word) <= 2:
+            return False  # bare function words (de, el, y) are not XP events
+        return phrase_present(word, evidence)
+    if section == "grammar":
+        from .can_dos import MORPHOLOGY_BY_FORM
+
+        block = MORPHOLOGY_BY_FORM.get(item)
+        if not block:
+            return True  # unauditable form id — benefit of the doubt
+        return any(
+            phrase_present(str(row.get("form") or ""), evidence)
+            for row in (block.get("paradigm") or [])
+        )
+    return True
+
+
 def _post_epoch(rows: list[dict]) -> list[dict]:
     epoch_i = -1
     for i, r in enumerate(rows):
@@ -99,6 +131,8 @@ def compute_xp(
         if section not in BAND_SECTIONS:
             continue
         item = str(r.get("field_id") or "")
+        if not _evidence_shows(section, item, str(r.get("evidence") or "")):
+            continue  # audit failed: quoted evidence does not show the item
         to_i = _band_index(r.get("to_status"))
         key = (section, item)
         prev_paid = paid_band.get(key, 0)
