@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Spanish tutor</title>
-  <link rel="stylesheet" href="/static/styles.css?v=20260805a" />
+  <link rel="stylesheet" href="/static/styles.css?v=20260805b" />
 </head>
 <body>
   <div class="app">
@@ -34,9 +34,9 @@
           <input type="range" id="ttsRateSlider" min="0.7" max="1.2" step="0.05" value="1.0" />
           <span id="ttsRateLabel">Voice 1.0×</span>
         </label>
-        <button type="button" class="btn ghost" id="sheetToggle" title="Full character sheet">Full sheet</button>
-        <button type="button" class="btn ghost" id="newChat" title="New chat (keep learner sheet)">New chat</button>
-        <button type="button" class="btn ghost danger" id="resetLearner" title="Wipe character sheet and start a blank learner">Reset learner</button>
+        <button type="button" class="btn ghost" id="sheetToggle" title="Full character sheet" aria-label="Full character sheet">Sheet</button>
+        <button type="button" class="btn ghost" id="newChat" title="New chat (keep learner sheet)" aria-label="New chat, keep learner sheet">New chat</button>
+        <button type="button" class="btn ghost danger" id="resetLearner" title="Wipe character sheet and start a blank learner" aria-label="Reset learner: wipe character sheet">Reset</button>
       </div>
     </header>
 
@@ -122,6 +122,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=20260805a"></script>
+  <script src="/static/app.js?v=20260805b"></script>
 </body>
 </html>

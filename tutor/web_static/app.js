@@ -1004,6 +1004,20 @@ function offerTapToPlay(audio, url) {
   }, { once: true });
 }
 
+// Mobile chat shell: the ≤900px chat-panel height subtracts the REAL
+// header height (measured — a fixed constant broke whenever the actions
+// row wrapped; Grok E1/A2, docs/archive/reviews/ui-responsive-20260805.md).
+function syncHeaderBand() {
+  const top = document.querySelector(".top");
+  if (!top) return;
+  document.documentElement.style.setProperty(
+    "--mobile-header-band", `${top.offsetHeight + 24}px`
+  );
+}
+window.addEventListener("resize", syncHeaderBand);
+window.addEventListener("orientationchange", syncHeaderBand);
+syncHeaderBand();
+
 // Best-effort audio unlock: the FIRST user gesture anywhere plays a
 // muted no-op so later programmatic replies are allowed to sound.
 window.addEventListener("pointerdown", () => {
