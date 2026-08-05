@@ -95,3 +95,17 @@ class TestLevels(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSkillIdNormalization(unittest.TestCase):
+    def test_underscore_ids_canonicalized(self):
+        from tutor.character_sheet import apply_delta, default_sheet
+
+        sheet = default_sheet()
+        out = apply_delta(sheet, {
+            "reason": "test grade normalization path",
+            "skills": {"ip_03": {"status": "emerging"}},
+        })
+        self.assertIn("IP-03", out.get("skills") or {})
+        self.assertNotIn("ip_03", out.get("skills") or {})
+        self.assertNotIn("IP_03", out.get("skills") or {})

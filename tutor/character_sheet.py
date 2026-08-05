@@ -1461,6 +1461,18 @@ def apply_delta(sheet: dict, delta: dict) -> dict:
     delta = sanitize_tool_delta(delta)
     if not delta:
         return sheet
+    # Canonicalize model-written skill ids (2026-08-05 gate forensics:
+    # the lite model wrote IP_03 alongside IP-03, forking one can-do
+    # into two records). Underscores → dashes, uppercased prefix.
+    skl = delta.get("skills")
+    if isinstance(skl, dict):
+        fixed = {}
+        for k, v in skl.items():
+            ck = str(k).strip().replace("_", "-")
+            if len(ck) > 2 and ck[2] == "-":
+                ck = ck[:2].upper() + ck[2:]
+            fixed[ck] = v
+        delta["skills"] = fixed
     _bands_to_numbers(sheet, delta)
     before = sheet
     s = copy.deepcopy(sheet)
@@ -1691,6 +1703,21 @@ UPDATE_CHARACTER_SHEET_TOOL = {
         "context or session.\n"
         "DOWNGRADES are honest grades: repeated failure on something "
         "previously credited moves it DOWN.\n"
+        "GRADE EVERY LAYER the evidence touches, not only can-dos: the "
+        "WORDS they produced (lexicon), the FORMS they used (grammar), "
+        "AND the can-do (skills). A one-layer skills-only grade wastes "
+        "the evidence.\n"
+        "WORKED EXAMPLE — learner (first session, after you modeled "
+        "estoy): 'Estoy bien, gracias. Me gusta el café.'\n"
+        "  RIGHT call: lexicon {gracias: emerging, cafe: emerging}, "
+        "grammar {present_estar_person: emerging, gustar_basic: "
+        "emerging}, skills {IP-04: emerging}. Reason quotes the learner.\n"
+        "  WRONG calls: skills-only {IP-04: emerging} (evidence wasted); "
+        "any grade at all if they had merely repeated your exact model "
+        "sentence back (echo = not evidence); 'estoi bein grasias' -> "
+        "everything stays unknown (garble = struggle, not emerging).\n"
+        "Field ids: skills use dashes exactly as in the sheet (IP-03, "
+        "never IP_03); lexicon keys are lowercase lemmas.\n"
         "DO NOT call when: you only modeled the form, they only echoed "
         "you, or you are unsure. Prefer no call. Do not claim solid_uses. "
         "Do not record names or personal facts. Student never sees this."
