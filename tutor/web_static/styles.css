@@ -516,6 +516,15 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
   border: none;
   padding: 0.25rem;
 }
+/* Autoplay-blocked voice → tappable play affordance (mobile) */
+.bubble.system.tap-audio {
+  cursor: pointer;
+  color: var(--text);
+  background: var(--bg-elev);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 0.45rem 0.9rem;
+}
 .who {
   display: block;
   font-size: 0.72rem;

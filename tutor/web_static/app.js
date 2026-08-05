@@ -977,13 +977,44 @@ async function playServerSegment(text, rate, isStale) {
       reject(new Error("audio element error"));
     };
     audio.play().catch((playErr) => {
-      // Autoplay blocked (e.g. first greeting before any click) → reject
+      // Autoplay blocked (first greeting before any tap — the mobile
+      // "voice not working" report, 2026-08-05): keep the synthesized
+      // audio and offer a tap-to-play bubble instead of failing
+      // silently (the browser-speech fallback is equally blocked).
+      if (playErr?.name === "NotAllowedError" && !isStale?.()) {
+        offerTapToPlay(audio, url);
+        resolve();
+        return;
+      }
       URL.revokeObjectURL(url);
       if (currentAudio === audio) currentAudio = null;
       reject(playErr);
     });
   });
 }
+
+/** Autoplay-blocked audio → a tappable bubble (tap = the user gesture
+ * the browser wants). Removed on tap or when the next turn starts. */
+function offerTapToPlay(audio, url) {
+  const b = addBubble("system", "🔊 Tap to hear Marisol");
+  b.classList.add("tap-audio");
+  b.addEventListener("click", () => {
+    b.remove();
+    audio.play().catch(() => URL.revokeObjectURL(url));
+  }, { once: true });
+}
+
+// Best-effort audio unlock: the FIRST user gesture anywhere plays a
+// muted no-op so later programmatic replies are allowed to sound.
+window.addEventListener("pointerdown", () => {
+  try {
+    const a = new Audio(
+      "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA="
+    );
+    a.muted = true;
+    a.play().catch(() => {});
+  } catch (_) {}
+}, { once: true, capture: true });
 
 /**
  * AI teach voice = server Gemini TTS (good Spanish). Browser is fallback only.
