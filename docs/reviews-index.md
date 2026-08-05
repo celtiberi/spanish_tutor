@@ -61,3 +61,4 @@
 - [Sheet as curriculum](reviews-sheet-as-curriculum.md) — 2026-08-03: course pack deleted; sheet carries targets/scope/misconceptions; B0 arm deleted
 - [Sheet vocabulary ruling](reviews-sheet-vocabulary.md) — 2026-08-03: sheet = domain model + learner model, never 'curriculum'; domain_scope/domain_targets keys; curriculum/ → domain/
 - [Stance merge + voice + games placement](reviews-stance-merge.md) — 2026-08-04: dual system prompt deleted (§4.6); single stance; morph known-tier; Grok A1–A3 enacted; persona/games multi-turn check pre-registered
+- [XP / visible progression plan](design-xp-progression.md) — 2026-08-05: USER reopen of the 07-28 XP non-goal; two-truths split (sheet=ability, XP=journey); Grok round killed session-XP, ungated level names, 150 cap; full debate in archive/reviews/xp-progression-20260805.md
