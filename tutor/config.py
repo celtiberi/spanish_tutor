@@ -337,11 +337,21 @@ def make_client_for(model: str):
             raise RuntimeError("GROK_API_KEY not set (needed for grok models)")
         return anthropic.Anthropic(api_key=key, base_url="https://api.x.ai")
     if provider == "google":
-        from .providers import GeminiClient
         key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if not key:
             raise RuntimeError("GEMINI_API_KEY not set (needed for gemini models)")
-        return GeminiClient(key)
+        # Native generateContent path with explicit prefix caching (P0,
+        # docs/analysis-multi-model-context.md — implicit cache dead,
+        # explicit smoke passed 2026-08-06). GEMINI_CLIENT=compat reverts
+        # to the OpenAI-compat adapter if the native path misbehaves.
+        if (os.environ.get("GEMINI_CLIENT", "native").strip().lower()
+                == "compat"):
+            from .providers import GeminiClient
+
+            return GeminiClient(key)
+        from .gemini_native import GeminiNativeClient
+
+        return GeminiNativeClient(key)
     if provider == "deepseek":
         # DeepSeek ships a native Anthropic-format endpoint (their docs,
         # 2026-08-05) — same wiring as xai, no OpenAI adapter needed.

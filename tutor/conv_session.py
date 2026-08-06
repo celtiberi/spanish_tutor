@@ -462,12 +462,18 @@ def _assistant_content_blocks(final) -> list[dict]:
         if btype == "text":
             out.append({"type": "text", "text": getattr(b, "text", "") or ""})
         elif btype == "tool_use":
-            out.append({
+            entry = {
                 "type": "tool_use",
                 "id": getattr(b, "id", "call_0"),
                 "name": getattr(b, "name", ""),
                 "input": getattr(b, "input", {}) or {},
-            })
+            }
+            # Gemini native path requires thoughtSignature replay when a
+            # function call re-enters history (provider-specific passthrough).
+            ts = getattr(b, "thought_signature", None)
+            if ts:
+                entry["thought_signature"] = ts
+            out.append(entry)
     return out
 
 
