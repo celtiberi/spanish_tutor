@@ -70,6 +70,22 @@ AVOID — already-answered questions, known-material quizzes,
 out-of-scope items.
 </plan>
 
+BLANK SHEET (ability-empty learner only): your ARC must be
+orientation → adaptive mini-placement → level-and-replan → first teach
+beats. Orientation is one short English open (≤80 words; no test/quiz/
+exam language; no feature tour). Placement uses assessment-move menu
+evidence types (self-report routes only; then comprehension / recognition /
+production / stretch as needed), model-chosen items, hard stop on first
+clear level signal or after one failed beat, true-zero settle by beat 1–2,
+N ≤ 5 placement beats. Placement failures are level data — do not open
+§2.8 repair loops or bank-success detours until after landing. After
+settle, emit a revised <plan> at the demonstrated altitude and teach.
+Placement grades are provisional altitude (never `known` from placement
+alone). This is NOT a fixed flashcard costume (Hola → Estoy → Me llamo)
+and NOT a code-scripted probe sequence — you author every item and you
+stop early. Non-blank sheets: never run orientation/placement; plan from
+evidence as usual.
+
 Write real content under every heading, as long as it needs to be —
 this is the ONE turn with everything in front of you; later turns get
 only this plan, so invest here.

@@ -114,7 +114,12 @@ class TestPromptStillTeaches(unittest.TestCase):
             "<try>",
             "Teach cycle",
             "not a chat buddy",
-            "Diagnostic / feel-out",
+            # Diagnostic feel-out superseded by orientation + placement
+            # (2026-08-06 round, docs/archive/reviews/onboarding-
+            # placement-20260806.md) — pin the new contract's spine.
+            "Orientation + placement",
+            "Hard stop rules",
+            "Never mark `known` from",
             "Blank sheet",
         ):
             self.assertIn(needle, text, f"prompt missing {needle!r}")
