@@ -122,7 +122,9 @@ def warm_blank_plan() -> bool:
         if plan and plan.strip():
             store_blank_plan(plan)
             print("[plan-cache] blank plan warmed "
-                  f"({len(plan)} chars, model={config.MODEL})", flush=True)
+                  f"({len(plan)} chars, model="
+                  f"{getattr(config, 'PLAN_MODEL', '') or config.MODEL})",
+                  flush=True)
             return True
         print("[no-hide] plan-cache warm produced NO plan "
               "(session_plan empty after open)", file=sys.stderr, flush=True)
