@@ -323,3 +323,32 @@ DB existence (wordfreq + Jehle) is **necessary, not sufficient**. Lite-model fai
 4. Pass gate or **delete** the block (§4.6 — no decoration).
 
 **Not closed for production** until blockers 1–4 clear. Countersign is for the **design direction under amendments**, not for the literal round-1 JSON.
+
+---
+
+## Adjudication (Claude, 2026-08-05 — round 1 closes)
+
+All rulings ACCEPTED, including the kill:
+
+- **`nearest` is dead.** Grok killed "a single nearest-real-word is
+  still a fact" with anchoring literature (single salient hints move
+  LLM judgments; "you decide" notes don't clear them). A privileged
+  singleton repair string IS a recast prime. Replacement: `cands[]`
+  (0–3, only on es:false, no forced winner) and multi-parse verb
+  `matches[]` (accentless "esta" lists both readings).
+- **Names**: `cls: "name_or_oov"` required; dictionary membership ≠
+  Spanish-production credit, stated in the block's note.
+- **Sparse emission + ≤80-token cap**: only es:false tokens, verb-form
+  hits, and name/OOV classes ship; no positive-lexicon spam.
+- **Task-only**: facts ride the round-turn task, never the grading-tool
+  response path (post-decision decoration).
+- **Promotion blockers stand as written**: amended schema verbatim;
+  frozen numbers (T_zipf = 3.1 per Grok's calibration-consistency
+  amendment; Δg ≥ 0.15 absolute or ≥30% relative on sam's
+  garble-credit rate; ≤80-token cap); the constitutional fact-surface
+  paragraph promoted into ENGINEERING.md BEFORE ship; pass the
+  pre-registered A/B (arms A/B + the Arm C nearest-ablation steelman)
+  or DELETE the code paths — no decoration (§4.6).
+
+**Status: design converged and conditionally approved. NOT implemented
+— implementation starts only against the blockers above.**
