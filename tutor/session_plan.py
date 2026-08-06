@@ -39,6 +39,13 @@ from . import config
 
 PEDAGOGY_PATH = config.REPO_ROOT / "PEDAGOGY.md"
 
+# P1 history bound (ENGINEERING §3.3 amendment 2026-08-06): once the
+# plan-cycle suffix exceeds THRESHOLD messages, rounds carry a rolling
+# facts summary (with verbatim learner-error spans) + the last KEEP raw
+# exchanges. Versioned here per the truncation law.
+ROUND_SUMMARY_THRESHOLD_MSGS = 10
+ROUND_SUMMARY_KEEP_EXCHANGES = 3
+
 PLAN_INSTRUCTIONS = """## Your session plan (required on this turn)
 
 You have the full teaching guide in this request — later turns will NOT

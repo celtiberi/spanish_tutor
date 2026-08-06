@@ -270,6 +270,12 @@ def assert_full_teacher_context(ctx) -> None:
             # failed plan call that already moved the cycle marker cannot
             # confuse the audit — no middle drops, tail-aligned.
             tail = got[:-1]
+            # §3.3 P1 amendment (2026-08-06): past the versioned
+            # threshold, position 0 may be the tutor's rolling summary
+            # (sanctioned, marked) followed by a RAW tail that must
+            # still be an append-only suffix.
+            if tail and "tutor's summary" in str(tail[0].get("content", "")):
+                tail = tail[1:]
             assert expect[len(expect) - len(tail):] == tail, (
                 "ROUND history is not an append-only suffix of the "
                 "session history"
@@ -361,6 +367,7 @@ def tutor_session_factory(monkeypatch, tmp_path, request):
     monkeypatch.setattr(config, "SIGNAL_CLASSIFIER_BLOCKING", False)
     monkeypatch.setattr(config, "SHEET_TOOLS", False)
     monkeypatch.setattr(config, "PLAN_MODEL", "")  # plan turns use the fake client
+    monkeypatch.setattr(config, "HISTORY_SUMMARY_ENABLED", False)  # async off
     # (config.GATE_REPAIR stub deleted 2026-08-03 — nothing to pin.)
     monkeypatch.setattr(config, "TEACHER_CONTEXT_TRUNCATE", False)
     monkeypatch.setattr(config, "HISTORY_TURNS", 0)

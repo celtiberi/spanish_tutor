@@ -670,6 +670,7 @@ class ConversationalSession:
         self._last_call_model: str | None = None  # model of the LAST tutor call
         self._plan_client = None  # lazy premium plan-turn client (PLAN_MODEL)
         self._plan_caps = None
+        self.history_summary: dict | None = None  # P1 rolling summary
         self.grade_log_path: str | None = None  # per-session ledger (multi-user)
         self.last_morph: dict | None = None  # model-authored rail card
         self.replan_requested = False
@@ -1533,6 +1534,7 @@ class ConversationalSession:
         self.plan_cycle_start = 0
         self.replan_requested = False
         self.last_morph = None        # new chat → fresh morphology card
+        self.history_summary = None   # P1: summary is per-chat
 
         # Plan reuse (USER 2026-08-04: precreate the blank plan; store the
         # returning user's plan). A hit turns the expensive open PLAN turn
@@ -1642,6 +1644,12 @@ class ConversationalSession:
             "parts": result.parts,
         })
         self._persist_plan()
+        try:
+            from .history_summary import maybe_update_async
+
+            maybe_update_async(self)
+        except Exception as e:
+            self._oops("history_summary.trigger", e)
         return result
 
     def _persist_plan(self) -> None:

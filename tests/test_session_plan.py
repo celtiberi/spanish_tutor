@@ -336,3 +336,41 @@ class TestPlanCycleHistory:
         assert "words_heard_but_not_yet_learned" not in round_task
         # Unknown-status rows (zero information) stay off rounds.
         assert '"IP-02"' not in round_task
+
+
+class TestP1HistorySummary:
+    """§3.3 P1 amendment (2026-08-06): summary + raw-tail round history."""
+
+    def test_summary_injected_past_threshold(
+        self, plan_mode, tutor_session_factory
+    ):
+        from tutor.session_plan import (
+            ROUND_SUMMARY_KEEP_EXCHANGES,
+            ROUND_SUMMARY_THRESHOLD_MSGS,
+        )
+
+        ctx = tutor_session_factory(replies=[BODY_WITH_PLAN])
+        s = ctx.session
+        s.open_session()
+        # Simulate a long plan cycle + an async summary having landed.
+        for i in range(ROUND_SUMMARY_THRESHOLD_MSGS):
+            s.history.append({"role": "user" if i % 2 == 0 else "assistant",
+                              "content": f"m{i} filler exchange"})
+        covers = len(s.history) - ROUND_SUMMARY_KEEP_EXCHANGES * 2
+        s.history_summary = {"text": "Learner said (verbatim): 'esta bein'",
+                             "covers": covers}
+        s.user_turn("Hola otra vez")
+        hist = ctx.fake.history_messages(-1)
+        assert "tutor's summary" in hist[0]["content"]
+        assert "esta bein" in hist[0]["content"]
+        # summary message + raw tail only — bounded
+        assert len(hist) <= 1 + ROUND_SUMMARY_KEEP_EXCHANGES * 2 + 1
+
+    def test_no_summary_short_session(self, plan_mode, tutor_session_factory):
+        ctx = tutor_session_factory(replies=[BODY_WITH_PLAN])
+        s = ctx.session
+        s.open_session()
+        s.user_turn("Hola")
+        hist = ctx.fake.history_messages(-1)
+        assert all("tutor's summary" not in m.get("content", "")
+                   for m in hist)

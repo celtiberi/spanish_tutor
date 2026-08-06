@@ -268,6 +268,13 @@ TUTOR_MAX_TOKENS = int(os.environ.get("TUTOR_MAX_TOKENS", "4096"))
 # 2026-08-06: "move to grok 4.5 for planning"). Empty = same model as
 # rounds. Set via env/.env/Fly secret: PLAN_MODEL=grok-4.5.
 PLAN_MODEL = (os.environ.get("PLAN_MODEL", "") or "").strip()
+
+# P1 rolling history summary (ENGINEERING §3.3 amendment 2026-08-06).
+# HISTORY_SUMMARY=off disables (tests pin off for determinism).
+HISTORY_SUMMARY_ENABLED = (
+    os.environ.get("HISTORY_SUMMARY", "on").strip().lower()
+    in ("1", "true", "yes", "on")
+)
 # Optional reasoning-effort hint for Gemini thinking models ("low"/"medium"/
 # "high"). Unset = provider default. Sent only by GeminiClient.
 GEMINI_REASONING_EFFORT = (

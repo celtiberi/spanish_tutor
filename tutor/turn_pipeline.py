@@ -579,6 +579,26 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
             # dropped in-cycle context (B0 lesson).
             _start = max(0, int(getattr(session, "plan_cycle_start", 0) or 0))
             history = session.history[_start:]  # truncation-ok: plan-cycle suffix (plan digested the prefix)
+            # P1 history bound (§3.3 amendment 2026-08-06): replace the
+            # OLDER suffix with the async rolling summary + last K raw
+            # exchanges once past the versioned threshold. Sheet stays
+            # the ability authority; summarizer failure ⇒ full suffix.
+            _summary = getattr(session, "history_summary", None)
+            if _summary and isinstance(_summary, dict):
+                from .session_plan import ROUND_SUMMARY_KEEP_EXCHANGES
+
+                _covers = int(_summary.get("covers") or 0)
+                _keep = ROUND_SUMMARY_KEEP_EXCHANGES * 2
+                if (_covers > _start
+                        and len(session.history) - _covers >= _keep):
+                    history = [{
+                        "role": "user",
+                        "content": (
+                            "(Earlier this session — tutor's summary; the "
+                            "character sheet stays authoritative on ability:\n"
+                            + str(_summary.get("text") or "") + ")"
+                        ),
+                    }] + session.history[_covers:]  # truncation-ok: §3.3 P1 summary + raw tail
     else:
         history = session.history
 

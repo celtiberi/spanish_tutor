@@ -269,7 +269,9 @@ class _NativeMessages:
             "generationConfig": gen_config,
         }
         cache_name = None
-        if sys_text:
+        # API minimum is 1024 cached tokens — small prompts (e.g. the
+        # history summarizer) skip caching instead of 400ing every call.
+        if sys_text and len(sys_text) // 4 >= 1200:
             cache_name = _CACHE.get_or_create(
                 self._key, model, sys_text, tools_native)
         if cache_name:
