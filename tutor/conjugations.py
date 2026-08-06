@@ -100,3 +100,68 @@ def is_real_spanish(word: str) -> bool:
     except ImportError:
         return True  # dependency missing: audit degrades open, visibly
     return zipf_frequency(w, "es") >= GARBLE_ZIPF
+
+
+@lru_cache(maxsize=1)
+def _paradigms() -> dict:
+    p = config.REPO_ROOT / "domain" / "spanish_a1" / "conjugations.json"
+    try:
+        d = json.loads(p.read_text(encoding="utf-8"))
+        return {"paradigms": d.get("paradigms") or {},
+                "english": d.get("english") or {}}
+    except (OSError, ValueError):
+        return {"paradigms": {}, "english": {}}
+
+
+# English person-conjugation is rule-based with a handful of irregulars —
+# deterministic beats a model pass (P2 round, 2026-08-06).
+_EN_IRREGULAR = {"be": {"1": "am", "3": "is", "p": "are"},
+                 "have": {"3": "has"}, "go": {"3": "goes"},
+                 "do": {"3": "does"}}
+
+
+def _en_third(base: str) -> str:
+    irr = _EN_IRREGULAR.get(base)
+    if irr and "3" in irr:
+        return irr["3"]
+    if base.endswith(("s", "sh", "ch", "x", "z", "o")):
+        return base + "es"
+    if base.endswith("y") and len(base) > 1 and base[-2] not in "aeiou":
+        return base[:-1] + "ies"
+    return base + "s"
+
+
+def render_paradigm(lemma: str, highlight: str = "") -> dict | None:
+    """Ground-truth present-indicative card rows for a verb, with derived
+    English glosses. None when the lemma is not covered (caller falls
+    back to model-authored rows — the C3a coverage gate)."""
+    lem = str(lemma or "").strip().lower()
+    data = _paradigms()
+    para = data["paradigms"].get(lem)
+    if not para:
+        return None
+    base = (data["english"].get(lem) or "").removeprefix("to ").strip()
+    irr = _EN_IRREGULAR.get(base, {})
+    gloss = {
+        "yo": f"I {irr.get('1', base)}",
+        "tú": f"you {irr.get('p', base)}" if base == "be" else f"you {base}",
+        "usted/él/ella": f"you (formal) / he / she {_en_third(base)}",
+        "nosotros": f"we {irr.get('p', base)}" if base == "be" else f"we {base}",
+        "ustedes/ellos": f"they {irr.get('p', base)}" if base == "be" else f"they {base}",
+    } if base else {}
+    hl = _strip_accents(str(highlight or "").strip().lower())
+    rows = []
+    for person, form in para.items():
+        rows.append({
+            "form": form,
+            "person": person,
+            "gloss": gloss.get(person, ""),
+            "highlight": bool(hl) and _strip_accents(form.lower()) == hl,
+        })
+    return {
+        "label": f"{lem} — {data['english'].get(lem, '')}".rstrip(" —"),
+        "paradigm": rows,
+        "note": "",
+        "live": True,
+        "source": "code",
+    }

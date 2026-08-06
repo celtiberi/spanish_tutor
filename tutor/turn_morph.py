@@ -28,7 +28,10 @@ import re
 # class lives in textnorm; historical local name kept for the token scan.
 from .textnorm import SPANISH_LETTERS as _ES
 
-_MORPH_RE = re.compile(r"<morph\b([^>]*)>(.*?)</morph>", re.S | re.I)
+# Accepts both <morph attrs>rows</morph> and the P2 slim self-closing
+# <morph lemma="estar" highlight="estás"/> (code renders the table).
+_MORPH_RE = re.compile(
+    r"<morph\b([^>]*?)(?:/>|>(.*?)</morph>)", re.S | re.I)
 _ATTR_RE = re.compile(r'(\w+)\s*=\s*"([^"]*)"')
 
 
@@ -65,6 +68,23 @@ def extract_morph(raw: str) -> tuple[dict | None, str]:
             "highlight": highlight,
         })
     cleaned = _MORPH_RE.sub(" ", text).strip()
+    if not rows and attrs.get("lemma"):
+        # P2 (2026-08-06, docs/analysis-multi-model-context.md): slim
+        # card — code renders ground-truth rows from the conjugation DB.
+        # Uncovered lemma → no card (the model's full-row form remains
+        # the fallback contract in the stance).
+        from .conjugations import render_paradigm
+
+        card = render_paradigm(attrs["lemma"], attrs.get("highlight", ""))
+        if card:
+            if attrs.get("title"):
+                card["label"] = attrs["title"]
+            if attrs.get("note"):
+                card["note"] = attrs["note"]
+            import datetime as _dt2
+
+            card["ts"] = _dt2.datetime.now().isoformat(timespec="seconds")
+            return card, cleaned
     if not rows:
         return None, cleaned
     card = {

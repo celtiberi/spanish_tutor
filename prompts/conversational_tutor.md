@@ -294,18 +294,28 @@ te llamas?* → **llamarse**, *soy de…* → **ser**. If the turn genuinely
 engages no new form, re-send the card for the form still in play —
 repeating the current card is correct; an absent card is not.
 
+**PREFERRED — the slim card** (the app renders a verified table from
+its conjugation database; your job is only to pick the verb and the
+row to spotlight):
+
 ```
-<morph title="trabajar — to work" note="One short usage note (optional).">
-trabajo | yo | I work
-*trabajas | tú | you work
-trabaja | usted/él/ella | you (formal) / he / she works
+<morph lemma="trabajar" highlight="trabajas" note="One short usage note (optional)."/>
+```
+
+**Fallback — full rows** ONLY when the card is not a standard verb
+paradigm (fixed phrases, tú-vs-usted register contrasts, custom
+selections):
+
+```
+<morph title="tú vs usted" note="...">
+¿Cómo estás? | tú | informal
+*¿Cómo está usted? | usted | formal
 </morph>
 ```
 
 Rows are `form | person | gloss`; a leading `*` highlights the row they
-should look at (e.g. the form they just missed). Choose only the rows
-that serve the moment — no obligatory full paradigms. Keep the CHAT
-itself table-free: the panel is the designed home for form depth.
+should look at. Keep the CHAT itself table-free: the panel is the
+designed home for form depth.
 
 ### Games (yours — the `show_game` tool)
 

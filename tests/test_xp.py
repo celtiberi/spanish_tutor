@@ -139,3 +139,41 @@ class TestSkillIdNormalization(unittest.TestCase):
         self.assertIn("IP-03", out.get("skills") or {})
         self.assertNotIn("ip_03", out.get("skills") or {})
         self.assertNotIn("IP_03", out.get("skills") or {})
+
+
+class TestParadigmRendering(unittest.TestCase):
+    """P2 (2026-08-06): code-rendered morph cards from the conjugation DB."""
+
+    def test_render_estar_with_glosses_and_highlight(self):
+        from tutor.conjugations import render_paradigm
+
+        c = render_paradigm("estar", "estás")
+        forms = {r["person"]: r for r in c["paradigm"]}
+        self.assertEqual(forms["yo"]["form"], "estoy")
+        self.assertEqual(forms["yo"]["gloss"], "I am")
+        self.assertTrue(forms["tú"]["highlight"])
+        self.assertIn("he / she is", forms["usted/él/ella"]["gloss"])
+
+    def test_regular_verb_english_third_person(self):
+        from tutor.conjugations import render_paradigm
+
+        c = render_paradigm("trabajar")
+        g = {r["person"]: r["gloss"] for r in c["paradigm"]}
+        self.assertEqual(g["yo"], "I work")
+        self.assertIn("works", g["usted/él/ella"])
+
+    def test_uncovered_lemma_none(self):
+        from tutor.conjugations import render_paradigm
+
+        self.assertIsNone(render_paradigm("zzzquux"))
+
+    def test_slim_morph_tag_renders_from_code(self):
+        from tutor.turn_morph import extract_morph
+
+        card, rest = extract_morph(
+            '<tutor><model>x</model></tutor>'
+            '<morph lemma="nadar" highlight="nado"/>')
+        self.assertIsNotNone(card)
+        self.assertEqual(card["source"], "code")
+        self.assertIn("swim", card["label"])
+        self.assertNotIn("<morph", rest)
