@@ -515,7 +515,20 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
             session.sheet,
             round_view=(plan_mode and not needs_plan),
         ),
-        teaching_data={"due_for_review": due_facts},
+        teaching_data={
+            "due_for_review": due_facts,
+            # Sheet-derived FACT (same §1.1 surface class as due items,
+            # r6 assessment round 2026-08-06): interpretive/presentational
+            # can-dos with zero evidence. The model cannot act on
+            # starvation it never sees — casey ran 10 coping turns with
+            # no assessment beat until this shipped.
+            "mode_evidence_gaps": [
+                {"can_do": k, "statement": (v or {}).get("statement", "")}
+                for k, v in (session.sheet.get("skills") or {}).items()
+                if k.startswith(("IT", "PR"))
+                and (v or {}).get("status") in (None, "unknown")
+            ] or None,
+        },
         session_plan=(
             None if (not plan_mode or needs_plan)
             else getattr(session, "session_plan", None)

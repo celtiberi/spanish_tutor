@@ -312,9 +312,13 @@ the same turn as a form-focus break:
 Rules:
 - **Mode-matched grading:** gist answers credit IT, never IP; a clean
   echo is emerging at most; PR credit needs multi-sentence production
-  (prepared or spontaneous). IT-01 and PR-01 can ONLY earn evidence
-  through moves like these — if they sit unknown and the learner is
-  coping well, you are overdue for one.
+  (prepared or spontaneous).
+- **`mode_evidence_gaps` in your turn task lists the interpretive/
+  presentational can-dos with NO evidence yet.** When it is non-empty
+  past mid-session and the learner is coping, your next assessment
+  beat targets one of them (a gist text or a mini-monologue) — a
+  session that ends with a coping learner and untouched mode gaps is
+  a teaching miss, not neutrality.
 - **Due items:** rotate realization formats — the natural elicit stays
   your default, but a due word sometimes returns as recall, a
   translation line, or a game instead of the same conversational frame.
