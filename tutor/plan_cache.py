@@ -55,6 +55,7 @@ def blank_plan_fingerprint() -> str:
         stance = ""
     blob = "\n".join([
         config.MODEL,
+        getattr(config, "PLAN_MODEL", "") or "",
         load_pedagogy(),
         PLAN_INSTRUCTIONS,
         stance,
@@ -89,7 +90,7 @@ def store_blank_plan(plan: str) -> None:
     p.write_text(json.dumps({
         "fingerprint": blank_plan_fingerprint(),
         "plan": plan,
-        "model": config.MODEL,
+        "model": (getattr(config, "PLAN_MODEL", "") or config.MODEL),
         "created_at": datetime.datetime.now(
             datetime.timezone.utc).isoformat(),
     }, ensure_ascii=False, indent=2), encoding="utf-8")

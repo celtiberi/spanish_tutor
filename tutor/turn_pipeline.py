@@ -606,9 +606,30 @@ def stage_model_call(session, ctx: TurnContext) -> None:
         tools = (
             session.tools if getattr(config, "SHEET_TOOLS", False) else None
         )
+        # PLAN turns may route to a premium model (USER 2026-08-06:
+        # "move to grok 4.5 for planning"; config.PLAN_MODEL, empty =
+        # same model). Lazy client; failure falls back VISIBLY to the
+        # round model rather than killing the turn.
+        _client, _caps = session.client, session.caps
+        if ctx.plan_turn and getattr(config, "PLAN_MODEL", ""):
+            pm = config.PLAN_MODEL
+            if pm and pm != session.model:
+                try:
+                    if getattr(session, "_plan_client", None) is None:
+                        session._plan_client = config.make_client_for(pm)
+                        session._plan_caps = config.caps_for(pm)
+                    _client, _caps = session._plan_client, session._plan_caps
+                except Exception as e:
+                    import sys as _sys
+
+                    print(f"[no-hide] PLAN_MODEL {pm} client failed, plan "
+                          f"turn falls back to {session.model}: "
+                          f"{type(e).__name__}: {e}",
+                          file=_sys.stderr, flush=True)
+        session._last_call_model = _caps.model
         final, raw, tool_delta, usage, _blocks = tutor_turn(
-            session.client,
-            session.caps,
+            _client,
+            _caps,
             ctx.system,
             ctx.messages,
             tools=tools,

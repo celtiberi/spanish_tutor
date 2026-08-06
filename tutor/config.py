@@ -263,6 +263,11 @@ MAX_TOKENS = 8192
 # reasoning tokens before visible text — 1024 truncated real answers mid-word
 # (session 20260726-155600 turns 4+8). Replies stay short via prompt, not cap.
 TUTOR_MAX_TOKENS = int(os.environ.get("TUTOR_MAX_TOKENS", "4096"))
+
+# PLAN turns may run on a different (premium) model than rounds (USER
+# 2026-08-06: "move to grok 4.5 for planning"). Empty = same model as
+# rounds. Set via env/.env/Fly secret: PLAN_MODEL=grok-4.5.
+PLAN_MODEL = (os.environ.get("PLAN_MODEL", "") or "").strip()
 # Optional reasoning-effort hint for Gemini thinking models ("low"/"medium"/
 # "high"). Unset = provider default. Sent only by GeminiClient.
 GEMINI_REASONING_EFFORT = (

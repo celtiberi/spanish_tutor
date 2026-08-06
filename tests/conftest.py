@@ -360,6 +360,7 @@ def tutor_session_factory(monkeypatch, tmp_path, request):
     monkeypatch.setattr(config, "SIGNAL_CLASSIFIER_MODEL", "off")
     monkeypatch.setattr(config, "SIGNAL_CLASSIFIER_BLOCKING", False)
     monkeypatch.setattr(config, "SHEET_TOOLS", False)
+    monkeypatch.setattr(config, "PLAN_MODEL", "")  # plan turns use the fake client
     # (config.GATE_REPAIR stub deleted 2026-08-03 — nothing to pin.)
     monkeypatch.setattr(config, "TEACHER_CONTEXT_TRUNCATE", False)
     monkeypatch.setattr(config, "HISTORY_TURNS", 0)

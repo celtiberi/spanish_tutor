@@ -661,6 +661,9 @@ class ConversationalSession:
         self.session_plan: str | None = None
         self.plan_cycle_start = 0  # history index where the current plan cycle began
         self._plan_persisted: str | None = None  # last plan written to plan_store
+        self._last_call_model: str | None = None  # model of the LAST tutor call
+        self._plan_client = None  # lazy premium plan-turn client (PLAN_MODEL)
+        self._plan_caps = None
         self.grade_log_path: str | None = None  # per-session ledger (multi-user)
         self.last_morph: dict | None = None  # model-authored rail card
         self.replan_requested = False
@@ -862,7 +865,7 @@ class ConversationalSession:
         "I want to see what is being sent and received").  Never raises."""
         try:
             entry = build_debug_entry(
-                model=self.model,
+                model=getattr(self, "_last_call_model", None) or self.model,
                 system=system,
                 messages=messages,
                 task=task,
@@ -1229,7 +1232,9 @@ class ConversationalSession:
         if usage:
             self.costs.add_llm(
                 "tutor",
-                self.model,
+                # Honest attribution: plan turns may bill a different
+                # model (PLAN_MODEL routing, 2026-08-06).
+                getattr(self, "_last_call_model", None) or self.model,
                 input_tokens=(usage or {}).get("input_tokens", 0),
                 output_tokens=(usage or {}).get("output_tokens", 0),
                 thinking_tokens=(usage or {}).get("thinking_tokens", 0),
