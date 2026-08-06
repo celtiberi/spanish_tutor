@@ -21,7 +21,10 @@ from functools import lru_cache
 
 from . import config
 
-GARBLE_ZIPF = 3.0
+# Frozen 2026-08-05 (pre-grading round, Grok amendment: ONE number
+# everywhere): real A1 vocabulary >= 3.11 (senderismo — closest margin),
+# garble <= 2.68. Do not tune without a new review round.
+GARBLE_ZIPF = 3.1
 
 
 @lru_cache(maxsize=1)
@@ -41,6 +44,39 @@ def _form_index() -> dict[str, str]:
         for f in forms:
             idx.setdefault(f, lemma)
     return idx
+
+
+def _strip_accents(s: str) -> str:
+    import unicodedata
+
+    return "".join(
+        c for c in unicodedata.normalize("NFD", s)
+        if unicodedata.category(c) != "Mn"
+    )
+
+
+@lru_cache(maxsize=1)
+def _accentless_multi_index() -> dict[str, list[tuple[str, str]]]:
+    """accent-stripped surface -> ALL (lemma, canonical_form) parses.
+    'fui' -> [(ir,'fui'),(ser,'fui')]; 'esta' -> [(estar,'está')].
+    Multi-parse listing is REQUIRED by the pre-grading review (never
+    collapse an ambiguous surface to one reading)."""
+    idx: dict[str, list[tuple[str, str]]] = {}
+    for lemma, forms in _db().items():
+        for f in forms:
+            key = _strip_accents(f)
+            pair = (lemma, f)
+            bucket = idx.setdefault(key, [])
+            if pair not in bucket:
+                bucket.append(pair)
+    return idx
+
+
+def parses_of_surface(word: str) -> list[tuple[str, str]]:
+    """All (lemma, canonical_form) readings of a surface token,
+    accent-lenient. Empty list = not a known conjugated form."""
+    w = _strip_accents(str(word or "").strip().lower())
+    return list(_accentless_multi_index().get(w) or [])
 
 
 def forms_of(lemma: str) -> list[str]:

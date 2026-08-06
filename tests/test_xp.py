@@ -139,3 +139,50 @@ class TestSkillIdNormalization(unittest.TestCase):
         self.assertIn("IP-03", out.get("skills") or {})
         self.assertNotIn("ip_03", out.get("skills") or {})
         self.assertNotIn("IP_03", out.get("skills") or {})
+
+
+class TestTextFacts(unittest.TestCase):
+    """learner_text_facts (ENGINEERING §1.1 fact-surface clause)."""
+
+    def test_garble_gets_multi_cands_quiero_first(self):
+        from tutor.text_facts import build_text_facts
+
+        b = build_text_facts("yo kiero trabajar")
+        [tok] = b["tokens"]
+        self.assertEqual(tok["w"], "kiero")
+        self.assertFalse(tok["es"])
+        self.assertEqual(tok["cands"][0], "quiero")
+        self.assertNotIn("nearest", tok)
+
+    def test_verb_forms_multi_parse_and_accent(self):
+        from tutor.text_facts import build_text_facts
+
+        b = build_text_facts("esta bein")
+        self.assertEqual(b["verb_forms"][0]["w"], "esta")
+        self.assertEqual(b["verb_forms"][0]["matches"][0]["lemma"], "estar")
+        self.assertEqual(b["tokens"][0]["cands"][0], "bien")
+
+    def test_all_valid_returns_none_or_sparse(self):
+        from tutor.text_facts import build_text_facts
+
+        b = build_text_facts("muy bien gracias")
+        # no invalid tokens, no verb forms -> omit entirely
+        self.assertIsNone(b)
+
+    def test_nearest_mode_is_arm_c_only_shape(self):
+        from tutor.text_facts import build_text_facts
+
+        b = build_text_facts("esta bein", mode="nearest")
+        [tok] = b["tokens"]
+        self.assertEqual(tok.get("nearest"), "bien")
+        self.assertNotIn("cands", tok)
+
+    def test_cap_holds(self):
+        import json as J
+
+        from tutor.text_facts import TOKEN_CAP, build_text_facts
+
+        msg = " ".join(f"zzq{i}xw" for i in range(30))  # 30 garble tokens
+        b = build_text_facts(msg)
+        self.assertLessEqual(len(J.dumps(b, ensure_ascii=False)) // 4,
+                             TOKEN_CAP)

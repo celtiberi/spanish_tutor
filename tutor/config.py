@@ -263,6 +263,12 @@ MAX_TOKENS = 8192
 # reasoning tokens before visible text — 1024 truncated real answers mid-word
 # (session 20260726-155600 turns 4+8). Replies stay short via prompt, not cap.
 TUTOR_MAX_TOKENS = int(os.environ.get("TUTOR_MAX_TOKENS", "4096"))
+
+# learner_text_facts experiment arms (ENGINEERING §1.1 fact-surface
+# clause; docs/archive/reviews/pre-grading-20260805.md). "off" until the
+# pre-registered A/B passes; "cands" = amended schema; "nearest" =
+# Arm C ablation ONLY (forbidden in production — anchoring).
+TEXT_FACTS = os.environ.get("TEXT_FACTS", "off").strip().lower()
 # Optional reasoning-effort hint for Gemini thinking models ("low"/"medium"/
 # "high"). Unset = provider default. Sent only by GeminiClient.
 GEMINI_REASONING_EFFORT = (
