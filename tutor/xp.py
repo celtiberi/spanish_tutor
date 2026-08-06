@@ -75,6 +75,7 @@ def _evidence_shows(section: str, item: str, evidence: str) -> bool:
     the form's paradigm when MORPHOLOGY_BY_FORM knows it; unknown form
     ids pay unaudited (benefit of doubt, recorded here honestly). No
     evidence quote → no pay."""
+    from .conjugations import forms_of, is_real_spanish, lemma_of_form
     from .textnorm import phrase_present
 
     if not evidence.strip():
@@ -83,16 +84,35 @@ def _evidence_shows(section: str, item: str, evidence: str) -> bool:
         word = item.replace("_", " ")
         if len(word) <= 2:
             return False  # bare function words (de, el, y) are not XP events
+        if not is_real_spanish(word):
+            return False  # credited item is not real Spanish (garble key)
         return phrase_present(word, evidence)
     if section == "grammar":
         from .can_dos import MORPHOLOGY_BY_FORM
 
         block = MORPHOLOGY_BY_FORM.get(item)
-        if not block:
-            return True  # unauditable form id — benefit of the doubt
+        if block:
+            return any(
+                phrase_present(str(row.get("form") or ""), evidence)
+                for row in (block.get("paradigm") or [])
+            )
+        # Conjugation-DB fallback (2026-08-05, Jehle 637 verbs): derive
+        # verb lemmas from the form id's tokens (ser_origin_person ->
+        # ser; me_llamo_name -> llamar via the form index) and demand a
+        # real form of one of them in the evidence.
+        lemmas: set[str] = set()
+        for tok in item.lower().split("_"):
+            if forms_of(tok):
+                lemmas.add(tok)
+            else:
+                lem = lemma_of_form(tok)
+                if lem:
+                    lemmas.add(lem)
+        if not lemmas:
+            return True  # no verb identifiable — benefit of the doubt
         return any(
-            phrase_present(str(row.get("form") or ""), evidence)
-            for row in (block.get("paradigm") or [])
+            phrase_present(f, evidence)
+            for lem in lemmas for f in forms_of(lem)
         )
     return True
 

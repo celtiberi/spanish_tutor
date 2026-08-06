@@ -5,6 +5,8 @@ description = "Pedagogy-first AI tutor: conversational Spanish + character sheet
 requires-python = ">=3.10"
 dependencies = [
     "anthropic>=0.92",
+    # Offline Spanish verification data (auditor's reference shelf, 2026-08-05)
+    "wordfreq>=3.0",
     "httpx>=0.27",
     # Web stack in main deps so Vercel/uv install gets FastAPI
     "fastapi>=0.115",

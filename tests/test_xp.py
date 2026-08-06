@@ -108,14 +108,14 @@ class TestLevels(unittest.TestCase):
         self.assertTrue(all(b > a for a, b in zip(t, t[1:])))
 
     def test_level_and_to_next(self):
-        r = compute_xp([g(f"word{i}", "unknown", "known") for i in range(3)], [])
+        r = compute_xp([g(w, "unknown", "known") for w in ("casa", "perro", "gato")], [])
         # 3 x 50 = 150 -> level 2 (>=100), 100 to next (250)
         self.assertEqual(r["total"], 150)
         self.assertEqual(r["level"], 2)
         self.assertEqual(r["to_next"], 100)
 
     def test_gated_name_requires_sheet_evidence(self):
-        rows = [g(f"word{i}", "unknown", "known") for i in range(3)]  # level 2
+        rows = [g(w, "unknown", "known") for w in ("casa", "perro", "gato")]  # level 2
         bare = compute_xp(rows, [], sheet={"skills": {}})
         self.assertEqual(bare["level_name"], "Nivel 2")
         gated = compute_xp(rows, [], sheet={
