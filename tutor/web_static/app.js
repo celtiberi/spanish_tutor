@@ -283,10 +283,21 @@ function renderXp(progress) {
   els.xpBoard.hidden = false;
   const bits = [];
   if (counts.known) bits.push(`${counts.known} known`);
-  if (counts.emerging) bits.push(`${counts.emerging} emerging`);
-  if (counts.fragile) bits.push(`${counts.fragile} fragile`);
-  els.xpAbility.textContent = bits.length ? bits.join(" · ") : "just starting";
-  els.xpLevel.textContent = xp.level_name || `Nivel ${xp.level}`;
+  const learning = (counts.emerging || 0) + (counts.fragile || 0);
+  if (learning) bits.push(`${learning} in progress`);
+  els.xpAbility.textContent = bits.length
+    ? `Skills: ${bits.join(" · ")}`
+    : "Skills: just starting";
+  els.xpAbility.title =
+    "Your ability record (can-dos from the character sheet). " +
+    "Honest — it can go down.";
+  // Short level label in the box; the can-do name lives in the tooltip
+  // (the full «¿Cómo estás?» form overflowed the board — USER 2026-08-06).
+  els.xpLevel.textContent = `Nivel ${xp.level}`;
+  els.xpLevel.title =
+    (xp.level_name && xp.level_name !== `Nivel ${xp.level}`
+      ? `${xp.level_name} — ` : "") +
+    "journey stage from practice XP (never goes down; not an ability claim)";
   const floor = xp.level_floor || 0;
   const frac = xp.next_threshold != null
     ? Math.max(0, Math.min(1,
@@ -294,8 +305,12 @@ function renderXp(progress) {
     : 1;
   els.xpBar.style.width = `${Math.round(frac * 100)}%`;
   els.xpNums.textContent = xp.next_threshold != null
-    ? `${xp.total} xp · ${xp.to_next} to next`
+    ? `${xp.total} / ${xp.next_threshold} xp`
     : `${xp.total} xp`;
+  els.xpNums.title = xp.next_threshold != null
+    ? `${xp.to_next} xp to Nivel ${xp.level + 1} — earned from graded ` +
+      "evidence (new words, forms held over days, errors conquered)"
+    : "earned from graded evidence";
   // Level-up: one celebration chip in the rail, no confetti spam.
   if (lastXpLevel !== null && xp.level > lastXpLevel) {
     addBubble("system", `⭐ ${xp.level_name} — level up!`);
