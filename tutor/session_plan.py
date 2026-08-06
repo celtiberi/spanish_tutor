@@ -60,6 +60,12 @@ anchor/gloss you'll introduce each with.
 CONTINGENCIES — if X stalls or confuses them, you'll do Y (write
 several; sessions rarely follow the happy path).
 EVIDENCE — which productions would earn a sheet grade, and for what.
+Include the MODE plan: if any interpretive/presentational can-do
+(IT-*/PR-*) has no evidence, name the beat in your ARC where you will
+collect it (a short gist text, a describe-the-photo, a two-sentence
+"cuéntame de tu…" monologue — one assessment beat, in your voice).
+A session that ends with a coping learner and untouched mode gaps is
+a planning miss.
 AVOID — already-answered questions, known-material quizzes,
 out-of-scope items.
 </plan>
