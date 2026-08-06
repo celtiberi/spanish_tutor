@@ -505,20 +505,6 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
         getattr(session, "session_plan", None) is None
         or getattr(session, "replan_requested", False)
     )
-    # learner_text_facts (experiment arms; §1.1 fact-surface clause):
-    # offline dictionary facts about THIS message, round turns only.
-    _facts = None
-    _facts_mode = getattr(config, "TEXT_FACTS", "off")
-    if _facts_mode in ("cands", "nearest") and ctx.learner and not ctx.is_open:
-        try:
-            from .text_facts import build_text_facts
-
-            _facts = build_text_facts(ctx.learner, mode=_facts_mode)
-        except Exception as e:
-            import sys as _sys
-
-            print(f"[no-hide] text_facts build FAILED (teaching without): "
-                  f"{type(e).__name__}: {e}", file=_sys.stderr, flush=True)
     ctx.task = build_ai_tutor_user_message(
         learner=ctx.learner,
         is_open=ctx.is_open,
@@ -534,7 +520,6 @@ def stage_prompt_build(session, ctx: TurnContext) -> None:
             None if (not plan_mode or needs_plan)
             else getattr(session, "session_plan", None)
         ),
-        learner_text_facts=_facts,
     )
     if plan_mode:
         from .session_plan import (

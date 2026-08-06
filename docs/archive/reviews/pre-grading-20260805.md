@@ -352,3 +352,33 @@ All rulings ACCEPTED, including the kill:
 
 **Status: design converged and conditionally approved. NOT implemented
 — implementation starts only against the blockers above.**
+
+---
+
+## A/B outcome (2026-08-05 — the experiment closes)
+
+Ran same-day, three arms, gemini-3.5-flash-lite, 10-turn persona runs:
+
+| Arm | sam garble-credit g | bar (≤0.321) |
+|---|---|---|
+| A control (off) | 0.471 (16/34) | — |
+| B cands (candidate) | 0.483 (14/29) | **FAIL — no movement** |
+| C nearest (forbidden ablation) | 0.250 (7/28) | −47% relative |
+
+Secondary regressed under B too: sofia lost all grammar grading
+(grammar XP 60→0); casey's grade rows narrowed 35→28. Token cost
+delta was negligible (avg input 17.2k→16.0k — noise).
+
+**Per pre-registration: Arm B failed → learner_text_facts code paths
+DELETED (tutor/text_facts.py, config.TEXT_FACTS, pipeline/executor
+wiring, tests). No decoration kept.** conjugations.py + wordfreq stay:
+they serve the XP evidence audit and the garble_credit metric, both of
+which measurably work.
+
+**The honest surprise, recorded:** the constitutionally-forbidden
+singleton anchor was the ONLY intervention that moved the model —
+Grok's anchoring literature cut both ways: "you judge" disclaimers
+don't stop anchors, and neutral multi-candidate facts don't create
+salience. A future round wanting this win must solve
+salience-without-priming (e.g., facts phrased as questions? tool-forced
+verification?) — that design does not exist yet and is NOT this one.

@@ -88,7 +88,6 @@ def build_ai_tutor_user_message(
     sheet_summary: str = "",
     teaching_data: dict | None = None,
     session_plan: str | None = None,
-    learner_text_facts: dict | None = None,
 ) -> str:
     """User-turn task: facts only; the AI is the teacher (§1.1).
 
@@ -116,10 +115,6 @@ def build_ai_tutor_user_message(
         # notes/debug as shadow telemetry only. (open_scene_goals DELETED
         # 2026-08-03 with scenes — full-code-audit S9.)
         "teaching_data": teaching_data or None,
-        # Offline dictionary facts about THIS learner message (§1.1
-        # fact-surface clause, 2026-08-05; experiment arms via
-        # config.TEXT_FACTS — None when off or nothing to report).
-        "learner_text_facts": learner_text_facts or None,
         # The model's OWN session plan (two-phase context, 2026-08-03) —
         # code stores and replays it verbatim, never edits it (§1.1).
         "your_session_plan": session_plan or None,
