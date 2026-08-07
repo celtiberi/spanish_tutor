@@ -16,7 +16,11 @@ primary_region = "dfw"
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = "stop"
+  # "suspend" preserves machine MEMORY across idle sleeps — in-memory
+  # chat sessions survive and resume in <1s. "stop" cold-booted mid-
+  # conversation on 2026-08-07 (proxy autostopped between chat turns;
+  # the learner's session vanished and the chat reset on them).
+  auto_stop_machines = "suspend"
   auto_start_machines = true
   min_machines_running = 0
 
